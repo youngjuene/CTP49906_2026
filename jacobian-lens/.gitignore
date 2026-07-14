@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+.pytest_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# jlens outputs
+*.pt
+slice*.html
+slices/
+
+# Local model-fitting outputs (checkpoints and fitted lenses can be hundreds of MB)
+/artifacts/

@@ -1,0 +1,9 @@
+--extra-index-url https://download.pytorch.org/whl/cu124
+
+openai==2.30.0
+qwen_omni_utils==0.0.9
+accelerate==1.14.0
+torch==2.6.0+cu124
+torchvision==0.21.0+cu124
+# The repository's historical 4.52.0.dev0 build is no longer published.
+transformers==4.52.0
