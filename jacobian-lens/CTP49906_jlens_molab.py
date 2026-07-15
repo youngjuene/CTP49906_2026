@@ -292,8 +292,32 @@ def _(EXAMPLES, JLENS_DIR, example_choice, lens, mo, model, tokenizer):
     import gzip
     import json
 
+    from jlens import vis
     from jlens.examples import resolve_prompt
     from jlens.vis import build_page, compute_slice
+
+    # The embed page inlines d3, fetched once via urllib. molab's kernel may
+    # block Python's socket; fall back to curl with the same SRI pin (exactly as
+    # walkthrough.ipynb does) so the slice still renders. The result is memoised
+    # in vis._TEMPLATE_FOR_MODE, so this runs at most once across dropdown changes.
+    try:
+        vis._template("embed")
+    except RuntimeError:
+        import base64 as _b64
+        import hashlib as _hashlib
+        import subprocess as _sp
+
+        _d3 = _sp.run(
+            ["curl", "--fail", "--silent", "--show-error", "-L", vis._D3_URL],
+            check=True,
+            capture_output=True,
+        ).stdout
+        _sri = "sha384-" + _b64.b64encode(_hashlib.sha384(_d3).digest()).decode()
+        if _sri != vis._D3_SRI:
+            raise RuntimeError(f"d3 integrity check failed: {_sri}")
+        vis._TEMPLATE_FOR_MODE["embed"] = vis.PAGE_TEMPLATE.replace(
+            "__D3__", f"<script>\n{_d3.decode()}\n</script>"
+        )
 
     _example = next(e for e in EXAMPLES if e.slug == example_choice.value)
     _prompt = resolve_prompt(_example, tokenizer)
@@ -338,10 +362,66 @@ def _(EXAMPLES, mo):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## Local 100-prompt lens
+    ## 6. Fit a lens from scratch (optional)
 
-    The long fitting job on your workstation writes `jacobian_lens.pt`. Upload it
-    to the path below to verify it here; otherwise this reports *not available*.
+    Reproduces the walkthrough's final step: fit `J_l` over 100 WikiText prompts
+    and save it to the artifact path the *Local lens* section verifies. This is a
+    long GPU job (~15–20 min for the 4B model) and pulls `datasets` on demand, so
+    it runs **only when you click** — nothing fits on load.
+    """)
+    return
+
+
+@app.cell
+def _(mo):
+    run_fit = mo.ui.run_button(label="Fit a 100-prompt lens (~15–20 min on GPU)")
+    run_fit
+    return (run_fit,)
+
+
+@app.cell
+def _(LOCAL_FITTED_LENS, OUTPUT_ROOT, jlens, mo, model, run_fit):
+    if run_fit.value:
+        import subprocess as _sp
+        import sys as _sys
+
+        # load_wikitext_prompts streams WikiText via `datasets`; install it on
+        # demand (only when fitting) so ordinary runs stay lean and torch is
+        # never touched.
+        with mo.status.spinner(title="Installing datasets…"):
+            _sp.run([_sys.executable, "-m", "pip", "install", "datasets"], check=True)
+        from jlens.examples import load_wikitext_prompts
+
+        with mo.status.spinner(title="Fitting a 100-prompt Jacobian lens (~15–20 min)…"):
+            _prompts = load_wikitext_prompts(n_prompts=100)
+            _fitted = jlens.fit(
+                model,
+                _prompts,
+                dim_batch=32,
+                max_seq_len=128,
+                checkpoint_path=str(OUTPUT_ROOT / "ckpt.pt"),
+            )
+            _fitted.save(str(LOCAL_FITTED_LENS))
+        _out = mo.md(
+            f"✅ Fitted **{_fitted.n_prompts} prompts**, saved to "
+            f"`{LOCAL_FITTED_LENS}`. Re-run the *Local lens* cell below to verify."
+        )
+    else:
+        _out = mo.md(
+            "_Idle — click the button above to fit. Nothing runs until you do._"
+        )
+    _out
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Verify the local 100-prompt lens
+
+    Fit one above (Section 6), or run the fit on your workstation and upload
+    `jacobian_lens.pt` to the path below. Either way this loads it and checks the
+    shape against the model; otherwise it reports *not available*.
     """)
     return
 
