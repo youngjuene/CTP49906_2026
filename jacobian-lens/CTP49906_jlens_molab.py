@@ -338,7 +338,27 @@ def _(EXAMPLES, JLENS_DIR, example_choice, lens, mo, model, tokenizer):
             description=_example.description,
             alt_token=_gloss,
         )
-    mo.iframe(_page, height="660px")
+
+    # molab renders cell output inside a locked-down iframe that won't run this
+    # page's inlined scripts, so the inline view often comes up blank. The page
+    # is fully self-contained (d3 inlined), so always offer it as a download —
+    # opening the file in a browser tab gives the real interactive slice. The
+    # inline iframe stays below for runtimes (local marimo, Jupyter) that do
+    # render it.
+    _download = mo.download(
+        _page.encode(),
+        filename=f"slice_{_example.slug}.html",
+        mimetype="text/html",
+        label="⬇ Download this slice, then open it in a new browser tab",
+    )
+    mo.vstack([
+        mo.md(
+            f"**{_example.section}** — interactive slice. If the view below is "
+            "blank, use the download button above (molab blocks scripted iframes)."
+        ),
+        _download,
+        mo.iframe(_page, height="660px"),
+    ])
     return
 
 
