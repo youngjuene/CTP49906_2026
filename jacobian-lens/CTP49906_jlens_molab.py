@@ -463,5 +463,170 @@ def _(LOCAL_FITTED_LENS, jlens, mo, model):
     return
 
 
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## 7. Playground — download, upload & test any lens
+
+    Get the lens you just fit out of molab, bring one back in, and read out any
+    prompt through it — the released lens, your fitted lens, or an uploaded one.
+    """)
+    return
+
+
+@app.cell
+def _(LOCAL_FITTED_LENS, mo):
+    if LOCAL_FITTED_LENS.exists():
+        _mb = LOCAL_FITTED_LENS.stat().st_size / 2**20
+        # Lazy (callable) data so the ~hundreds-of-MB file streams on click
+        # instead of inlining into the cell output.
+        _dl = mo.download(
+            data=lambda: LOCAL_FITTED_LENS.read_bytes(),
+            filename="jacobian_lens.pt",
+            mimetype="application/octet-stream",
+            label=f"⬇ Download your fitted lens ({_mb:.0f} MB)",
+        )
+    else:
+        _dl = mo.md("_No fitted lens on disk yet — run Section 6 to create one._")
+    _dl
+    return
+
+
+@app.cell
+def _(mo):
+    lens_upload = mo.ui.file(
+        filetypes=[".pt"],
+        kind="button",
+        max_size=2_000_000_000,
+        label="⬆ Upload a jacobian_lens.pt (used by the 'Uploaded lens' option below)",
+    )
+    lens_upload
+    return (lens_upload,)
+
+
+@app.cell
+def _(mo):
+    pg_source = mo.ui.dropdown(
+        options={
+            "Released lens": "released",
+            "Your fitted lens (this session)": "fitted",
+            "Uploaded lens": "uploaded",
+        },
+        value="Your fitted lens (this session)",
+        label="Lens",
+    )
+    pg_prompt = mo.ui.text_area(
+        value="Fact: The capital of the country whose flag has a single maple leaf is",
+        label="Prompt",
+        rows=2,
+        full_width=True,
+    )
+    pg_run = mo.ui.run_button(label="Run readout")
+    mo.vstack([pg_source, pg_prompt, pg_run])
+    return pg_prompt, pg_run, pg_source
+
+
+@app.cell
+def _(
+    LOCAL_FITTED_LENS,
+    OUTPUT_ROOT,
+    jlens,
+    lens,
+    lens_upload,
+    mo,
+    model,
+    pg_prompt,
+    pg_run,
+    pg_source,
+    tokenizer,
+):
+    mo.stop(
+        not pg_run.value,
+        mo.md("_Pick a lens and prompt above, then click **Run readout**._"),
+    )
+
+    # build_page/compute_slice are imported under private names so they don't
+    # redefine the ones in the Section 5 slice cell (marimo: one def per name).
+    from jlens.vis import build_page as _build_page
+    from jlens.vis import compute_slice as _compute_slice
+
+    if pg_source.value == "uploaded" and lens_upload.value:
+        _p = OUTPUT_ROOT / "uploaded_lens.pt"
+        _p.write_bytes(lens_upload.value[0].contents)
+        _active = jlens.JacobianLens.load(str(_p))
+        _which = f"uploaded · {lens_upload.value[0].name}"
+    elif pg_source.value == "fitted" and LOCAL_FITTED_LENS.exists():
+        _active = jlens.JacobianLens.load(str(LOCAL_FITTED_LENS))
+        _which = "your fitted lens"
+    else:
+        _active = lens
+        _which = "released lens" + (
+            " (no fitted lens found — run Section 6)"
+            if pg_source.value == "fitted"
+            else ""
+        )
+
+    _prompt = pg_prompt.value
+    # Four representative layers from the ACTIVE lens's fitted set (apply requires
+    # layers ⊆ source_layers when use_jacobian=True, and released vs fitted lenses
+    # may cover different layers).
+    _src = _active.source_layers
+    _layers = sorted(
+        {_src[len(_src) // 4], _src[len(_src) // 2], _src[len(_src) * 3 // 4], _src[-1]}
+    )
+
+    def _top5(_t):
+        return (
+            "`"
+            + ", ".join(repr(tokenizer.decode([_i])) for _i in _t.topk(5).indices)
+            + "`"
+        )
+
+    with mo.status.spinner(title="Reading out the prompt…"):
+        _jl, _ml, _ = _active.apply(model, _prompt, layers=_layers, positions=[-2])
+        _ll, _, _ = _active.apply(
+            model, _prompt, layers=_layers, positions=[-2], use_jacobian=False
+        )
+    _rows = "\n".join(
+        f"| L{_l} | {_top5(_ll[_l][0])} | {_top5(_jl[_l][0])} |" for _l in _layers
+    )
+    _table = mo.md(
+        f"**Lens:** {_which} · **n_prompts:** {_active.n_prompts}\n\n"
+        f"**Prompt:** {_prompt!r}\n\n"
+        "| layer | logit-lens top-5 | J-lens top-5 |\n|---|---|---|\n"
+        + _rows
+        + f"\n\n**model (final) top-5:** {_top5(_ml[0])}"
+    )
+
+    # Interactive slice for the same prompt+lens, offered as a download (the d3
+    # embed template was warmed by Section 5). Guarded so a viz hiccup never
+    # hides the table above.
+    try:
+        with mo.status.spinner(title="Building the interactive slice…"):
+            _slice = _compute_slice(
+                model, _active, _prompt, layer_stride=2, max_tracked=64, mask_display=True
+            )
+            _page, _, _ = _build_page(
+                _slice,
+                _prompt,
+                title="Playground slice",
+                description=f"{_which} · {_prompt!r}",
+            )
+        _viz = mo.download(
+            _page.encode(),
+            filename="playground_slice.html",
+            mimetype="text/html",
+            label="⬇ Download the interactive slice for this prompt",
+        )
+    except Exception as _e:
+        _viz = mo.md(
+            f"_(Slice viz unavailable: {type(_e).__name__}. The table above still "
+            "reflects your lens.)_"
+        )
+
+    mo.vstack([_table, _viz])
+    return
+
+
 if __name__ == "__main__":
     app.run()
