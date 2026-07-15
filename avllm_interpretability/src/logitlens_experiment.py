@@ -11,7 +11,10 @@ logit_lens_hooks = []
 
 def logit_lens_hook(layer_idx):
     def hook_fn(module, input, output):
-        hidden_state = output[0]
+        # transformers <5 returns a tuple (hidden_states, ...) from a decoder
+        # layer; >=5 returns the bare hidden_states tensor. Handle both so we
+        # always store the full [batch, seq, d_model] activation.
+        hidden_state = output[0] if isinstance(output, tuple) else output
         if hidden_state is not None:
             logit_lens_storage[layer_idx] = hidden_state.detach().cpu()
     return hook_fn
@@ -75,8 +78,12 @@ def analyze_and_save_audio_logits_to_csv(model, processor, token_mapping, filena
     for token_idx in audio_token_indices:
         csv_row = [token_idx, 'audio']
         for layer_idx in sorted(logit_lens_storage.keys()):
-            # hidden_state_for_token is currently on CPU
-            hidden_state_for_token = logit_lens_storage[layer_idx][0, token_idx, :].unsqueeze(0)
+            # hidden_state_for_token is currently on CPU. Stored tensor is
+            # [batch, seq, d_model]; tolerate [seq, d_model] if a batch dim was
+            # ever stripped.
+            _stored = logit_lens_storage[layer_idx]
+            _row = _stored[0, token_idx, :] if _stored.dim() == 3 else _stored[token_idx, :]
+            hidden_state_for_token = _row.unsqueeze(0)
 
             with torch.no_grad():
                 # **THIS IS THE FIX**: Move the CPU tensor to the same device as the lm_head

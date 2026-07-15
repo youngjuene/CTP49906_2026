@@ -160,9 +160,20 @@ def _(mo):
     _ensure_video_reader()
 
     # The experiment code (src/) and sample video live under the
-    # `avllm_interpretability/` subdirectory of this repo.
+    # `avllm_interpretability/` subdirectory of this repo. If the clone already
+    # exists, hard-sync it to the latest main so pushed fixes reach molab
+    # (a kernel restart is still needed to re-import updated modules).
     REPO_DIR = Path("CTP49906_2026").resolve()
-    if not REPO_DIR.exists():
+    if REPO_DIR.exists():
+        with mo.status.spinner(title="Updating CTP49906_2026 to latest main…"):
+            subprocess.run(
+                ["git", "-C", str(REPO_DIR), "fetch", "--depth", "1", "origin", "main"],
+                check=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(REPO_DIR), "reset", "--hard", "origin/main"], check=True
+            )
+    else:
         with mo.status.spinner(title="Cloning CTP49906_2026 (src + sample video)…"):
             subprocess.run(
                 ["git", "clone", "--depth", "1",

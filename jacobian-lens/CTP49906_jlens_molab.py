@@ -106,8 +106,19 @@ def _(mo):
     # jlens is not on PyPI; clone the repo and import it from source. This avoids
     # pip's resolver rebuilding/replacing torch on Blackwell. The package lives
     # in the `jacobian-lens/` subdirectory of the repo.
+    # If the clone already exists, hard-sync it to the latest main so pushed
+    # fixes reach molab (a kernel restart is still needed to re-import modules).
     REPO_DIR = Path("CTP49906_2026").resolve()
-    if not REPO_DIR.exists():
+    if REPO_DIR.exists():
+        with mo.status.spinner(title="Updating CTP49906_2026 to latest main…"):
+            subprocess.run(
+                ["git", "-C", str(REPO_DIR), "fetch", "--depth", "1", "origin", "main"],
+                check=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(REPO_DIR), "reset", "--hard", "origin/main"], check=True
+            )
+    else:
         with mo.status.spinner(title="Cloning CTP49906_2026 (jlens source + assets)…"):
             subprocess.run(
                 ["git", "clone", "--depth", "1",
