@@ -374,7 +374,11 @@ def _(
 
     with mo.status.spinner(title="Generating the caption…"):
         with torch.no_grad():
-            _ids = logit_model.generate(**logit_inputs, max_new_tokens=MAX_NEW_TOKENS)
+            # Generate from the thinker directly: the omni wrapper's generate()
+            # defaults to audio output and errors because we freed the talker
+            # (transformers >=5 dropped the has-talker fallback). The thinker is a
+            # plain causal LM and yields the same text, version-agnostically.
+            _ids = logit_model.thinker.generate(**logit_inputs, max_new_tokens=MAX_NEW_TOKENS)
     logit_caption = logit_processor.batch_decode(
         _ids, skip_special_tokens=True, clean_up_tokenization_spaces=False
     )[0]
@@ -447,7 +451,10 @@ def _(
 
     with mo.status.spinner(title="Baseline generation…"):
         with torch.no_grad():
-            _base = attention_model.generate(
+            # Thinker-direct generation (see the logit cell): avoids the omni
+            # wrapper's talker requirement. Knockout hooks live on the thinker's
+            # layers, so they still fire below.
+            _base = attention_model.thinker.generate(
                 **attention_inputs, max_new_tokens=MAX_NEW_TOKENS, return_dict_in_generate=True
             )
     baseline_text = attention_processor.batch_decode(
@@ -460,7 +467,7 @@ def _(
     ) as _cap:
         with mo.status.spinner(title="Knockout generation…"):
             with torch.no_grad():
-                _ko = attention_model.generate(
+                _ko = attention_model.thinker.generate(
                     **attention_inputs, max_new_tokens=MAX_NEW_TOKENS,
                     output_attentions=True, return_dict_in_generate=True,
                 )
