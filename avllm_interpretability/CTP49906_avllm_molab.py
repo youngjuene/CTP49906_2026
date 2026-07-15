@@ -483,7 +483,13 @@ def _(
         ],
         widths="equal",
     )
-    return attention_token_types, captured_attention, knockout_text
+    return (
+        attention_model,
+        attention_processor,
+        attention_token_types,
+        captured_attention,
+        knockout_text,
+    )
 
 
 @app.cell(hide_code=True)
@@ -567,8 +573,372 @@ def _(knockout_text, logit_csv_written, mo):
         f"### Done\n\n"
         f"- Logit-lens CSV written: **{_ok}** — `{logit_csv_written}`\n"
         f"- Baseline vs knockout compared above.\n\n"
-        "Change `KNOCKOUT_RULES`, `NFRAMES`, or `VIDEO_PATH` in the parameters cell to explore further."
+        "Change `KNOCKOUT_RULES`, `NFRAMES`, or `VIDEO_PATH` in the parameters cell — "
+        "or use the **interactive logit-lens diversity scoreboard** below — to explore further."
     )
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## 🎛️ Interactive: logit-lens diversity scoreboard
+
+    Everything above ran once with the fixed parameters. This section turns the
+    **logit-lens diversity** measurement into a live playground: pick a clip, the
+    number of frames, the prompt, and (optionally) an attention knockout to apply
+    **during** the forward pass, then submit to score every thinker layer by how
+    many *distinct* tokens it decodes across the audio-token positions.
+
+    Nothing runs until you press submit (the controls are wrapped in a form), and
+    the eager model from the knockout experiment is reused — so runs are quick and
+    need no extra VRAM.
+
+    The score is measured at **audio** token positions, so knockouts with an `audio`
+    source reshape it most directly (a `generated` source does nothing in a forward
+    pass). Build one rule with the dropdowns, or enter several in the advanced field.
+    """)
+    return
+
+
+@app.cell
+def _(KNOCKOUT_RULES, LOGIT_PROMPT, NFRAMES, attention_model, mo):
+    _n_layers = len(attention_model.thinker.model.layers)
+    _modalities = ["audio", "video", "query_text", "image", "generated"]
+    # Scoreboard-appropriate defaults: the source must be a modality that is
+    # actually PRESENT in the prompt, so `audio` (the positions being scored) —
+    # not the params cell's `generated`, which is inert in a forward pass. The
+    # target follows the params rule; the window spans every layer ([0, N)).
+    _def_source = "audio"
+    _def_target = KNOCKOUT_RULES[0][1] if KNOCKOUT_RULES else "video"
+
+    _hint = (
+        f"Source/target ∈ `audio · video · query_text · image · generated` — but "
+        f"`generated` is **inert** here (there are no generated tokens during a forward "
+        f"pass). Layer `end` is exclusive; this thinker has **{_n_layers}** layers, so "
+        f"`[0, {_n_layers})` spans all of them."
+    )
+    _template = (
+        "**Video** — upload `mp4 / mov / mkv / webm`, or leave empty to reuse the default clip:\n\n"
+        "{video}\n\n"
+        "**Frames sampled from the clip** {nframes}\n\n"
+        "**Prompt** {prompt}\n\n"
+        "---\n\n"
+        "**Apply attention knockout during the pass** {ko_enable}\n\n"
+        "Single rule — block {ko_source} → {ko_target} across thinker layers {ko_layers}\n\n"
+        "Advanced — several rules as `source,target,start,end` separated by `;` "
+        "(overrides the single rule above when filled):\n\n"
+        "{ko_rules_text}\n\n"
+        + _hint + "\n\n"
+        "**Also run a no-knockout baseline to compare against** {compare}"
+    )
+
+    ko_controls = mo.md(_template).batch(
+        video=mo.ui.file(
+            filetypes=[".mp4", ".mov", ".mkv", ".webm", ".avi"],
+            multiple=False,
+            kind="area",
+        ),
+        nframes=mo.ui.slider(
+            2, 32, step=2, value=NFRAMES, show_value=True, include_input=True
+        ),
+        prompt=mo.ui.text(value=LOGIT_PROMPT, full_width=True),
+        ko_enable=mo.ui.checkbox(value=bool(KNOCKOUT_RULES)),
+        ko_source=mo.ui.dropdown(_modalities, value=_def_source),
+        ko_target=mo.ui.dropdown(_modalities, value=_def_target),
+        ko_layers=mo.ui.range_slider(
+            0, _n_layers, step=1, value=[0, _n_layers], show_value=True
+        ),
+        ko_rules_text=mo.ui.text(
+            placeholder="e.g.  audio,video,0,36 ; audio,image,0,36", full_width=True
+        ),
+        compare=mo.ui.checkbox(value=True),
+    ).form(
+        submit_button_label="▶ Run logit-lens diversity",
+        bordered=True,
+    )
+    ko_controls
+    return (ko_controls,)
+
+
+@app.cell
+def _(
+    Counter,
+    LOGIT_CSV_PATH,
+    LOGIT_PROMPT,
+    VIDEO_PATH,
+    analyze_and_save_audio_logits_to_csv,
+    attention_model,
+    attention_processor,
+    block_attention,
+    clear_logit_lens_hooks,
+    create_attention_token_mapping,
+    csv,
+    ko_controls,
+    mo,
+    np,
+    plt,
+    register_logit_lens_hooks,
+    torch,
+):
+    from contextlib import nullcontext as _nullcontext
+
+    from qwen_omni_utils import process_mm_info as _process_mm_info
+
+    _p = ko_controls.value
+    mo.stop(
+        _p is None,
+        mo.callout(
+            mo.md("Set the parameters above and press **▶ Run logit-lens diversity**."),
+            kind="info",
+        ),
+    )
+
+    _results_dir = LOGIT_CSV_PATH.parent
+
+    # Resolve the video: an uploaded clip wins, otherwise reuse the default sample.
+    _uploads = _p["video"]
+    if _uploads and _uploads[0].contents:
+        _video_path = _results_dir / f"uploaded_{_uploads[0].name}"
+        _video_path.write_bytes(_uploads[0].contents)
+    else:
+        _video_path = VIDEO_PATH
+    _nframes = int(_p["nframes"])
+    _prompt = _p["prompt"].strip() or LOGIT_PROMPT
+
+    # Build the knockout rules. The advanced text field (several `src,tgt,start,end`
+    # rules separated by `;`) overrides the single-rule builder when it is filled.
+    _modalities = ["audio", "video", "query_text", "image", "generated"]
+    _n_layers = len(attention_model.thinker.model.layers)
+
+    def _parse_rules(text):
+        _out = []
+        for _seg in text.split(";"):
+            _seg = _seg.strip()
+            if not _seg:
+                continue
+            _f = [c.strip() for c in _seg.split(",")]
+            if len(_f) != 4:
+                return [], f"`{_seg}` needs 4 fields: `source,target,start,end`"
+            _s, _t, _a, _b = _f
+            if _s not in _modalities:
+                return [], f"unknown source `{_s}` — use {' / '.join(_modalities)}"
+            if _t not in _modalities:
+                return [], f"unknown target `{_t}` — use {' / '.join(_modalities)}"
+            try:
+                _a, _b = int(_a), int(_b)
+            except ValueError:
+                return [], f"start/end must be integers in `{_seg}`"
+            if not (0 <= _a < _b <= _n_layers):
+                return [], f"need 0 ≤ start < end ≤ {_n_layers} in `{_seg}`"
+            _out.append((_s, _t, _a, _b))
+        if not _out:
+            return [], "no rules parsed — try `audio,video,0,36`"
+        return _out, None
+
+    _rules_err = None
+    if not _p["ko_enable"]:
+        _rules = []
+    elif _p["ko_rules_text"].strip():
+        _rules, _rules_err = _parse_rules(_p["ko_rules_text"])
+    else:
+        _lo, _hi = _p["ko_layers"]
+        _rules = [(_p["ko_source"], _p["ko_target"], int(_lo), int(_hi))]
+    mo.stop(
+        _rules_err is not None,
+        mo.callout(mo.md(f"**Invalid knockout rules** — {_rules_err}"), kind="danger"),
+    )
+    _compare = bool(_p["compare"])
+
+    def _prep(video_path, nframes, prompt):
+        _conv = [{"role": "user", "content": [
+            {"type": "text", "text": prompt},
+            {"type": "video", "video": str(video_path), "nframes": nframes},
+        ]}]
+        _text = attention_processor.apply_chat_template(
+            _conv, add_generation_prompt=True, tokenize=False
+        )
+        _audios, _images, _videos = _process_mm_info(_conv, use_audio_in_video=True)
+        _inp = attention_processor(
+            text=_text, audio=_audios, images=_images, videos=_videos,
+            return_tensors="pt", padding=True, use_audio_in_video=True,
+        )
+        _inp = {k: v.to(attention_model.device) for k, v in _inp.items()}
+        _types = create_attention_token_mapping(
+            _inp["input_ids"], attention_model.config.thinker_config
+        )
+        return _inp, _types
+
+    def _diversity(csv_path):
+        # Reproduce the "diversity by layer" logic: per layer, count distinct decoded
+        # tokens across the audio-token rows, and the most-common prediction's share.
+        with open(csv_path, newline="", encoding="utf-8") as _fh:
+            _data = list(csv.reader(_fh))[1:]  # drop the header row
+        if not _data:
+            return [], [], 0
+        _cols = list(zip(*(_r[2:] for _r in _data)))  # one tuple per thinker layer
+        _uniq = [len(set(_c)) for _c in _cols]
+        _dom = [Counter(_c).most_common(1)[0][1] / len(_c) for _c in _cols]
+        return _uniq, _dom, len(_data)
+
+    def _run_pass(rules, tag, inp, types):
+        _csv_path = _results_dir / f"interactive_logit_lens_{tag}.csv"
+        if _csv_path.exists():
+            _csv_path.unlink()  # no stale results if this run has no audio tokens
+        register_logit_lens_hooks(attention_model)
+        try:
+            _ctx = (
+                block_attention(
+                    attention_model, rules, types, len(types), track_attention=False
+                )
+                if rules else _nullcontext()
+            )
+            with _ctx:
+                with torch.no_grad():
+                    attention_model.thinker(**inp, output_hidden_states=True)
+            analyze_and_save_audio_logits_to_csv(
+                attention_model, attention_processor, types, filename=str(_csv_path)
+            )
+        finally:
+            clear_logit_lens_hooks()
+        if not _csv_path.exists():
+            return [], [], 0
+        return _diversity(_csv_path)
+
+    _scoreboard = None
+    try:
+        with mo.status.spinner(
+            title=f"Logit-lens forward pass · {_nframes} frames · {_video_path.name}…"
+        ):
+            _inp, _types = _prep(_video_path, _nframes, _prompt)  # encode the clip once
+            if _rules:
+                _ko_u, _ko_d, _n_audio = _run_pass(_rules, "knockout", _inp, _types)
+                _bl_u, _bl_d = (None, None)
+                if _compare:
+                    _bl_u, _bl_d, _ = _run_pass([], "baseline", _inp, _types)
+            else:
+                _bl_u, _bl_d, _n_audio = _run_pass([], "baseline", _inp, _types)
+                _ko_u, _ko_d = (None, None)
+    except Exception as _e:  # noqa: BLE001 — surface any run failure in-notebook
+        _scoreboard = mo.callout(
+            mo.md(f"**Run failed** — `{type(_e).__name__}: {_e}`"), kind="danger"
+        )
+
+    if _scoreboard is None:
+        _primary_u = _ko_u if _ko_u else _bl_u
+        _primary_d = _ko_d if _ko_d else _bl_d
+        _both = bool(_ko_u) and bool(_bl_u)
+
+    if _scoreboard is not None:
+        pass
+    elif not _primary_u:
+        _scoreboard = mo.callout(
+            mo.md(
+                f"**No audio tokens** were produced for `{_video_path.name}` with this "
+                "prompt, so there are no audio-position predictions to score. Try a clip "
+                "that carries an audio track."
+            ),
+            kind="warn",
+        )
+    else:
+        _n_l = len(_primary_u)
+        _order = sorted(range(_n_l), key=lambda k: _primary_u[k], reverse=True)
+
+        _rows = []
+        for _rank, _i in enumerate(_order, 1):
+            _row = {"Rank": _rank, "Layer": _i, "Unique preds": _primary_u[_i]}
+            if _both:
+                _row["Baseline"] = _bl_u[_i]
+                _row["Δ vs base"] = _ko_u[_i] - _bl_u[_i]
+            _row["Dominant share"] = round(_primary_d[_i], 3)
+            _rows.append(_row)
+        _table = mo.ui.table(_rows, selection=None, pagination=True, page_size=12)
+
+        _peak = _order[0]
+        _stats = [
+            mo.stat(
+                value=f"Layer {_peak}",
+                label="Peak diversity",
+                caption=f"{_primary_u[_peak]} unique predictions",
+                bordered=True,
+            ),
+            mo.stat(
+                value=f"{sum(_primary_u) / _n_l:.1f}",
+                label="Mean unique / layer",
+                caption=f"across {_n_l} thinker layers",
+                bordered=True,
+            ),
+            mo.stat(
+                value=str(_n_audio),
+                label="Audio tokens scored",
+                caption="positions decoded per layer",
+                bordered=True,
+            ),
+        ]
+        if _both:
+            _mean_delta = sum(_ko_u[k] - _bl_u[k] for k in range(_n_l)) / _n_l
+            _less = sum(1 for k in range(_n_l) if _ko_u[k] < _bl_u[k])
+            _stats.append(
+                mo.stat(
+                    value=f"{_mean_delta:+.1f}",
+                    label="Mean Δ from knockout",
+                    caption=f"{_less}/{_n_l} layers less diverse",
+                    direction="decrease" if _mean_delta < 0 else "increase",
+                    bordered=True,
+                )
+            )
+
+        _x = np.arange(_n_l)
+        _fig, _axes = plt.subplots(1, 2, figsize=(14, 4), constrained_layout=True)
+        if _both:
+            _axes[0].bar(_x, _ko_u, color="#4C78A8", label="knockout")
+            _axes[0].plot(_x, _bl_u, color="#F58518", marker="o", ms=3, lw=1.5, label="baseline")
+            _axes[0].legend()
+            _axes[0].set(title="Unique predictions by layer",
+                         xlabel="Thinker layer", ylabel="Unique predictions")
+            _delta = [_ko_u[k] - _bl_u[k] for k in range(_n_l)]
+            _axes[1].bar(_x, _delta, color=["#E45756" if d < 0 else "#54A24B" for d in _delta])
+            _axes[1].axhline(0, color="black", lw=0.8)
+            _axes[1].set(title="Δ diversity (knockout − baseline)",
+                         xlabel="Thinker layer", ylabel="Δ unique predictions")
+        else:
+            _axes[0].bar(_x, _primary_u, color="#4C78A8")
+            _axes[0].set(title="Logit-lens diversity by layer",
+                         xlabel="Thinker layer", ylabel="Unique predictions")
+            _axes[1].plot(_x, _primary_d, marker="o", color="#F58518")
+            _axes[1].set(title="Most-common prediction share",
+                         xlabel="Thinker layer", ylabel="Share", ylim=(0, 1))
+        for _ax in _axes:
+            _ax.grid(axis="y", alpha=0.25)
+
+        _rule_txt = (
+            " + ".join(f"`{r[0]}→{r[1]}` [{r[2]},{r[3]})" for r in _rules)
+            if _rules else "_none (baseline only)_"
+        )
+        _children = []
+        _gen = [r for r in _rules if r[0] == "generated"]
+        if _gen:
+            _children.append(mo.callout(
+                mo.md(
+                    f"**Heads-up:** {len(_gen)} rule(s) use `generated` as the source, which "
+                    "is **inert** in this forward-pass scoreboard — there are no generated "
+                    "tokens during prefill, so those rules block nothing (expect a flat Δ). "
+                    "Use `audio`, `video`, or `query_text` as the source to reshape the score."
+                ),
+                kind="warn",
+            ))
+        _children += [
+            mo.md(
+                f"**Video** `{_video_path.name}` &nbsp;·&nbsp; **Frames** {_nframes} "
+                f"&nbsp;·&nbsp; **Prompt** _{_prompt}_ &nbsp;·&nbsp; **Knockout** {_rule_txt}"
+            ),
+            mo.hstack(_stats, widths="equal", gap=1),
+            _fig,
+            mo.md("###### Layers ranked by decoded-prediction diversity (higher = more distinct audio-token predictions)"),
+            _table,
+        ]
+        _scoreboard = mo.vstack(_children)
+    _scoreboard
     return
 
 
