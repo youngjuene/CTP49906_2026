@@ -1,0 +1,558 @@
+# /// script
+# requires-python = ">=3.10"
+# dependencies = [
+#     "marimo",
+#     "numpy",
+#     "matplotlib",
+#     "torch==2.6.0",
+#     "torchvision==0.21.0",
+#     "transformers==4.52.0",
+#     "accelerate==1.14.0",
+#     "qwen-omni-utils==0.0.9",
+# ]
+# ///
+
+import marimo
+
+__generated_with = "0.23.14"
+app = marimo.App(width="medium")
+
+
+@app.cell
+def _():
+    import marimo as mo
+
+    return (mo,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    # AVLLM interpretability — molab demo
+
+    Two interpretability experiments on one video with **Qwen2.5-Omni-3B**:
+
+    1. **Logit Lens** — decode the model's intermediate predictions at audio-token
+       positions across thinker layers.
+    2. **Attention Knockout** — compare a baseline response with one generated after
+       blocking a chosen source→target attention path.
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Running in molab
+
+    - **GPU:** attach one via the notebook-specs button in the header; this notebook
+      uses `cuda:0`. The two 3B models load comfortably in molab's VRAM.
+    - **Dependencies:** the setup cell pip-installs them into the kernel (molab does
+      not honor the `# /// script` block automatically) and restores
+      `torchvision.io.read_video` with a small PyAV shim, since molab's bundled
+      torchvision no longer ships a video decoder.
+    - The experiment code (`src/`) and the sample clip are cloned from
+      `youngjuene/CTP49906_2026` by the setup cell below.
+    """)
+    return
+
+
+@app.cell
+def _(mo):
+    import importlib.metadata
+    import importlib.util
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    def _ver_tuple(v):
+        out = []
+        for part in v.split(".")[:3]:
+            digits = "".join(ch for ch in part if ch.isdigit())
+            out.append(int(digits) if digits else 0)
+        return tuple(out)
+
+    def _ensure_packages(specs):
+        # specs: (import_name, dist_name, min_version_or_None, pip_spec).
+        # molab does not install the `# /// script` block into the running
+        # kernel, so pip-install anything missing (or too old) at runtime.
+        to_install = []
+        for import_name, dist_name, min_version, pip_spec in specs:
+            if importlib.util.find_spec(import_name) is None:
+                to_install.append(pip_spec)
+                continue
+            if min_version is not None:
+                try:
+                    have = importlib.metadata.version(dist_name)
+                except importlib.metadata.PackageNotFoundError:
+                    to_install.append(pip_spec)
+                    continue
+                if _ver_tuple(have) < _ver_tuple(min_version):
+                    to_install.append(pip_spec)
+        if to_install:
+            with mo.status.spinner(title=f"Installing {', '.join(to_install)}…"):
+                subprocess.run(
+                    [sys.executable, "-m", "pip", "install", *to_install], check=True
+                )
+
+    _ensure_packages([
+        ("transformers", "transformers", "4.52.0", "transformers==4.52.0"),
+        ("accelerate", "accelerate", "1.14.0", "accelerate==1.14.0"),
+        ("qwen_omni_utils", "qwen-omni-utils", None, "qwen-omni-utils==0.0.9"),
+        ("av", "av", None, "av"),  # PyAV — backs the video-decode shim below
+    ])
+
+    def _ensure_video_reader():
+        # molab ships its own recent torch/torchvision and ignores the
+        # `# /// script` pins above. torchvision >= 0.23 dropped the built-in
+        # video decoder, so `torchvision.io.read_video` no longer exists and
+        # qwen-omni-utils' default torchvision backend dies with
+        # `AttributeError: module 'torchvision.io' has no attribute 'read_video'`.
+        # PyAV is already installed (qwen uses it to read the audio track), so
+        # restore read_video on top of PyAV — no version-fragile CUDA wheels
+        # (torchcodec/decord) and no reliance on system codecs.
+        import torchvision
+
+        if hasattr(torchvision.io, "read_video"):
+            return  # normal torchvision (e.g. the pinned 0.21.0) — nothing to do
+        import av
+        import numpy as np
+        import torch
+
+        def _read_video_pyav(
+            filename, start_pts=0.0, end_pts=None, pts_unit="sec", output_format="TCHW"
+        ):
+            # Minimal torchvision.io.read_video replacement covering the single
+            # call qwen makes: it only reads `video.size(0)` and `info["video_fps"]`.
+            if isinstance(filename, str) and filename.startswith("file://"):
+                filename = filename[len("file://") :]
+            container = av.open(filename)
+            try:
+                stream = container.streams.video[0]
+                stream.thread_type = "AUTO"
+                rate = stream.average_rate or stream.guessed_rate or stream.base_rate
+                video_fps = float(rate) if rate else 30.0
+                frames = []
+                for frame in container.decode(video=0):
+                    ts = frame.time
+                    if pts_unit == "sec" and ts is not None:
+                        if ts < start_pts:
+                            continue
+                        if end_pts is not None and ts > end_pts:
+                            break
+                    frames.append(frame.to_ndarray(format="rgb24"))  # (H, W, C) uint8
+            finally:
+                container.close()
+            if frames:
+                video = torch.from_numpy(np.stack(frames))  # (T, H, W, C)
+            else:
+                video = torch.zeros((0, 0, 0, 3), dtype=torch.uint8)
+            if output_format.upper() == "TCHW":
+                video = video.permute(0, 3, 1, 2).contiguous()  # (T, C, H, W)
+            # qwen extracts audio separately (process_audio_info), so an empty
+            # placeholder here is fine; it only unpacks and discards this value.
+            audio = torch.zeros((1, 0), dtype=torch.float32)
+            return video, audio, {"video_fps": video_fps, "audio_fps": None}
+
+        torchvision.io.read_video = _read_video_pyav
+        print("patched torchvision.io.read_video (PyAV shim) for molab compatibility")
+
+    _ensure_video_reader()
+
+    # The experiment code (src/) and sample video live under the
+    # `avllm_interpretability/` subdirectory of this repo.
+    REPO_DIR = Path("CTP49906_2026").resolve()
+    if not REPO_DIR.exists():
+        with mo.status.spinner(title="Cloning CTP49906_2026 (src + sample video)…"):
+            subprocess.run(
+                ["git", "clone", "--depth", "1",
+                 "https://github.com/youngjuene/CTP49906_2026.git", str(REPO_DIR)],
+                check=True,
+            )
+    PROJECT_DIR = REPO_DIR / "avllm_interpretability"
+    assert PROJECT_DIR.is_dir(), f"expected code dir not found: {PROJECT_DIR}"
+    if str(PROJECT_DIR) not in sys.path:
+        sys.path.insert(0, str(PROJECT_DIR))
+    print("project dir:", PROJECT_DIR)
+    return (PROJECT_DIR,)
+
+
+@app.cell
+def _():
+    import torch
+
+    assert torch.cuda.is_available(), (
+        "No GPU visible. In molab, attach a GPU via the notebook-specs button in the header."
+    )
+    DEVICE = torch.device("cuda:0")
+    _free, _total = torch.cuda.mem_get_info(0)
+    print(f"torch={torch.__version__}, GPU={torch.cuda.get_device_name(0)}, VRAM={_total / 2**30:.0f} GiB")
+    return DEVICE, torch
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Parameters
+
+    Edit these to point at your own video or change the intervention. On molab's
+    large GPU you can safely raise `NFRAMES`.
+    """)
+    return
+
+
+@app.cell
+def _(PROJECT_DIR):
+    VIDEO_PATH = PROJECT_DIR / "assets" / "02321.mp4"
+    MODEL_PATH = "Qwen/Qwen2.5-Omni-3B"
+    NFRAMES = 8
+    LOGIT_PROMPT = "Describe what you hear in the video"
+    ATTENTION_PROMPT = "Describe what you see and hear in the video"
+    KNOCKOUT_RULES = [("generated", "video", 0, 35)]  # block generated→video, layers 0–35
+    MAX_NEW_TOKENS = 32
+    ATTENTION_CAPTURE_LAYERS = (0, 2)
+
+    RESULTS_DIR = PROJECT_DIR / "notebook_results"
+    RESULTS_DIR.mkdir(exist_ok=True)
+    LOGIT_CSV_PATH = RESULTS_DIR / "logit_lens_audio_token_analysis.csv"
+
+    assert VIDEO_PATH.is_file(), f"video not found: {VIDEO_PATH}"
+    print("video:", VIDEO_PATH)
+    return (
+        ATTENTION_CAPTURE_LAYERS,
+        ATTENTION_PROMPT,
+        KNOCKOUT_RULES,
+        LOGIT_CSV_PATH,
+        LOGIT_PROMPT,
+        MAX_NEW_TOKENS,
+        MODEL_PATH,
+        NFRAMES,
+        VIDEO_PATH,
+    )
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Preview the video (frames + embedded audio go to Qwen)
+    """)
+    return
+
+
+@app.cell
+def _(VIDEO_PATH, mo):
+    mo.video(src=VIDEO_PATH.read_bytes(), width=640)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Model and input helpers
+    """)
+    return
+
+
+@app.cell
+def _(DEVICE, MODEL_PATH, NFRAMES, PROJECT_DIR, VIDEO_PATH):
+    import csv
+    from collections import Counter
+
+    import matplotlib.pyplot as plt
+    import numpy as np
+    from qwen_omni_utils import process_mm_info
+    from transformers import Qwen2_5OmniForConditionalGeneration, Qwen2_5OmniProcessor
+
+    _ = PROJECT_DIR  # ensure the clone / sys.path cell ran first
+    from src.attention_knockout_experiment import block_attention
+    from src.attention_knockout_experiment import (
+        create_token_type_mapping as create_attention_token_mapping,
+    )
+    from src.logitlens_experiment import (
+        analyze_and_save_audio_logits_to_csv,
+        clear_logit_lens_hooks,
+        create_token_type_mapping,
+        register_logit_lens_hooks,
+    )
+
+    def load_model_and_processor(attn_implementation):
+        _model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
+            MODEL_PATH, torch_dtype="auto", attn_implementation=attn_implementation
+        )
+        # Free the talker + (float32) token2wav BEFORE moving to GPU so they never
+        # occupy VRAM — this experiment only needs the thinker.
+        _model.disable_talker()
+        _model = _model.to(DEVICE)
+        _model.eval()
+        _proc = Qwen2_5OmniProcessor.from_pretrained(MODEL_PATH)
+        return _model, _proc
+
+    def prepare_video_inputs(model, processor, prompt, token_mapping_fn):
+        _conv = [{"role": "user", "content": [
+            {"type": "text", "text": prompt},
+            {"type": "video", "video": str(VIDEO_PATH), "nframes": NFRAMES},
+        ]}]
+        _text = processor.apply_chat_template(_conv, add_generation_prompt=True, tokenize=False)
+        _audios, _images, _videos = process_mm_info(_conv, use_audio_in_video=True)
+        _inputs = processor(
+            text=_text, audio=_audios, images=_images, videos=_videos,
+            return_tensors="pt", padding=True, use_audio_in_video=True,
+        )
+        _inputs = {k: v.to(model.device) for k, v in _inputs.items()}
+        _types = token_mapping_fn(_inputs["input_ids"], model.config.thinker_config)
+        print("token counts:", Counter(_types))
+        return _inputs, _types
+
+    return (
+        Counter,
+        analyze_and_save_audio_logits_to_csv,
+        block_attention,
+        clear_logit_lens_hooks,
+        create_attention_token_mapping,
+        create_token_type_mapping,
+        csv,
+        load_model_and_processor,
+        np,
+        plt,
+        prepare_video_inputs,
+        register_logit_lens_hooks,
+    )
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Logit Lens
+
+    A multimodal forward pass; the CSV analysis focuses on `audio` token positions.
+    """)
+    return
+
+
+@app.cell
+def _(
+    LOGIT_CSV_PATH,
+    LOGIT_PROMPT,
+    MAX_NEW_TOKENS,
+    analyze_and_save_audio_logits_to_csv,
+    clear_logit_lens_hooks,
+    create_token_type_mapping,
+    load_model_and_processor,
+    mo,
+    prepare_video_inputs,
+    register_logit_lens_hooks,
+    torch,
+):
+    with mo.status.spinner(title="Loading Qwen2.5-Omni-3B (SDPA, first run downloads ~8 GB)…"):
+        logit_model, logit_processor = load_model_and_processor("sdpa")
+    logit_inputs, logit_token_types = prepare_video_inputs(
+        logit_model, logit_processor, LOGIT_PROMPT, create_token_type_mapping
+    )
+
+    register_logit_lens_hooks(logit_model)
+    try:
+        with mo.status.spinner(title="Forward pass + decoding per-layer predictions…"):
+            with torch.no_grad():
+                _ = logit_model.thinker(**logit_inputs, output_hidden_states=True)
+            analyze_and_save_audio_logits_to_csv(
+                logit_model, logit_processor, logit_token_types, filename=str(LOGIT_CSV_PATH)
+            )
+    finally:
+        clear_logit_lens_hooks()
+    logit_csv_written = LOGIT_CSV_PATH
+
+    with mo.status.spinner(title="Generating the caption…"):
+        with torch.no_grad():
+            _ids = logit_model.generate(**logit_inputs, max_new_tokens=MAX_NEW_TOKENS)
+    logit_caption = logit_processor.batch_decode(
+        _ids, skip_special_tokens=True, clean_up_tokenization_spaces=False
+    )[0]
+    mo.md(f"**Generated caption:**\n\n> {logit_caption}")
+    return (logit_csv_written,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Logit-lens diversity by layer
+
+    Left: how many distinct decoded predictions appear across audio-token positions
+    at each layer. Right: how dominant the most common prediction is.
+    """)
+    return
+
+
+@app.cell
+def _(Counter, csv, logit_csv_written, np, plt):
+    with open(logit_csv_written, newline="", encoding="utf-8") as _fh:
+        _all = list(csv.reader(_fh))
+    _header, _data = _all[0], _all[1:]
+    _layer_names = _header[2:]
+    _preds = list(zip(*(r[2:] for r in _data)))
+    _unique = [len(set(p)) for p in _preds]
+    _dominant = [Counter(p).most_common(1)[0][1] / len(p) for p in _preds]
+
+    _x = np.arange(len(_layer_names))
+    _fig, _axes = plt.subplots(1, 2, figsize=(14, 4), constrained_layout=True)
+    _axes[0].bar(_x, _unique, color="#4C78A8")
+    _axes[0].set(title="Logit-lens diversity by layer", xlabel="Thinker layer", ylabel="Unique predictions")
+    _axes[1].plot(_x, _dominant, marker="o", color="#F58518")
+    _axes[1].set(title="Most-common prediction share", xlabel="Thinker layer", ylabel="Share", ylim=(0, 1))
+    for _ax in _axes:
+        _ax.grid(axis="y", alpha=0.25)
+    _fig
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Attention Knockout
+
+    `KNOCKOUT_RULES` are `(source_type, target_type, start_layer, end_layer)` tuples.
+    The default blocks generated tokens from attending to video tokens in layers 0–35.
+    """)
+    return
+
+
+@app.cell
+def _(
+    ATTENTION_CAPTURE_LAYERS,
+    ATTENTION_PROMPT,
+    KNOCKOUT_RULES,
+    MAX_NEW_TOKENS,
+    block_attention,
+    create_attention_token_mapping,
+    load_model_and_processor,
+    mo,
+    prepare_video_inputs,
+    torch,
+):
+    with mo.status.spinner(title="Loading Qwen2.5-Omni-3B (eager attention)…"):
+        attention_model, attention_processor = load_model_and_processor("eager")
+    attention_inputs, attention_token_types = prepare_video_inputs(
+        attention_model, attention_processor, ATTENTION_PROMPT, create_attention_token_mapping
+    )
+
+    with mo.status.spinner(title="Baseline generation…"):
+        with torch.no_grad():
+            _base = attention_model.generate(
+                **attention_inputs, max_new_tokens=MAX_NEW_TOKENS, return_dict_in_generate=True
+            )
+    baseline_text = attention_processor.batch_decode(
+        _base.sequences, skip_special_tokens=True, clean_up_tokenization_spaces=False
+    )[0]
+
+    with block_attention(
+        attention_model, KNOCKOUT_RULES, attention_token_types, len(attention_token_types),
+        track_attention=True, capture_layer_range=ATTENTION_CAPTURE_LAYERS,
+    ) as _cap:
+        with mo.status.spinner(title="Knockout generation…"):
+            with torch.no_grad():
+                _ko = attention_model.generate(
+                    **attention_inputs, max_new_tokens=MAX_NEW_TOKENS,
+                    output_attentions=True, return_dict_in_generate=True,
+                )
+        captured_attention = {layer: list(v) for layer, v in _cap.items()}
+    knockout_text = attention_processor.batch_decode(
+        _ko.sequences, skip_special_tokens=True, clean_up_tokenization_spaces=False
+    )[0]
+
+    mo.hstack(
+        [
+            mo.vstack([mo.md("**Baseline**"), mo.md(baseline_text)]),
+            mo.vstack([mo.md(f"**Knockout** `{KNOCKOUT_RULES}`"), mo.md(knockout_text)]),
+        ],
+        widths="equal",
+    )
+    return attention_token_types, captured_attention, knockout_text
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Captured attention by key modality
+
+    A **descriptive** summary (not causal importance): for each captured layer we
+    average heads and sum the final query's attention over each token group. Read it
+    alongside the baseline-vs-knockout text above.
+    """)
+    return
+
+
+@app.cell
+def _(attention_token_types, captured_attention, mo, np, plt):
+    def _summarize(storage, prompt_token_types):
+        _order = ["query_text", "audio", "video", "image", "generated"]
+        _records = []
+        _plen = len(prompt_token_types)
+        for _layer, _snaps in sorted(storage.items()):
+            for _snap in _snaps:
+                _t = _snap.detach().float().cpu()
+                if _t.ndim == 4:
+                    _mean = _t[0].mean(dim=0)
+                elif _t.ndim == 3:
+                    _mean = _t.mean(dim=0)
+                else:
+                    continue
+                _key = _mean[-1] if _mean.shape[0] else _mean
+                _ktypes = prompt_token_types + ["generated"] * max(0, _key.shape[-1] - _plen)
+                for _m in _order:
+                    _idx = [i for i, tt in enumerate(_ktypes) if tt == _m]
+                    if _idx:
+                        _records.append((_layer, _m, float(_key[_idx].sum())))
+        if not _records:
+            return None
+        _layers = sorted({l for l, _, _ in _records})
+        _mat = np.zeros((len(_layers), len(_order)))
+        for _ri, _l in enumerate(_layers):
+            for _ci, _m in enumerate(_order):
+                _vals = [v for rl, rm, v in _records if rl == _l and rm == _m]
+                _mat[_ri, _ci] = np.mean(_vals) if _vals else 0.0
+        return _layers, _order, _mat
+
+    _summary = _summarize(captured_attention, attention_token_types)
+    if _summary is None:
+        _out = mo.md("> No attention tensors were returned by this build; the text comparison above is the result.")
+    else:
+        _layers, _mods, _mat = _summary
+        _fig, _ax = plt.subplots(figsize=(8, max(3, len(_layers) * 0.6)), constrained_layout=True)
+        _im = _ax.imshow(_mat, aspect="auto", cmap="magma")
+        _ax.set(
+            title="Captured final-query attention mass by key modality",
+            xlabel="Key modality", ylabel="Thinker layer",
+            xticks=np.arange(len(_mods)), xticklabels=_mods,
+            yticks=np.arange(len(_layers)), yticklabels=_layers,
+        )
+        for _ri in range(_mat.shape[0]):
+            for _ci in range(_mat.shape[1]):
+                _ax.text(_ci, _ri, f"{_mat[_ri, _ci]:.2f}", ha="center", va="center", color="white", fontsize=9)
+        _fig.colorbar(_im, ax=_ax, label="Attention mass")
+        _out = _fig
+    _out
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Wrap-up
+    """)
+    return
+
+
+@app.cell
+def _(knockout_text, logit_csv_written, mo):
+    _ = knockout_text  # depend on the knockout run
+    _ok = logit_csv_written.is_file() and logit_csv_written.stat().st_size > 0
+    mo.md(
+        f"### Done\n\n"
+        f"- Logit-lens CSV written: **{_ok}** — `{logit_csv_written}`\n"
+        f"- Baseline vs knockout compared above.\n\n"
+        "Change `KNOCKOUT_RULES`, `NFRAMES`, or `VIDEO_PATH` in the parameters cell to explore further."
+    )
+    return
+
+
+if __name__ == "__main__":
+    app.run()
