@@ -2,12 +2,11 @@
 # requires-python = ">=3.10"
 # dependencies = [
 #     "marimo",
-#     "numpy",
-#     "huggingface-hub",
-#     # jlens is not on PyPI; install it from the repository subdirectory.
-#     # If youngjuene/CTP49906_2026 is private, connect GitHub in molab, or
-#     # swap in the upstream: "jlens @ git+https://github.com/anthropics/jacobian-lens"
-#     "jlens @ git+https://github.com/youngjuene/CTP49906_2026.git#subdirectory=jacobian-lens",
+#     # Only marimo is declared here. jlens (imported from the cloned source),
+#     # transformers, huggingface-hub, and numpy are installed at runtime by the
+#     # setup cell, which never touches torch so molab's GPU-matched build (Blackwell
+#     # needs a cu128 wheel) is preserved. Don't add jlens or torch here: jlens
+#     # depends on an unpinned torch transitively and would risk replacing that build.
 # ]
 # ///
 
@@ -136,7 +135,7 @@ def _(mo):
 @app.cell
 def _(JLENS_DIR):
     import os
-    from pathlib import Path
+    from pathlib import Path as _Path
 
     _ = JLENS_DIR  # ensure the clone / sys.path / deps cell ran first
     import jlens
@@ -149,7 +148,7 @@ def _(JLENS_DIR):
         "No GPU visible. In molab, attach a GPU via the notebook-specs button in the header."
     )
     device = torch.device("cuda:0")
-    OUTPUT_ROOT = Path("artifacts/jlens-molab")
+    OUTPUT_ROOT = _Path("artifacts/jlens-molab")
     OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
 
     _free, _total = torch.cuda.mem_get_info(0)
