@@ -4,8 +4,8 @@ Reproducible interpretability experiments for the audio-visual LLM Qwen2.5-Omni:
 
 ## Contents
 
-- [`avllm_interpretability/`](avllm_interpretability/) — the experiments ([README](avllm_interpretability/README.md)), adapted from [ramaneswaran/avllm_interpretability](https://github.com/ramaneswaran/avllm_interpretability)
-- [`jacobian-lens/`](jacobian-lens/) — vendored [anthropics/jacobian-lens](https://github.com/anthropics/jacobian-lens) reference code
+- [`avllm_interpretability/`](avllm_interpretability/) — the experiments ([README](avllm_interpretability/README.md)), adapted from [ramaneswaran/avllm_interpretability](https://github.com/ramaneswaran/avllm_interpretability) ([project page](https://ramaneswaran.github.io/avllm_interpretability/))
+- [`jacobian-lens/`](jacobian-lens/) — vendored [anthropics/jacobian-lens](https://github.com/anthropics/jacobian-lens) reference code ([paper](https://transformer-circuits.pub/2026/workspace/index.html))
 
 ## Quick start
 

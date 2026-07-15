@@ -1,14 +1,11 @@
 # Do Audio-Visual Large Language Models Really See and Hear?
 
 <p align="center">
-  <a href="https://arxiv.org/abs/XXXX.XXXXX">
-    <img src="https://img.shields.io/badge/arXiv-paper-b31b1b" alt="arXiv"/>
+  <a href="https://arxiv.org/abs/2604.02605">
+    <img src="https://img.shields.io/badge/arXiv-2604.02605-b31b1b" alt="arXiv"/>
   </a>
   <a href="https://avllm-interpretability.github.io">
     <img src="https://img.shields.io/badge/Project-Website-blue" alt="Website"/>
-  </a>
-  <a href="https://huggingface.co/datasets/XXXXXXX">
-    <img src="https://img.shields.io/badge/🤗%20Hugging%20Face-Dataset-yellow" alt="HuggingFace"/>
   </a>
 </p>
 
@@ -34,4 +31,18 @@ python src/logitlens_experiment.py \
 python src/attention_knockout_experiment.py \
   --model_path Qwen/Qwen2.5-Omni-3B \
   --video_path assets/02321.mp4
+```
+
+## Citation
+
+```bibtex
+@misc{selvakumar2026audiovisuallargelanguagemodels,
+      title={Do Audio-Visual Large Language Models Really See and Hear?},
+      author={Ramaneswaran Selvakumar and Kaousheik Jayakumar and S Sakshi and Sreyan Ghosh and Ruohan Gao and Dinesh Manocha},
+      year={2026},
+      eprint={2604.02605},
+      archivePrefix={arXiv},
+      primaryClass={cs.AI},
+      url={https://arxiv.org/abs/2604.02605},
+}
 ```
