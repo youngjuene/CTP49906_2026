@@ -10,7 +10,10 @@ dist/
 
 # jlens outputs
 *.pt
+# Ignore generated slice pages, but keep the packaged source template that
+# jlens.vis reads at import time (do not let slice*.html swallow it).
 slice*.html
+!jlens/data/slice_vis.html
 slices/
 
 # Local model-fitting outputs (checkpoints and fitted lenses can be hundreds of MB)
