@@ -219,7 +219,7 @@ def _(PROJECT_DIR):
     NFRAMES = 8
     LOGIT_PROMPT = "Describe what you hear in the video"
     ATTENTION_PROMPT = "Describe what you see and hear in the video"
-    KNOCKOUT_RULES = [("generated", "video", 0, 35)]  # block generated→video, layers 0–35
+    KNOCKOUT_RULES = [("generated", "video", 0, 36)]  # block generated→video, all 36 thinker layers
     MAX_NEW_TOKENS = 32
     ATTENTION_CAPTURE_LAYERS = (0, 2)
 
