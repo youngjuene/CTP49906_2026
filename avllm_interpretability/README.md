@@ -97,7 +97,9 @@ run in this mode. Regenerate the artifacts on a CUDA box with
 | **Diversity by layer** | Two plots: how many *distinct* tokens each layer decodes at audio positions, and how dominant the top prediction is. | A low-diversity layer is "committed"; a high-diversity layer is still "deciding". |
 | **Attention Knockout** | Generates a **baseline** caption and a **knockout** caption side-by-side using `KNOCKOUT_RULES`. | The whole point: does the answer *change* when a pathway is cut? |
 | **Captured attention** | Heatmap of how much the final query attends to each modality, per captured layer. **Descriptive, not causal.** | Read it *alongside* the text diff, not instead of it. |
+| **Teacher-forced Δ log-lik** | Feeds the baseline caption back in tagged `answer` and scores, per token, how much less the model believes it under the same knockout. | The string diff as a **measurement**: continuous (small effects show) and deterministic. |
 | **🎛️ Playground** | Interactive form (below) that re-runs the logit-lens diversity measurement on your choices. | Where students spend most of their time. |
+| **🎯 Teacher forcing** | Interactive form for the Δ log-lik measurement: your clip, prompt, target modality, and layer band, with the source fixed to `answer`. | Where `answer → audio` — inert everywhere else — becomes a real experiment. |
 
 ### Reading a knockout rule
 
@@ -196,6 +198,21 @@ didn't matter (or, for a `generated` source, couldn't).
 5. **Stack rules.** Use the advanced field to knock out `audio → video` **and**
    `audio → query_text` at once — does starving the audio stream of *both* neighbors compound
    the collapse?
+6. **Sight vs. sound, quantified.** In the 🎯 teacher-forcing section, run `answer → audio`
+   and then `answer → video` on the same clip and prompt. Experiment 1 asked which knockout
+   *changes the caption more*; this asks **by how many nats** the model's belief in its own
+   caption drops for each. Do the binary diff and the continuous measurement agree on which
+   sense this clip leans on?
+7. **Where does the caption's audio grounding live?** Run `answer → audio` over `[0, 12)`,
+   then `[12, 24)`, then `[24, 36)`. Which layer band, when cut, costs the caption the most
+   belief? Compare with experiment 2 — do the layers that *fuse* audio into the
+   representations match the layers the *answer* reads audio from?
+8. **A null that means something.** Run `answer → audio` on `assets/02321_silent.mp4` — same
+   frames as the sample clip, but the soundtrack is digital silence. The audio tokens exist,
+   yet Δ should stay ≈ 0: cutting a pathway that carries no signal shouldn't cost the model
+   any belief. If your Δ on the *sound* clip isn't clearly larger, what would that tell you
+   about the measurement? *(This is the course's thesis in one experiment: an effect is only
+   interpretable next to a control that can fail.)*
 
 ## Citation
 
