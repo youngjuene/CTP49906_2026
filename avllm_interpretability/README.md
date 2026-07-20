@@ -77,6 +77,14 @@ inside* and forming falsifiable "if I block X, the output should change like Y" 
 You can also run it locally with `uvx marimo edit CTP49906_avllm_molab.py` on a CUDA
 machine — the `# /// script` header pins compatible dependency versions.
 
+**No GPU? GPU-free replay.** If molab's GPU is unavailable, set `USE_PRECOMPUTED = True`
+in the config cell near the top: every non-interactive **W7-W9** plot then renders from
+committed artifacts in [`precomputed/`](precomputed/) with no GPU and no 8 GB download
+(each is labelled *"replayed from cache"*). It defaults to `False` (live model); the
+interactive playground and teacher-forcing sections still need a GPU and fail loudly if
+run in this mode. Regenerate the artifacts on a CUDA box with
+`python scripts/generate_precompute.py`.
+
 ### A tour of the cells (the read-through)
 
 | Cell | What it does | What to notice |

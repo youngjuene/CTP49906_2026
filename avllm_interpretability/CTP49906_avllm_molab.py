@@ -189,15 +189,35 @@ def _(mo):
 
 
 @app.cell
-def _():
+def _(PROJECT_DIR):
+    # F5a — GPU-free replay. Flip to True to render every non-interactive W7-W9
+    # plot from committed artifacts (no GPU, no 8 GB download): a break-glass mode
+    # for when molab's GPU is unavailable. Default False = live model. The
+    # interactive playground / teacher-forcing sections still need a GPU and fail
+    # loudly if submitted in this mode. Generate the artifacts on a GPU with:
+    #   python avllm_interpretability/scripts/generate_precompute.py
+    USE_PRECOMPUTED = False
+    PRECOMPUTED_DIR = PROJECT_DIR / "precomputed"
+    if USE_PRECOMPUTED:
+        print(f"USE_PRECOMPUTED=True — replaying W7-W9 from {PRECOMPUTED_DIR} (no GPU)")
+    return PRECOMPUTED_DIR, USE_PRECOMPUTED
+
+
+@app.cell
+def _(USE_PRECOMPUTED):
     import torch
 
-    assert torch.cuda.is_available(), (
-        "No GPU visible. In molab, attach a GPU via the notebook-specs button in the header."
-    )
-    DEVICE = torch.device("cuda:0")
-    _free, _total = torch.cuda.mem_get_info(0)
-    print(f"torch={torch.__version__}, GPU={torch.cuda.get_device_name(0)}, VRAM={_total / 2**30:.0f} GiB")
+    if USE_PRECOMPUTED:
+        DEVICE = torch.device("cpu")
+        print(f"torch={torch.__version__}, USE_PRECOMPUTED=True → CPU (no GPU required)")
+    else:
+        assert torch.cuda.is_available(), (
+            "No GPU visible. In molab, attach a GPU via the notebook-specs button in the header. "
+            "(Or set USE_PRECOMPUTED=True in the cell above to replay W7-W9 from committed artifacts.)"
+        )
+        DEVICE = torch.device("cuda:0")
+        _free, _total = torch.cuda.mem_get_info(0)
+        print(f"torch={torch.__version__}, GPU={torch.cuda.get_device_name(0)}, VRAM={_total / 2**30:.0f} GiB")
     return DEVICE, torch
 
 
@@ -345,6 +365,8 @@ def _(
     LOGIT_CSV_PATH,
     LOGIT_PROMPT,
     MAX_NEW_TOKENS,
+    PRECOMPUTED_DIR,
+    USE_PRECOMPUTED,
     analyze_and_save_audio_logits_to_csv,
     clear_logit_lens_hooks,
     create_token_type_mapping,
@@ -354,35 +376,46 @@ def _(
     register_logit_lens_hooks,
     torch,
 ):
-    with mo.status.spinner(title="Loading Qwen2.5-Omni-3B (SDPA, first run downloads ~8 GB)…"):
-        logit_model, logit_processor = load_model_and_processor("sdpa")
-    logit_inputs, logit_token_types = prepare_video_inputs(
-        logit_model, logit_processor, LOGIT_PROMPT, create_token_type_mapping
-    )
+    if USE_PRECOMPUTED:
+        from src.precompute import load_precompute as _load_pre
 
-    register_logit_lens_hooks(logit_model)
-    try:
-        with mo.status.spinner(title="Forward pass + decoding per-layer predictions…"):
+        _pre = _load_pre(PRECOMPUTED_DIR)
+        logit_csv_written = _pre["logit_csv"]
+        _logit_out = mo.vstack([
+            mo.callout(mo.md("**Replayed from cache** — precomputed, no GPU."), kind="neutral"),
+            mo.md(f"**Generated caption:**\n\n> {_pre['logit_caption']}"),
+        ])
+    else:
+        with mo.status.spinner(title="Loading Qwen2.5-Omni-3B (SDPA, first run downloads ~8 GB)…"):
+            logit_model, logit_processor = load_model_and_processor("sdpa")
+        logit_inputs, logit_token_types = prepare_video_inputs(
+            logit_model, logit_processor, LOGIT_PROMPT, create_token_type_mapping
+        )
+
+        register_logit_lens_hooks(logit_model)
+        try:
+            with mo.status.spinner(title="Forward pass + decoding per-layer predictions…"):
+                with torch.no_grad():
+                    _ = logit_model.thinker(**logit_inputs, output_hidden_states=True)
+                analyze_and_save_audio_logits_to_csv(
+                    logit_model, logit_processor, logit_token_types, filename=str(LOGIT_CSV_PATH)
+                )
+        finally:
+            clear_logit_lens_hooks()
+        logit_csv_written = LOGIT_CSV_PATH
+
+        with mo.status.spinner(title="Generating the caption…"):
             with torch.no_grad():
-                _ = logit_model.thinker(**logit_inputs, output_hidden_states=True)
-            analyze_and_save_audio_logits_to_csv(
-                logit_model, logit_processor, logit_token_types, filename=str(LOGIT_CSV_PATH)
-            )
-    finally:
-        clear_logit_lens_hooks()
-    logit_csv_written = LOGIT_CSV_PATH
-
-    with mo.status.spinner(title="Generating the caption…"):
-        with torch.no_grad():
-            # Generate from the thinker directly: the omni wrapper's generate()
-            # defaults to audio output and errors because we freed the talker
-            # (transformers >=5 dropped the has-talker fallback). The thinker is a
-            # plain causal LM and yields the same text, version-agnostically.
-            _ids = logit_model.thinker.generate(**logit_inputs, max_new_tokens=MAX_NEW_TOKENS)
-    logit_caption = logit_processor.batch_decode(
-        _ids, skip_special_tokens=True, clean_up_tokenization_spaces=False
-    )[0]
-    mo.md(f"**Generated caption:**\n\n> {logit_caption}")
+                # Generate from the thinker directly: the omni wrapper's generate()
+                # defaults to audio output and errors because we freed the talker
+                # (transformers >=5 dropped the has-talker fallback). The thinker is a
+                # plain causal LM and yields the same text, version-agnostically.
+                _ids = logit_model.thinker.generate(**logit_inputs, max_new_tokens=MAX_NEW_TOKENS)
+        _logit_caption = logit_processor.batch_decode(
+            _ids, skip_special_tokens=True, clean_up_tokenization_spaces=False
+        )[0]
+        _logit_out = mo.md(f"**Generated caption:**\n\n> {_logit_caption}")
+    _logit_out
     return (logit_csv_written,)
 
 
@@ -398,7 +431,7 @@ def _(mo):
 
 
 @app.cell
-def _(Counter, csv, logit_csv_written, np, plt):
+def _(Counter, USE_PRECOMPUTED, csv, logit_csv_written, mo, np, plt):
     with open(logit_csv_written, newline="", encoding="utf-8") as _fh:
         _all = list(csv.reader(_fh))
     _header, _data = _all[0], _all[1:]
@@ -415,7 +448,14 @@ def _(Counter, csv, logit_csv_written, np, plt):
     _axes[1].set(title="Most-common prediction share", xlabel="Thinker layer", ylabel="Share", ylim=(0, 1))
     for _ax in _axes:
         _ax.grid(axis="y", alpha=0.25)
-    _fig
+    if USE_PRECOMPUTED:
+        _div_out = mo.vstack([
+            mo.callout(mo.md("**Replayed from cache** — precomputed, no GPU."), kind="neutral"),
+            _fig,
+        ])
+    else:
+        _div_out = _fig
+    _div_out
     return
 
 
@@ -436,6 +476,8 @@ def _(
     ATTENTION_PROMPT,
     KNOCKOUT_RULES,
     MAX_NEW_TOKENS,
+    PRECOMPUTED_DIR,
+    USE_PRECOMPUTED,
     block_attention,
     create_attention_token_mapping,
     load_model_and_processor,
@@ -443,51 +485,77 @@ def _(
     prepare_video_inputs,
     torch,
 ):
-    with mo.status.spinner(title="Loading Qwen2.5-Omni-3B (eager attention)…"):
-        attention_model, attention_processor = load_model_and_processor("eager")
-    attention_inputs, attention_token_types = prepare_video_inputs(
-        attention_model, attention_processor, ATTENTION_PROMPT, create_attention_token_mapping
-    )
+    if USE_PRECOMPUTED:
+        from src.precompute import StubModel as _StubModel
+        from src.precompute import load_precompute as _load_pre
 
-    with mo.status.spinner(title="Baseline generation…"):
-        with torch.no_grad():
-            # Thinker-direct generation (see the logit cell): avoids the omni
-            # wrapper's talker requirement. Knockout hooks live on the thinker's
-            # layers, so they still fire below.
-            _base = attention_model.thinker.generate(
-                **attention_inputs, max_new_tokens=MAX_NEW_TOKENS, return_dict_in_generate=True
-            )
-    baseline_text = attention_processor.batch_decode(
-        _base.sequences, skip_special_tokens=True, clean_up_tokenization_spaces=False
-    )[0]
+        _pre = _load_pre(PRECOMPUTED_DIR)
+        baseline_text = _pre["baseline_text"]
+        knockout_text = _pre["knockout_text"]
+        attention_summary = _pre["attention_summary"]
+        attention_token_types = _pre["attention_token_types"]
+        # Stand-in so the playground / teacher-forcing forms can read the layer
+        # count without a GPU; it cannot run the model (those sections fail loudly
+        # if submitted while replaying from cache).
+        attention_model = _StubModel(_pre["meta"].get("n_layers", 36))
+        attention_processor = None
+        _ko_rules = _pre["knockout_rules"]
+        _ko_banner = mo.callout(mo.md("**Replayed from cache** — precomputed, no GPU."), kind="neutral")
+    else:
+        from src.precompute import summarize_attention as _summarize_attention
 
-    with block_attention(
-        attention_model, KNOCKOUT_RULES, attention_token_types, len(attention_token_types),
-        track_attention=True, capture_layer_range=ATTENTION_CAPTURE_LAYERS,
-    ) as _cap:
-        with mo.status.spinner(title="Knockout generation…"):
+        with mo.status.spinner(title="Loading Qwen2.5-Omni-3B (eager attention)…"):
+            attention_model, attention_processor = load_model_and_processor("eager")
+        attention_inputs, attention_token_types = prepare_video_inputs(
+            attention_model, attention_processor, ATTENTION_PROMPT, create_attention_token_mapping
+        )
+
+        with mo.status.spinner(title="Baseline generation…"):
             with torch.no_grad():
-                _ko = attention_model.thinker.generate(
-                    **attention_inputs, max_new_tokens=MAX_NEW_TOKENS,
-                    output_attentions=True, return_dict_in_generate=True,
+                # Thinker-direct generation (see the logit cell): avoids the omni
+                # wrapper's talker requirement. Knockout hooks live on the thinker's
+                # layers, so they still fire below.
+                _base = attention_model.thinker.generate(
+                    **attention_inputs, max_new_tokens=MAX_NEW_TOKENS, return_dict_in_generate=True
                 )
-        captured_attention = {layer: list(v) for layer, v in _cap.items()}
-    knockout_text = attention_processor.batch_decode(
-        _ko.sequences, skip_special_tokens=True, clean_up_tokenization_spaces=False
-    )[0]
+        baseline_text = attention_processor.batch_decode(
+            _base.sequences, skip_special_tokens=True, clean_up_tokenization_spaces=False
+        )[0]
 
-    mo.hstack(
+        with block_attention(
+            attention_model, KNOCKOUT_RULES, attention_token_types, len(attention_token_types),
+            track_attention=True, capture_layer_range=ATTENTION_CAPTURE_LAYERS,
+        ) as _cap:
+            with mo.status.spinner(title="Knockout generation…"):
+                with torch.no_grad():
+                    _ko = attention_model.thinker.generate(
+                        **attention_inputs, max_new_tokens=MAX_NEW_TOKENS,
+                        output_attentions=True, return_dict_in_generate=True,
+                    )
+            _captured = {layer: list(v) for layer, v in _cap.items()}
+        knockout_text = attention_processor.batch_decode(
+            _ko.sequences, skip_special_tokens=True, clean_up_tokenization_spaces=False
+        )[0]
+        # Reduce to the plot-ready matrix now, so the heatmap cell consumes the
+        # same shape whether live or replayed (raw tensors are never committed).
+        attention_summary = _summarize_attention(_captured, attention_token_types)
+        _ko_rules = KNOCKOUT_RULES
+        _ko_banner = None
+
+    _ko_cmp = mo.hstack(
         [
             mo.vstack([mo.md("**Baseline**"), mo.md(baseline_text)]),
-            mo.vstack([mo.md(f"**Knockout** `{KNOCKOUT_RULES}`"), mo.md(knockout_text)]),
+            mo.vstack([mo.md(f"**Knockout** `{_ko_rules}`"), mo.md(knockout_text)]),
         ],
         widths="equal",
     )
+    _ko_display = mo.vstack([_ko_banner, _ko_cmp]) if _ko_banner is not None else _ko_cmp
+    _ko_display
     return (
         attention_model,
         attention_processor,
+        attention_summary,
         attention_token_types,
-        captured_attention,
         knockout_text,
     )
 
@@ -505,41 +573,15 @@ def _(mo):
 
 
 @app.cell
-def _(attention_token_types, captured_attention, mo, np, plt):
-    def _summarize(storage, prompt_token_types):
-        _order = ["query_text", "audio", "video", "image", "generated"]
-        _records = []
-        _plen = len(prompt_token_types)
-        for _layer, _snaps in sorted(storage.items()):
-            for _snap in _snaps:
-                _t = _snap.detach().float().cpu()
-                if _t.ndim == 4:
-                    _mean = _t[0].mean(dim=0)
-                elif _t.ndim == 3:
-                    _mean = _t.mean(dim=0)
-                else:
-                    continue
-                _key = _mean[-1] if _mean.shape[0] else _mean
-                _ktypes = prompt_token_types + ["generated"] * max(0, _key.shape[-1] - _plen)
-                for _m in _order:
-                    _idx = [i for i, tt in enumerate(_ktypes) if tt == _m]
-                    if _idx:
-                        _records.append((_layer, _m, float(_key[_idx].sum())))
-        if not _records:
-            return None
-        _layers = sorted({l for l, _, _ in _records})
-        _mat = np.zeros((len(_layers), len(_order)))
-        for _ri, _l in enumerate(_layers):
-            for _ci, _m in enumerate(_order):
-                _vals = [v for rl, rm, v in _records if rl == _l and rm == _m]
-                _mat[_ri, _ci] = np.mean(_vals) if _vals else 0.0
-        return _layers, _order, _mat
-
-    _summary = _summarize(captured_attention, attention_token_types)
-    if _summary is None:
+def _(attention_summary, mo, np, plt):
+    # `attention_summary` is `(layers, modalities, matrix)` — computed live from
+    # captured tensors, or loaded from the committed matrix in USE_PRECOMPUTED
+    # mode. Same shape either way, so the plot below is unchanged.
+    if attention_summary is None:
         _out = mo.md("> No attention tensors were returned by this build; the text comparison above is the result.")
     else:
-        _layers, _mods, _mat = _summary
+        _layers, _mods, _mat = attention_summary
+        _mat = np.asarray(_mat, dtype=float)
         _fig, _ax = plt.subplots(figsize=(8, max(3, len(_layers) * 0.6)), constrained_layout=True)
         _im = _ax.imshow(_mat, aspect="auto", cmap="magma")
         _ax.set(
