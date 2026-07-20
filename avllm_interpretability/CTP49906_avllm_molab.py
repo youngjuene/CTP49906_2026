@@ -210,16 +210,17 @@ def _(mo):
 
 @app.cell
 def _(PROJECT_DIR):
-    # F5a — GPU-free replay. Flip to True to render every non-interactive W7-W9
-    # plot from committed artifacts (no GPU, no 8 GB download): a break-glass mode
-    # for when molab's GPU is unavailable. Default False = live model. The
-    # interactive playground / teacher-forcing sections still need a GPU and fail
-    # loudly if submitted in this mode. Generate the artifacts on a GPU with:
+    # F5a — GPU-free replay. Flip to True to render every non-interactive
+    # fixed-run plot from committed artifacts (no GPU, no 8 GB download): a
+    # break-glass mode for when molab's GPU is unavailable. Default False = live
+    # model. The interactive playground / teacher-forcing sections still need a
+    # GPU and fail loudly if submitted in this mode. Generate the artifacts on a
+    # GPU with:
     #   python avllm_interpretability/scripts/generate_precompute.py
     USE_PRECOMPUTED = False
     PRECOMPUTED_DIR = PROJECT_DIR / "precomputed"
     if USE_PRECOMPUTED:
-        print(f"USE_PRECOMPUTED=True — replaying W7-W9 from {PRECOMPUTED_DIR} (no GPU)")
+        print(f"USE_PRECOMPUTED=True — replaying the fixed run from {PRECOMPUTED_DIR} (no GPU)")
     return PRECOMPUTED_DIR, USE_PRECOMPUTED
 
 
@@ -233,7 +234,7 @@ def _(USE_PRECOMPUTED):
     else:
         assert torch.cuda.is_available(), (
             "No GPU visible. In molab, attach a GPU via the notebook-specs button in the header. "
-            "(Or set USE_PRECOMPUTED=True in the cell above to replay W7-W9 from committed artifacts.)"
+            "(Or set USE_PRECOMPUTED=True in the cell above to replay the fixed run from committed artifacts.)"
         )
         DEVICE = torch.device("cuda:0")
         _free, _total = torch.cuda.mem_get_info(0)
@@ -409,9 +410,9 @@ def _(PRECOMPUTED_DIR, USE_PRECOMPUTED, load_model_and_processor, mo):
     # if submitted.
     if USE_PRECOMPUTED:
         from src.precompute import StubModel as _StubModel
-        from src.precompute import load_precompute as _stub_pre
+        from src.precompute import load_precompute as _load_pre
 
-        attention_model = _StubModel(_stub_pre(PRECOMPUTED_DIR)["meta"].get("n_layers", 36))
+        attention_model = _StubModel(_load_pre(PRECOMPUTED_DIR)["meta"].get("n_layers", 36))
         attention_processor = None
     else:
         with mo.status.spinner(title="Loading Qwen2.5-Omni-3B (eager attention)…"):
@@ -807,8 +808,8 @@ def _(
     mo,
 ):
     if USE_PRECOMPUTED:
-        w9_tf_result = None
-        _w9_out = mo.callout(
+        fixed_tf_result = None
+        _fixed_out = mo.callout(
             mo.md(
                 "**Teacher forcing needs the live model** — this cell is skipped while "
                 "`USE_PRECOMPUTED=True`. (Cached replay of this measurement lands with F5b.)"
@@ -816,49 +817,49 @@ def _(
             kind="warn",
         )
     else:
-        from src.teacher_forcing import render_delta_strip as _w9_strip
-        from src.teacher_forcing import teacher_forced_delta as _w9_tfd
+        from src.teacher_forcing import render_delta_strip as _fixed_strip
+        from src.teacher_forcing import teacher_forced_delta as _fixed_tfd
 
         # Mirror the params-cell intervention with `answer` as the source: the
         # caption is input now, so `answer → target` is the measurable counterpart
         # of the generation-time `generated → target` diff above.
-        _w9_rules = [("answer", _t, _a, _b) for (_s, _t, _a, _b) in KNOCKOUT_RULES]
-        _w9_prompt_len = attention_inputs["input_ids"].shape[1]
-        _w9_c_ids = attention_baseline_ids[:, _w9_prompt_len:]
+        _fixed_rules = [("answer", _t, _a, _b) for (_s, _t, _a, _b) in KNOCKOUT_RULES]
+        _fixed_prompt_len = attention_inputs["input_ids"].shape[1]
+        _fixed_c_ids = attention_baseline_ids[:, _fixed_prompt_len:]
 
-        w9_tf_result = None
+        fixed_tf_result = None
         try:
             with mo.status.spinner(title="Teacher-forced scoring (2 forward passes)…"):
-                w9_tf_result = _w9_tfd(
+                fixed_tf_result = _fixed_tfd(
                     attention_model,
                     attention_processor,
                     attention_inputs,
                     attention_token_types,
-                    _w9_rules,
-                    cached_caption_ids=_w9_c_ids,
+                    _fixed_rules,
+                    cached_caption_ids=_fixed_c_ids,
                 )
         except Exception as _e:  # noqa: BLE001 — surface any failure in-notebook
-            _w9_out = mo.callout(
+            _fixed_out = mo.callout(
                 mo.md(f"**Teacher-forced scoring failed** — `{type(_e).__name__}: {_e}`"),
                 kind="danger",
             )
 
-        if w9_tf_result is not None:
-            _w9_delta = [float(x) for x in w9_tf_result["delta"].detach().cpu().float().tolist()]
-            _w9_total = w9_tf_result["delta_total"]
-            _w9_rule_txt = " + ".join(f"`answer→{_r[1]}` [{_r[2]},{_r[3]})" for _r in _w9_rules)
-            _w9_out = mo.vstack([
-                mo.md(f"**Knockout** {_w9_rule_txt} &nbsp;·&nbsp; baseline caption teacher-forced as `answer`"),
+        if fixed_tf_result is not None:
+            _fixed_delta = [float(x) for x in fixed_tf_result["delta"].detach().cpu().float().tolist()]
+            _fixed_total = fixed_tf_result["delta_total"]
+            _fixed_rule_txt = " + ".join(f"`answer→{_r[1]}` [{_r[2]},{_r[3]})" for _r in _fixed_rules)
+            _fixed_out = mo.vstack([
+                mo.md(f"**Knockout** {_fixed_rule_txt} &nbsp;·&nbsp; baseline caption teacher-forced as `answer`"),
                 mo.hstack([
                     mo.stat(
-                        value=f"{_w9_total:+.2f}",
+                        value=f"{_fixed_total:+.2f}",
                         label="Σ Δ log-lik (nats)",
                         caption="knockout − baseline · negative = believed less",
-                        direction="decrease" if _w9_total < 0 else "increase",
+                        direction="decrease" if _fixed_total < 0 else "increase",
                         bordered=True,
                     ),
                     mo.stat(
-                        value=str(len(_w9_delta)),
+                        value=str(len(_fixed_delta)),
                         label="Caption tokens scored",
                         caption="greedy baseline, teacher-forced",
                         bordered=True,
@@ -867,12 +868,12 @@ def _(
                 mo.md("###### Per-token Δ log-likelihood (hover a word for its tokens' nats)"),
                 mo.Html(
                     "<div style='line-height:2.1;font-family:monospace;font-size:15px'>"
-                    + _w9_strip(w9_tf_result["caption_tokens"], _w9_delta)
+                    + _fixed_strip(fixed_tf_result["caption_tokens"], _fixed_delta)
                     + "</div>"
                 ),
             ])
-    _w9_out
-    return (w9_tf_result,)
+    _fixed_out
+    return (fixed_tf_result,)
 
 
 @app.cell(hide_code=True)
@@ -977,7 +978,7 @@ def _(KNOCKOUT_RULES, LOGIT_PROMPT, NFRAMES, attention_model, mo):
         "**Also run a no-knockout baseline to compare against** {compare}"
     )
 
-    ko_controls = mo.md(_template).batch(
+    scoreboard_controls = mo.md(_template).batch(
         video=mo.ui.file(
             filetypes=[".mp4", ".mov", ".mkv", ".webm", ".avi"],
             multiple=False,
@@ -1001,8 +1002,8 @@ def _(KNOCKOUT_RULES, LOGIT_PROMPT, NFRAMES, attention_model, mo):
         submit_button_label="▶ Run logit-lens diversity",
         bordered=True,
     )
-    ko_controls
-    return (ko_controls,)
+    scoreboard_controls
+    return (scoreboard_controls,)
 
 
 @app.cell
@@ -1019,7 +1020,7 @@ def _(
     clear_logit_lens_hooks,
     create_attention_token_mapping,
     csv,
-    ko_controls,
+    scoreboard_controls,
     mo,
     np,
     playground_caches,
@@ -1031,7 +1032,7 @@ def _(
 
     from qwen_omni_utils import process_mm_info as _process_mm_info
 
-    _p = ko_controls.value
+    _p = scoreboard_controls.value
     mo.stop(
         _p is None,
         mo.callout(
@@ -1307,7 +1308,7 @@ def _(mo):
 
     The metric is **Δ log-likelihood, `knockout − baseline`** — *negative* means the
     model believed its own caption **less** after the knockout, i.e. that pathway was
-    holding the caption up. Unlike the W9 free-generation string diff it is
+    holding the caption up. Unlike the free-generation string diff above it is
     **continuous** (you can see a *small* effect) and **deterministic** (greedy
     caption, forward-only scoring). Nothing runs until you press ▶.
 
@@ -1315,7 +1316,7 @@ def _(mo):
 
     - **Sight vs. sound, in nats.** Same clip, same prompt: run `answer → audio`,
       then `answer → video`. Which Δ is more negative — and does that agree with
-      which knockout changed the *free-generated* caption more in the W9 cell above?
+      which knockout changed the *free-generated* caption more in the knockout cell above?
       If the binary diff and the continuous measurement disagree, which do you
       believe, and why?
     - **Where does the caption's audio grounding live?** Keep `answer → audio` and
@@ -1338,7 +1339,7 @@ def _(mo):
     > effect you find above with a control like this: a control that *can* fail is
     > the whole point. Log each run in `avllm_interpretability/WORKSHEET.md` —
     > hypothesis **before** ▶, result, verdict; its last block is the exact
-    > question your W11 project is graded on.
+    > question your final project is graded on.
     """)
     return
 
@@ -1357,7 +1358,7 @@ def _(LOGIT_PROMPT, NFRAMES, attention_model, mo):
         f"(`answer` is the model's own caption, teacher-forced back in; this thinker has "
         f"**{_n_layers}** layers, `end` exclusive.)"
     )
-    tf_controls = mo.md(_tf_template).batch(
+    teacher_forcing_controls = mo.md(_tf_template).batch(
         video=mo.ui.file(
             filetypes=[".mp4", ".mov", ".mkv", ".webm", ".avi"], multiple=False, kind="area"
         ),
@@ -1366,8 +1367,8 @@ def _(LOGIT_PROMPT, NFRAMES, attention_model, mo):
         target=mo.ui.dropdown(_tf_targets, value="audio"),
         layers=mo.ui.range_slider(0, _n_layers, step=1, value=[0, _n_layers], show_value=True),
     ).form(submit_button_label="▶ Run teacher-forced Δ log-lik", bordered=True)
-    tf_controls
-    return (tf_controls,)
+    teacher_forcing_controls
+    return (teacher_forcing_controls,)
 
 
 @app.cell
@@ -1381,7 +1382,7 @@ def _(
     mo,
     np,
     playground_caches,
-    tf_controls,
+    teacher_forcing_controls,
 ):
     from pathlib import Path as _Path
 
@@ -1390,7 +1391,7 @@ def _(
     from src.teacher_forcing import render_delta_strip as _render_strip
     from src.teacher_forcing import teacher_forced_delta as _tfd
 
-    _tp = tf_controls.value
+    _tp = teacher_forcing_controls.value
     mo.stop(
         _tp is None,
         mo.callout(
