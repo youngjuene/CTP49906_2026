@@ -77,6 +77,14 @@ inside* and forming falsifiable "if I block X, the output should change like Y" 
 You can also run it locally with `uvx marimo edit CTP49906_avllm_molab.py` on a CUDA
 machine — the `# /// script` header pins compatible dependency versions.
 
+**No GPU? GPU-free replay.** If molab's GPU is unavailable, set `USE_PRECOMPUTED = True`
+in the config cell near the top: every non-interactive **W7-W9** plot then renders from
+committed artifacts in [`precomputed/`](precomputed/) with no GPU and no 8 GB download
+(each is labelled *"replayed from cache"*). It defaults to `False` (live model); the
+interactive playground and teacher-forcing sections still need a GPU and fail loudly if
+run in this mode. Regenerate the artifacts on a CUDA box with
+`python scripts/generate_precompute.py`.
+
 ### A tour of the cells (the read-through)
 
 | Cell | What it does | What to notice |
@@ -89,7 +97,9 @@ machine — the `# /// script` header pins compatible dependency versions.
 | **Diversity by layer** | Two plots: how many *distinct* tokens each layer decodes at audio positions, and how dominant the top prediction is. | A low-diversity layer is "committed"; a high-diversity layer is still "deciding". |
 | **Attention Knockout** | Generates a **baseline** caption and a **knockout** caption side-by-side using `KNOCKOUT_RULES`. | The whole point: does the answer *change* when a pathway is cut? |
 | **Captured attention** | Heatmap of how much the final query attends to each modality, per captured layer. **Descriptive, not causal.** | Read it *alongside* the text diff, not instead of it. |
+| **Teacher-forced Δ log-lik** | Feeds the baseline caption back in tagged `answer` and scores, per token, how much less the model believes it under the same knockout. | The string diff as a **measurement**: continuous (small effects show) and deterministic. |
 | **🎛️ Playground** | Interactive form (below) that re-runs the logit-lens diversity measurement on your choices. | Where students spend most of their time. |
+| **🎯 Teacher forcing** | Interactive form for the Δ log-lik measurement: your clip, prompt, target modality, and layer band, with the source fixed to `answer`. | Where `answer → audio` — inert everywhere else — becomes a real experiment. |
 
 ### Reading a knockout rule
 
@@ -110,7 +120,7 @@ Two things students trip on, worth stating up front:
   an effect: block only early layers to test where fusion happens, only late layers to test
   where the answer is composed.
 
-The five token types (modalities) the model tags every position with:
+The six token types (modalities) the model tags every position with:
 
 | Type | What it is |
 | --- | --- |
@@ -118,7 +128,8 @@ The five token types (modalities) the model tags every position with:
 | `audio` | Tokens from the video's **soundtrack**. |
 | `video` | Tokens from the sampled **frames**. |
 | `image` | Still-image tokens — absent for a video clip, so inert here. |
-| `generated` | Tokens the model **produces** as its answer (exist only during generation). |
+| `generated` | Tokens the model **produces** during autoregressive decoding (exist only while generating). |
+| `answer` | The model's own caption **teacher-forced back in** as input, so a single forward pass can score it. Used by the teacher-forced Δ log-lik section; tagged by position, not by token id. |
 
 ### A catalog of knockout pairs (what each one is asking)
 
@@ -134,11 +145,20 @@ reshape the **audio-position logit lens** and belong in the **playground**.
 | `audio → video` | *Do the audio tokens borrow from the frames to form their meaning?* (visual → audio fusion) | Diversity at audio positions collapses → the visual stream was actively shaping the audio representations. |
 | `video → audio` | *Do the video tokens lean on the soundtrack?* (audio → visual fusion) | Shifts in later behavior → cross-modal binding runs the other way too. |
 
-> **Why `generated` does nothing in the playground.** The playground runs a single *forward
-> pass* (no autoregressive decoding), so there are **no `generated` tokens** for a rule to
-> act on. A `generated → …` rule there blocks nothing and the Δ is flat — the notebook warns
-> you when you try. To move the audio-position score, make the **source** a modality that is
-> actually present: `audio`, `video`, or `query_text`.
+> **Why `generated` does nothing in the diversity scoreboard.** The diversity scoreboard runs a
+> single *forward pass* over the prompt (no autoregressive decoding), so there are **no
+> `generated` tokens** for a rule to act on. A `generated → …` rule there blocks nothing and the
+> Δ is flat — the notebook warns you when you try. To move the audio-position score, make the
+> **source** a modality that is actually present: `audio`, `video`, or `query_text`.
+>
+> **Where the answer *can* be the source: teacher forcing.** The most intuitive question —
+> *"if the answer can't hear the soundtrack, does it still describe the sound?"* — needs the
+> answer to exist as input. The **teacher-forced Δ log-likelihood** section does exactly that:
+> it generates the caption once, feeds it back in tagged **`answer`**, and scores
+> `answer → audio` (or `→ video`, `→ query_text`) as a continuous, deterministic **Δ
+> log-lik = knockout − baseline** — negative meaning the model believes its own caption *less*
+> once the pathway is cut. That is the causal counterpart to the W9 string diff, and where an
+> `answer` source becomes meaningful.
 
 ### The playground (the tweak-it part)
 
@@ -165,6 +185,10 @@ didn't matter (or, for a `generated` source, couldn't).
 
 ### Suggested experiments for students
 
+Log every run in the [lab worksheet](WORKSHEET.md) — hypothesis **before** ▶, result,
+verdict. Its final block is the same (effect, control) question the W11 project is
+graded on.
+
 1. **Sight vs. sound, same clip.** Run `generated → video` and then `generated → audio` in
    the knockout cell with the *"see and hear"* prompt. Which knockout changes the caption
    more? What does that say about which sense the model leans on for this clip?
@@ -178,6 +202,21 @@ didn't matter (or, for a `generated` source, couldn't).
 5. **Stack rules.** Use the advanced field to knock out `audio → video` **and**
    `audio → query_text` at once — does starving the audio stream of *both* neighbors compound
    the collapse?
+6. **Sight vs. sound, quantified.** In the 🎯 teacher-forcing section, run `answer → audio`
+   and then `answer → video` on the same clip and prompt. Experiment 1 asked which knockout
+   *changes the caption more*; this asks **by how many nats** the model's belief in its own
+   caption drops for each. Do the binary diff and the continuous measurement agree on which
+   sense this clip leans on?
+7. **Where does the caption's audio grounding live?** Run `answer → audio` over `[0, 12)`,
+   then `[12, 24)`, then `[24, 36)`. Which layer band, when cut, costs the caption the most
+   belief? Compare with experiment 2 — do the layers that *fuse* audio into the
+   representations match the layers the *answer* reads audio from?
+8. **A null that means something.** Run `answer → audio` on `assets/02321_silent.mp4` — same
+   frames as the sample clip, but the soundtrack is digital silence. The audio tokens exist,
+   yet Δ should stay ≈ 0: cutting a pathway that carries no signal shouldn't cost the model
+   any belief. If your Δ on the *sound* clip isn't clearly larger, what would that tell you
+   about the measurement? *(This is the course's thesis in one experiment: an effect is only
+   interpretable next to a control that can fail.)*
 
 ## Citation
 

@@ -24,4 +24,4 @@ python src/logitlens_experiment.py --model_path Qwen/Qwen2.5-Omni-3B --video_pat
 python src/attention_knockout_experiment.py --model_path Qwen/Qwen2.5-Omni-3B --video_path assets/02321.mp4
 ```
 
-Or run both from [`CTP49906_avllm.ipynb`](avllm_interpretability/CTP49906_avllm.ipynb) — select the **AVLLM Interpretability (.venv)** kernel, set `VIDEO_PATH`, then **Run All**.
+Or run both from the classroom marimo notebook [`CTP49906_avllm_molab.py`](avllm_interpretability/CTP49906_avllm_molab.py) — open it in [molab](https://marimo.io/molab) with a GPU attached, or locally with `uvx marimo edit`. Its guidebook (cell tour, knockout catalog, suggested experiments) is in [`avllm_interpretability/README.md`](avllm_interpretability/README.md).
