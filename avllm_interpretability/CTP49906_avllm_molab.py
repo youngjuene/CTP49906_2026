@@ -566,6 +566,85 @@ def _(mo):
 
 
 @app.cell
+def _(Counter, KNOCKOUT_RULES, attention_token_types, mo, plt):
+    # Visual primer: THIS run's actual token sequence, and what the default rule
+    # cuts. Rebuilt from attention_token_types every run, so it is never a stale
+    # abstraction — the striping is the real audio/video interleaving.
+    _TYPE_COLORS = {
+        "query_text": "#9E9E9E", "audio": "#4C78A8", "video": "#F58518",
+        "image": "#B279A2", "generated": "#54A24B", "answer": "#E45756",
+    }
+    _pt = list(attention_token_types)
+    _n = max(1, len(_pt))
+
+    # Contiguous runs -> (type, start, width)
+    _runs = []
+    for _i, _t in enumerate(_pt):
+        if _runs and _runs[-1][0] == _t:
+            _runs[-1][2] += 1
+        else:
+            _runs.append([_t, _i, 1])
+
+    _fig, _ax = plt.subplots(figsize=(14, 2.8), constrained_layout=True)
+    for _t, _s, _w in _runs:
+        _ax.barh(0, _w, left=_s, height=0.55, color=_TYPE_COLORS.get(_t, "#cccccc"))
+    # The reply, appended after the prompt: `generated` while decoding,
+    # `answer` once teacher-forced back in.
+    _gap, _rw = _n * 0.015, max(8.0, _n * 0.08)
+    _r0 = _n + _gap
+    _ax.barh(0, _rw, left=_r0, height=0.55, color="#54A24B", hatch="//", edgecolor="white")
+    _ax.text(_r0 + _rw / 2, 0, "reply\n(`generated` / `answer`)",
+             ha="center", va="center", fontsize=8)
+
+    def _center_of(type_name):
+        if type_name in ("generated", "answer"):
+            return _r0 + _rw / 2
+        _cands = [(_w, _s + _w / 2) for _t, _s, _w in _runs if _t == type_name]
+        return max(_cands)[1] if _cands else None
+
+    _src, _tgt, _a, _b = (KNOCKOUT_RULES[0] if KNOCKOUT_RULES
+                          else ("generated", "video", 0, 36))
+    _sx, _tx = _center_of(_src), _center_of(_tgt)
+    if _sx is not None and _tx is not None:
+        _ax.annotate("", xy=(_tx, 0.33), xytext=(_sx, 0.33),
+                     arrowprops=dict(arrowstyle="-|>", color="#E45756", lw=2,
+                                     connectionstyle="arc3,rad=-0.22"))
+        _ax.text((_sx + _tx) / 2, 0.92,
+                 f"✂  {_src} → {_tgt}   ·   layers [{_a}, {_b})",
+                 ha="center", va="center", fontsize=10, color="#E45756")
+
+    from matplotlib.patches import Patch as _Patch
+    _counts = Counter(_pt)
+    _legend = [
+        _Patch(color=_TYPE_COLORS[_t], label=f"{_t} ({_counts[_t]})")
+        for _t in ("query_text", "audio", "video", "image") if _counts.get(_t)
+    ]
+    _ax.legend(handles=_legend, loc="lower left", ncols=len(_legend),
+               bbox_to_anchor=(0, -0.42), frameon=False, fontsize=9)
+    _ax.set(xlim=(-_n * 0.01, _r0 + _rw + _n * 0.01), ylim=(-0.75, 1.15),
+            title="How to read a knockout rule — this run's token sequence, one position per pixel-width")
+    _ax.axis("off")
+
+    mo.vstack([
+        _fig,
+        mo.md(
+            "Each colored sliver is one token **position** — note the audio/video "
+            "striping: the two modalities are *interleaved* in time, not separate "
+            "blocks. A rule `(source, target, start, end)` means: **in layers "
+            "`[start, end)` (end exclusive), forbid `source` tokens from attending "
+            "to `target` tokens.** The arrow points *from the token doing the "
+            "looking to the token being read* — and because the model is causally "
+            "masked (a token sees only itself and earlier positions), the "
+            "meaningful direction is almost always a **later** token reading an "
+            "**earlier** one. That is why the reply (`generated` while decoding, "
+            "`answer` when teacher-forced) is the natural *source*, and why "
+            "`video → generated` would cut almost nothing."
+        ),
+    ])
+    return
+
+
+@app.cell
 def _(
     ATTENTION_CAPTURE_LAYERS,
     ATTENTION_PROMPT,
@@ -858,8 +937,10 @@ def _(mo):
 
     A flat Δ is a result too — record it. And be careful *reading* a big one: a
     diversity shift tells you the representations changed, not by itself *why*
-    (that question gets its own week). The full experiment catalog is in the
-    repo's `avllm_interpretability/README.md`.
+    (that question gets its own week). Log every run in the lab worksheet
+    (`avllm_interpretability/WORKSHEET.md`): hypothesis **before** ▶, result,
+    verdict. The full experiment catalog is in the repo's
+    `avllm_interpretability/README.md`.
     """)
     return
 
@@ -1255,7 +1336,9 @@ def _(mo):
     > the default clip (real soundtrack), same prompt and layers — a real audio
     > dependency shows up as a clearly larger negative Δ. Pair *every* interesting
     > effect you find above with a control like this: a control that *can* fail is
-    > the whole point.
+    > the whole point. Log each run in `avllm_interpretability/WORKSHEET.md` —
+    > hypothesis **before** ▶, result, verdict; its last block is the exact
+    > question your W11 project is graded on.
     """)
     return
 

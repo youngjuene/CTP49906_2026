@@ -185,6 +185,10 @@ didn't matter (or, for a `generated` source, couldn't).
 
 ### Suggested experiments for students
 
+Log every run in the [lab worksheet](WORKSHEET.md) — hypothesis **before** ▶, result,
+verdict. Its final block is the same (effect, control) question the W11 project is
+graded on.
+
 1. **Sight vs. sound, same clip.** Run `generated → video` and then `generated → audio` in
    the knockout cell with the *"see and hear"* prompt. Which knockout changes the caption
    more? What does that say about which sense the model leans on for this clip?
