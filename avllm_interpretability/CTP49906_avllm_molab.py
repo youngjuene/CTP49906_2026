@@ -959,6 +959,12 @@ def _(mo):
     holding the caption up. Unlike the W9 free-generation string diff it is
     **continuous** (you can see a *small* effect) and **deterministic** (greedy
     caption, forward-only scoring). Nothing runs until you press ▶.
+
+    > **Sanity check.** Upload `assets/02321_silent.mp4` (the same frames, but the
+    > audio track is digital silence) and run `answer → audio`: the audio tokens
+    > exist but carry no signal, so Δ should be ≈ 0. Compare against the default clip
+    > (real soundtrack), same prompt and layers — a real audio dependency shows up as
+    > a clearly larger negative Δ. A control that *can* fail is the whole point.
     """)
     return
 
