@@ -942,5 +942,169 @@ def _(
     return
 
 
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## 🎯 Interactive: teacher-forced Δ log-likelihood
+
+    The diversity scoreboard above runs one forward pass over the **prompt**, so —
+    exactly like `generated` — an **`answer`** source is inert there (there are no
+    answer tokens to block). This section closes that gap. It generates the caption
+    once, feeds it back in tagged **`answer`**, and measures **how much less the
+    model believes what it said** when the answer is forbidden from attending to a
+    modality.
+
+    The metric is **Δ log-likelihood, `knockout − baseline`** — *negative* means the
+    model believed its own caption **less** after the knockout, i.e. that pathway was
+    holding the caption up. Unlike the W9 free-generation string diff it is
+    **continuous** (you can see a *small* effect) and **deterministic** (greedy
+    caption, forward-only scoring). Nothing runs until you press ▶.
+    """)
+    return
+
+
+@app.cell
+def _(LOGIT_PROMPT, NFRAMES, attention_model, mo):
+    _n_layers = len(attention_model.thinker.model.layers)
+    _tf_targets = ["audio", "video", "query_text", "image"]
+    _tf_template = (
+        "**Video** — upload `mp4 / mov / mkv / webm`, or leave empty to reuse the default clip:\n\n"
+        "{video}\n\n"
+        "**Frames sampled from the clip** {nframes}\n\n"
+        "**Prompt** {prompt}\n\n"
+        "---\n\n"
+        "Forbid the **answer** from attending to {target} across thinker layers {layers}\n\n"
+        f"(`answer` is the model's own caption, teacher-forced back in; this thinker has "
+        f"**{_n_layers}** layers, `end` exclusive.)"
+    )
+    tf_controls = mo.md(_tf_template).batch(
+        video=mo.ui.file(
+            filetypes=[".mp4", ".mov", ".mkv", ".webm", ".avi"], multiple=False, kind="area"
+        ),
+        nframes=mo.ui.slider(2, 32, step=2, value=NFRAMES, show_value=True, include_input=True),
+        prompt=mo.ui.text(value=LOGIT_PROMPT, full_width=True),
+        target=mo.ui.dropdown(_tf_targets, value="audio"),
+        layers=mo.ui.range_slider(0, _n_layers, step=1, value=[0, _n_layers], show_value=True),
+    ).form(submit_button_label="▶ Run teacher-forced Δ log-lik", bordered=True)
+    tf_controls
+    return (tf_controls,)
+
+
+@app.cell
+def _(
+    LOGIT_PROMPT,
+    VIDEO_PATH,
+    attention_model,
+    attention_processor,
+    create_attention_token_mapping,
+    mo,
+    np,
+    tf_controls,
+):
+    from pathlib import Path as _Path
+
+    from qwen_omni_utils import process_mm_info as _tf_mm_info
+
+    from src.teacher_forcing import render_delta_strip as _render_strip
+    from src.teacher_forcing import teacher_forced_delta as _tfd
+
+    _tp = tf_controls.value
+    mo.stop(
+        _tp is None,
+        mo.callout(
+            mo.md("Set the parameters above and press **▶ Run teacher-forced Δ log-lik**."),
+            kind="info",
+        ),
+    )
+
+    # Resolve the clip: an uploaded file wins, else reuse the sample.
+    _tf_uploads = _tp["video"]
+    if _tf_uploads and _tf_uploads[0].contents:
+        _tf_video = _Path(VIDEO_PATH).parent / "notebook_results" / f"tf_upload_{_tf_uploads[0].name}"
+        _tf_video.parent.mkdir(exist_ok=True)
+        _tf_video.write_bytes(_tf_uploads[0].contents)
+    else:
+        _tf_video = _Path(VIDEO_PATH)
+    _tf_nframes = int(_tp["nframes"])
+    _tf_prompt = _tp["prompt"].strip() or LOGIT_PROMPT
+    _tf_lo, _tf_hi = int(_tp["layers"][0]), int(_tp["layers"][1])
+    _tf_rules = [("answer", _tp["target"], _tf_lo, _tf_hi)]
+
+    def _tf_prep(video_path, nframes, prompt):
+        _conv = [{"role": "user", "content": [
+            {"type": "text", "text": prompt},
+            {"type": "video", "video": str(video_path), "nframes": nframes},
+        ]}]
+        _text = attention_processor.apply_chat_template(
+            _conv, add_generation_prompt=True, tokenize=False
+        )
+        _audios, _images, _videos = _tf_mm_info(_conv, use_audio_in_video=True)
+        _inp = attention_processor(
+            text=_text, audio=_audios, images=_images, videos=_videos,
+            return_tensors="pt", padding=True, use_audio_in_video=True,
+        )
+        _inp = {k: v.to(attention_model.device) for k, v in _inp.items()}
+        _types = create_attention_token_mapping(
+            _inp["input_ids"], attention_model.config.thinker_config
+        )
+        return _inp, _types
+
+    _tf_out = None
+    try:
+        with mo.status.spinner(
+            title=f"Teacher forcing · {_tf_nframes} frames · {_tf_video.name}…"
+        ):
+            _tf_inp, _tf_types = _tf_prep(_tf_video, _tf_nframes, _tf_prompt)
+            _tf_res = _tfd(attention_model, attention_processor, _tf_inp, _tf_types, _tf_rules)
+    except Exception as _e:  # noqa: BLE001 — surface any failure in-notebook
+        _tf_out = mo.callout(
+            mo.md(f"**Run failed** — `{type(_e).__name__}: {_e}`"), kind="danger"
+        )
+
+    if _tf_out is None:
+        _tf_delta = [float(x) for x in _tf_res["delta"].detach().cpu().float().tolist()]
+        _tf_total = _tf_res["delta_total"]
+        _tf_toks = _tf_res["caption_tokens"]
+        _tf_worst = int(np.argmin(_tf_delta)) if _tf_delta else 0
+        _tf_rule_txt = f"`answer→{_tp['target']}` [{_tf_lo},{_tf_hi})"
+        _tf_stats = [
+            mo.stat(
+                value=f"{_tf_total:+.2f}",
+                label="Σ Δ log-lik (nats)",
+                caption="knockout − baseline · negative = believed less",
+                direction="decrease" if _tf_total < 0 else "increase",
+                bordered=True,
+            ),
+            mo.stat(
+                value=(_tf_toks[_tf_worst].strip() or "·") if _tf_toks else "—",
+                label="Most affected token",
+                caption=(f"Δ = {_tf_delta[_tf_worst]:+.2f} nats" if _tf_delta else ""),
+                bordered=True,
+            ),
+            mo.stat(
+                value=str(len(_tf_toks)),
+                label="Caption tokens scored",
+                caption="teacher-forced, greedy",
+                bordered=True,
+            ),
+        ]
+        _tf_rows = [
+            {"pos": _i, "token": _t, "Δ log-lik": round(_d, 3)}
+            for _i, (_t, _d) in enumerate(zip(_tf_toks, _tf_delta))
+        ]
+        _tf_out = mo.vstack([
+            mo.md(
+                f"**Video** `{_tf_video.name}` &nbsp;·&nbsp; **Frames** {_tf_nframes} "
+                f"&nbsp;·&nbsp; **Prompt** _{_tf_prompt}_ &nbsp;·&nbsp; **Knockout** {_tf_rule_txt}"
+            ),
+            mo.hstack(_tf_stats, widths="equal", gap=1),
+            mo.md("###### Per-token Δ log-likelihood (hot = the model believed this token less after the knockout)"),
+            mo.Html(f"<div style='line-height:2.1;font-family:monospace;font-size:15px'>{_render_strip(_tf_toks, _tf_delta)}</div>"),
+            mo.ui.table(_tf_rows, selection=None, pagination=True, page_size=16),
+        ])
+    _tf_out
+    return
+
+
 if __name__ == "__main__":
     app.run()

@@ -31,6 +31,13 @@ TOKEN_TYPE_MAP: Dict[str, int] = {
     "video": 2,
     "image": 3,
     "generated": 4,
+    # `answer` tags a teacher-forced caption appended after the prompt: the
+    # tokens the model produced, fed back in as input so a single forward pass
+    # can score log P(caption | prompt) under a knockout. Distinct from
+    # `generated` (which only exists during autoregressive decoding) so a rule
+    # like `answer -> audio` acts during the forward pass, where `generated` is
+    # inert. Assigned positionally by the caller, never by the id-based mapper.
+    "answer": 5,
 }
 # Create a reverse map for potential debugging (optional)
 ID_TO_TOKEN_TYPE: Dict[int, str] = {v: k for k, v in TOKEN_TYPE_MAP.items()}
@@ -180,21 +187,24 @@ def block_attention(model: torch.nn.Module,
     capture_hook_handles = []
     attention_storage = defaultdict(list)
     
-    # 1. Pre-process token types
+    # 1. Pre-process token types.
+    # An unknown token type is a programming error, not a recoverable state:
+    # silently yielding with zero hooks registered would run a *baseline* while
+    # the caller believes a knockout is applied — a plausible-but-wrong result,
+    # exactly the artifact this course teaches students to distrust. Fail loudly
+    # so the notebook surfaces it as an in-cell error instead.
+    device = model.device
     try:
-        device = model.device 
-        
         numeric_token_types = torch.tensor(
             [TOKEN_TYPE_MAP[t] for t in token_types], dtype=torch.long, device=device
         )
-        generated_token_id = TOKEN_TYPE_MAP["generated"]
-
     except KeyError as e:
-        print(f"Error: Invalid token type or rule name: {e}")
-        print(f"Valid types are: {list(TOKEN_TYPE_MAP.keys())}")
-        yield attention_storage
-        return
-    
+        raise ValueError(
+            f"Unknown token type {e} in token_types; valid types are "
+            f"{list(TOKEN_TYPE_MAP.keys())}"
+        ) from e
+    generated_token_id = TOKEN_TYPE_MAP["generated"]
+
     try:
         # 2. Register all hooks
         num_knockout_hooks = 0

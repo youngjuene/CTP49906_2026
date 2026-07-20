@@ -110,7 +110,7 @@ Two things students trip on, worth stating up front:
   an effect: block only early layers to test where fusion happens, only late layers to test
   where the answer is composed.
 
-The five token types (modalities) the model tags every position with:
+The six token types (modalities) the model tags every position with:
 
 | Type | What it is |
 | --- | --- |
@@ -118,7 +118,8 @@ The five token types (modalities) the model tags every position with:
 | `audio` | Tokens from the video's **soundtrack**. |
 | `video` | Tokens from the sampled **frames**. |
 | `image` | Still-image tokens — absent for a video clip, so inert here. |
-| `generated` | Tokens the model **produces** as its answer (exist only during generation). |
+| `generated` | Tokens the model **produces** during autoregressive decoding (exist only while generating). |
+| `answer` | The model's own caption **teacher-forced back in** as input, so a single forward pass can score it. Used by the teacher-forced Δ log-lik section; tagged by position, not by token id. |
 
 ### A catalog of knockout pairs (what each one is asking)
 
@@ -134,11 +135,20 @@ reshape the **audio-position logit lens** and belong in the **playground**.
 | `audio → video` | *Do the audio tokens borrow from the frames to form their meaning?* (visual → audio fusion) | Diversity at audio positions collapses → the visual stream was actively shaping the audio representations. |
 | `video → audio` | *Do the video tokens lean on the soundtrack?* (audio → visual fusion) | Shifts in later behavior → cross-modal binding runs the other way too. |
 
-> **Why `generated` does nothing in the playground.** The playground runs a single *forward
-> pass* (no autoregressive decoding), so there are **no `generated` tokens** for a rule to
-> act on. A `generated → …` rule there blocks nothing and the Δ is flat — the notebook warns
-> you when you try. To move the audio-position score, make the **source** a modality that is
-> actually present: `audio`, `video`, or `query_text`.
+> **Why `generated` does nothing in the diversity scoreboard.** The diversity scoreboard runs a
+> single *forward pass* over the prompt (no autoregressive decoding), so there are **no
+> `generated` tokens** for a rule to act on. A `generated → …` rule there blocks nothing and the
+> Δ is flat — the notebook warns you when you try. To move the audio-position score, make the
+> **source** a modality that is actually present: `audio`, `video`, or `query_text`.
+>
+> **Where the answer *can* be the source: teacher forcing.** The most intuitive question —
+> *"if the answer can't hear the soundtrack, does it still describe the sound?"* — needs the
+> answer to exist as input. The **teacher-forced Δ log-likelihood** section does exactly that:
+> it generates the caption once, feeds it back in tagged **`answer`**, and scores
+> `answer → audio` (or `→ video`, `→ query_text`) as a continuous, deterministic **Δ
+> log-lik = knockout − baseline** — negative meaning the model believes its own caption *less*
+> once the pathway is cut. That is the causal counterpart to the W9 string diff, and where an
+> `answer` source becomes meaningful.
 
 ### The playground (the tweak-it part)
 
