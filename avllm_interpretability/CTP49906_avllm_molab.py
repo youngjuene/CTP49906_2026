@@ -419,7 +419,12 @@ def _(
                 # defaults to audio output and errors because we freed the talker
                 # (transformers >=5 dropped the has-talker fallback). The thinker is a
                 # plain causal LM and yields the same text, version-agnostically.
-                _ids = logit_model.thinker.generate(**logit_inputs, max_new_tokens=MAX_NEW_TOKENS)
+                # do_sample=False pins greedy decoding explicitly: the shipped
+                # generation_config is an empty stub that happens to resolve to
+                # greedy today; an upstream change must not silently flip it.
+                _ids = logit_model.thinker.generate(
+                    **logit_inputs, max_new_tokens=MAX_NEW_TOKENS, do_sample=False
+                )
         _logit_caption = logit_processor.batch_decode(
             _ids, skip_special_tokens=True, clean_up_tokenization_spaces=False
         )[0]
@@ -508,6 +513,8 @@ def _(
         # if submitted while replaying from cache).
         attention_model = _StubModel(_pre["meta"].get("n_layers", 36))
         attention_processor = None
+        attention_inputs = None
+        attention_baseline_ids = None
         _ko_rules = _pre["knockout_rules"]
         _ko_banner = mo.callout(mo.md("**Replayed from cache** — precomputed, no GPU."), kind="neutral")
     else:
@@ -523,10 +530,14 @@ def _(
             with torch.no_grad():
                 # Thinker-direct generation (see the logit cell): avoids the omni
                 # wrapper's talker requirement. Knockout hooks live on the thinker's
-                # layers, so they still fire below.
+                # layers, so they still fire below. Greedy (do_sample=False) so the
+                # baseline caption — reused as C by the teacher-forced cell below —
+                # is deterministic.
                 _base = attention_model.thinker.generate(
-                    **attention_inputs, max_new_tokens=MAX_NEW_TOKENS, return_dict_in_generate=True
+                    **attention_inputs, max_new_tokens=MAX_NEW_TOKENS, do_sample=False,
+                    return_dict_in_generate=True,
                 )
+        attention_baseline_ids = _base.sequences
         baseline_text = attention_processor.batch_decode(
             _base.sequences, skip_special_tokens=True, clean_up_tokenization_spaces=False
         )[0]
@@ -538,7 +549,7 @@ def _(
             with mo.status.spinner(title="Knockout generation…"):
                 with torch.no_grad():
                     _ko = attention_model.thinker.generate(
-                        **attention_inputs, max_new_tokens=MAX_NEW_TOKENS,
+                        **attention_inputs, max_new_tokens=MAX_NEW_TOKENS, do_sample=False,
                         output_attentions=True, return_dict_in_generate=True,
                     )
             _captured = {layer: list(v) for layer, v in _cap.items()}
@@ -561,6 +572,8 @@ def _(
     _ko_display = mo.vstack([_ko_banner, _ko_cmp]) if _ko_banner is not None else _ko_cmp
     _ko_display
     return (
+        attention_baseline_ids,
+        attention_inputs,
         attention_model,
         attention_processor,
         attention_summary,
@@ -606,6 +619,106 @@ def _(attention_summary, mo, np, plt):
         _out = _fig
     _out
     return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Teacher-forced Δ log-likelihood (fixed parameters)
+
+    The string diff above is **visceral but binary** — you can't see a *small*
+    effect, and it depends on how generation happens to continue. This cell asks
+    the same question as a **measurement**: it feeds the baseline caption back in
+    tagged `answer` and scores, per token, **how much less the model believes what
+    it said** when the answer is cut off from the same target modality as
+    `KNOCKOUT_RULES` (same clip, same prompt, same layers — only the source becomes
+    `answer`, because the caption is now *input*, not generation).
+
+    **Δ = knockout − baseline** per caption token; *negative = believed less = hot
+    color*. The 🎯 playground section below runs the same measurement on your own
+    clip, prompt, and layer band.
+    """)
+    return
+
+
+@app.cell
+def _(
+    KNOCKOUT_RULES,
+    USE_PRECOMPUTED,
+    attention_baseline_ids,
+    attention_inputs,
+    attention_model,
+    attention_processor,
+    attention_token_types,
+    mo,
+):
+    if USE_PRECOMPUTED:
+        w9_tf_result = None
+        _w9_out = mo.callout(
+            mo.md(
+                "**Teacher forcing needs the live model** — this cell is skipped while "
+                "`USE_PRECOMPUTED=True`. (Cached replay of this measurement lands with F5b.)"
+            ),
+            kind="warn",
+        )
+    else:
+        from src.teacher_forcing import render_delta_strip as _w9_strip
+        from src.teacher_forcing import teacher_forced_delta as _w9_tfd
+
+        # Mirror the params-cell intervention with `answer` as the source: the
+        # caption is input now, so `answer → target` is the measurable counterpart
+        # of the generation-time `generated → target` diff above.
+        _w9_rules = [("answer", _t, _a, _b) for (_s, _t, _a, _b) in KNOCKOUT_RULES]
+        _w9_prompt_len = attention_inputs["input_ids"].shape[1]
+        _w9_c_ids = attention_baseline_ids[:, _w9_prompt_len:]
+
+        w9_tf_result = None
+        try:
+            with mo.status.spinner(title="Teacher-forced scoring (2 forward passes)…"):
+                w9_tf_result = _w9_tfd(
+                    attention_model,
+                    attention_processor,
+                    attention_inputs,
+                    attention_token_types,
+                    _w9_rules,
+                    cached_caption_ids=_w9_c_ids,
+                )
+        except Exception as _e:  # noqa: BLE001 — surface any failure in-notebook
+            _w9_out = mo.callout(
+                mo.md(f"**Teacher-forced scoring failed** — `{type(_e).__name__}: {_e}`"),
+                kind="danger",
+            )
+
+        if w9_tf_result is not None:
+            _w9_delta = [float(x) for x in w9_tf_result["delta"].detach().cpu().float().tolist()]
+            _w9_total = w9_tf_result["delta_total"]
+            _w9_rule_txt = " + ".join(f"`answer→{_r[1]}` [{_r[2]},{_r[3]})" for _r in _w9_rules)
+            _w9_out = mo.vstack([
+                mo.md(f"**Knockout** {_w9_rule_txt} &nbsp;·&nbsp; baseline caption teacher-forced as `answer`"),
+                mo.hstack([
+                    mo.stat(
+                        value=f"{_w9_total:+.2f}",
+                        label="Σ Δ log-lik (nats)",
+                        caption="knockout − baseline · negative = believed less",
+                        direction="decrease" if _w9_total < 0 else "increase",
+                        bordered=True,
+                    ),
+                    mo.stat(
+                        value=str(len(_w9_delta)),
+                        label="Caption tokens scored",
+                        caption="greedy baseline, teacher-forced",
+                        bordered=True,
+                    ),
+                ], widths="equal", gap=1),
+                mo.md("###### Per-token Δ log-likelihood (hover a word for its tokens' nats)"),
+                mo.Html(
+                    "<div style='line-height:2.1;font-family:monospace;font-size:15px'>"
+                    + _w9_strip(w9_tf_result["caption_tokens"], _w9_delta)
+                    + "</div>"
+                ),
+            ])
+    _w9_out
+    return (w9_tf_result,)
 
 
 @app.cell(hide_code=True)
@@ -1155,7 +1268,7 @@ def _(
                 f"&nbsp;·&nbsp; **Prompt** _{_tf_prompt}_ &nbsp;·&nbsp; **Knockout** {_tf_rule_txt}"
             ),
             mo.hstack(_tf_stats, widths="equal", gap=1),
-            mo.md("###### Per-token Δ log-likelihood (hot = the model believed this token less after the knockout)"),
+            mo.md("###### Per-token Δ log-likelihood (hot = believed less after the knockout; hover a word for its tokens' nats)"),
             mo.Html(f"<div style='line-height:2.1;font-family:monospace;font-size:15px'>{_render_strip(_tf_toks, _tf_delta)}</div>"),
             mo.ui.table(_tf_rows, selection=None, pagination=True, page_size=16),
         ])

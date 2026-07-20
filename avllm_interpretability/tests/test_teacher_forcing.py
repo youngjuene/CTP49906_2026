@@ -24,7 +24,7 @@ from src.attention_knockout_experiment import (  # noqa: E402
 )
 from src.teacher_forcing import (  # noqa: E402
     build_answer_token_types, caption_logprobs, delta_logprobs,
-    render_delta_strip, teacher_forced_delta,
+    group_tokens_into_words, render_delta_strip, teacher_forced_delta,
 )
 
 NEG = torch.finfo(torch.float32).min
@@ -90,6 +90,26 @@ def test_strip_puts_belief_drop_on_the_hot_side():
     assert neg[0] > neg[2]  # strong-negative token -> red (hot)
     assert pos[2] > pos[0]  # ~zero token -> blue side
     assert "Δ=-3.00 nats" in html
+
+
+def test_word_grouping_joins_subword_pieces():
+    # ' saxophone' -> [' sax', 'ophone'] must regroup into one word whose delta
+    # is the SUM of its pieces (log-probs add).
+    words = group_tokens_into_words(["a", " sax", "ophone", " plays"], [0.1, -2.0, -1.0, 0.2])
+    assert [w[0] for w in words] == ["a", " saxophone", " plays"]
+    assert abs(words[1][1] - (-3.0)) < 1e-9
+    assert words[1][2] == [(" sax", -2.0), ("ophone", -1.0)]
+
+
+def test_strip_word_level_display_with_token_hover():
+    html = render_delta_strip(["a", " sax", "ophone"], torch.tensor([0.0, -2.0, -1.0]))
+    assert "&nbsp;saxophone" in html          # one joined span, not sax + ophone
+    assert ">ophone</span>" not in html
+    assert "Δ=-3.00 nats" in html             # word value = sum
+    assert "sax: -2.00" in html and "ophone: -1.00" in html  # per-token hover kept
+    # raw per-token view still available
+    raw = render_delta_strip(["a", " sax", "ophone"], torch.tensor([0.0, -2.0, -1.0]), word_level=False)
+    assert ">ophone</span>" in raw
 
 
 def test_answer_to_audio_masks_exactly_the_right_cells():

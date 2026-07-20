@@ -65,34 +65,74 @@ def delta_logprobs(knockout_logprobs, baseline_logprobs):
     return knockout_logprobs - baseline_logprobs
 
 
-def render_delta_strip(caption_tokens, delta, cmap_name="RdBu"):
-    """Minimal per-token colored caption (F1's readable output; F2 polishes it).
+def group_tokens_into_words(caption_tokens, delta):
+    """Group subword pieces into display words (F2).
+
+    A token that starts with whitespace (or a newline) begins a new word --
+    Qwen's byte-level BPE marks word starts with a leading space, so
+    ` saxophone` -> [` sax`, `ophone`] regroups into one word. Returns a list of
+    `(word_text, word_delta, [(piece, piece_delta), ...])` where `word_delta` is
+    the **sum** of the pieces' deltas (log-probs add: the word's log-likelihood
+    change).
+    """
+    words = []
+    for tok, val in zip(caption_tokens, [float(x) for x in delta]):
+        text = tok or ""
+        starts_word = (not words) or text[:1].isspace()
+        if starts_word:
+            words.append([text, val, [(text, val)]])
+        else:
+            words[-1][0] += text
+            words[-1][1] += val
+            words[-1][2].append((text, val))
+    return [tuple(w) for w in words]
+
+
+def render_delta_strip(caption_tokens, delta, cmap_name="RdBu", word_level=True):
+    """Colored caption strip: word-level display, token-level values (F2).
 
     Diverging scale centered at 0. Convention is pinned to `delta = knockout -
     baseline`, so the **negative** side is the hot color -- `RdBu` maps the most
     negative value to red, matching the notebook's existing
-    "delta diversity (knockout - baseline)" panel. Per-token nat value on hover.
+    "delta diversity (knockout - baseline)" panel.
 
-    NOTE (F2 follow-up): renders one span per *token*, so subword pieces
-    (` saxophone` -> `sax`+`ophone`) show fragment boundaries; F2 will join to
-    word level for display while keeping per-token hover values.
+    Subword pieces are joined into words for display (` saxophone` renders as
+    one span, not `sax`+`ophone`); a word's color comes from its **summed**
+    delta and its hover shows the sum plus the per-token breakdown when the word
+    has several pieces. Pass `word_level=False` for the raw one-span-per-token
+    view.
     """
     import matplotlib
 
     vals = [float(x) for x in delta]
     if not vals:
         return "<em>(empty caption)</em>"
-    vmax = max(1e-6, max(abs(v) for v in vals))
+
+    if word_level:
+        units = [
+            (text, val, pieces if len(pieces) > 1 else None)
+            for text, val, pieces in group_tokens_into_words(caption_tokens, vals)
+        ]
+    else:
+        units = [(tok or "", val, None) for tok, val in zip(caption_tokens, vals)]
+
+    vmax = max(1e-6, max(abs(v) for _, v, _ in units))
     norm = matplotlib.colors.TwoSlopeNorm(vmin=-vmax, vcenter=0.0, vmax=vmax)
     cmap = matplotlib.colormaps[cmap_name]
+
+    def _esc(s):
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+
     spans = []
-    for tok, val in zip(caption_tokens, vals):
+    for text, val, pieces in units:
         bg = matplotlib.colors.to_hex(cmap(norm(val)))
-        text = (tok or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-        text = text.replace(" ", "&nbsp;") or "&nbsp;"
+        title = f"Δ={val:+.2f} nats"
+        if pieces:
+            title += " (" + ", ".join(f"{_esc(p.strip()) or '·'}: {v:+.2f}" for p, v in pieces) + ")"
+        shown = _esc(text).replace(" ", "&nbsp;") or "&nbsp;"
         spans.append(
-            f'<span title="Δ={val:+.2f} nats" '
-            f'style="background:{bg};padding:1px 2px;border-radius:2px">{text}</span>'
+            f'<span title="{title}" '
+            f'style="background:{bg};padding:1px 2px;border-radius:2px">{shown}</span>'
         )
     return "".join(spans)
 
