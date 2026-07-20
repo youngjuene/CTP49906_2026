@@ -161,22 +161,31 @@ def _(mo):
 
     # The experiment code (src/) and sample video live under the
     # `avllm_interpretability/` subdirectory of this repo. If the clone already
-    # exists, hard-sync it to the latest main so pushed fixes reach molab
-    # (a kernel restart is still needed to re-import updated modules).
+    # exists, hard-sync it to REPO_REF so pushed fixes reach molab (a kernel
+    # restart is still needed to re-import updated modules).
+    #
+    # REPO_REF selects which branch or tag to sync: "main" for normal class use;
+    # a feature branch to smoke-test unmerged work; a release tag (risk R7 in
+    # the PRD) to pin the semester so September pushes can't change what
+    # students execute mid-course. Works for branches and tags alike (fetch +
+    # FETCH_HEAD, not origin/<branch>).
+    REPO_REF = "main"
     REPO_DIR = Path("CTP49906_2026").resolve()
+    if REPO_REF != "main":
+        print(f"⚠️ REPO_REF={REPO_REF!r} — this notebook is pinned to a non-main ref.")
     if REPO_DIR.exists():
-        with mo.status.spinner(title="Updating CTP49906_2026 to latest main…"):
+        with mo.status.spinner(title=f"Updating CTP49906_2026 to latest {REPO_REF}…"):
             subprocess.run(
-                ["git", "-C", str(REPO_DIR), "fetch", "--depth", "1", "origin", "main"],
+                ["git", "-C", str(REPO_DIR), "fetch", "--depth", "1", "origin", REPO_REF],
                 check=True,
             )
             subprocess.run(
-                ["git", "-C", str(REPO_DIR), "reset", "--hard", "origin/main"], check=True
+                ["git", "-C", str(REPO_DIR), "reset", "--hard", "FETCH_HEAD"], check=True
             )
     else:
-        with mo.status.spinner(title="Cloning CTP49906_2026 (src + sample video)…"):
+        with mo.status.spinner(title=f"Cloning CTP49906_2026 @ {REPO_REF} (src + sample video)…"):
             subprocess.run(
-                ["git", "clone", "--depth", "1",
+                ["git", "clone", "--depth", "1", "--branch", REPO_REF,
                  "https://github.com/youngjuene/CTP49906_2026.git", str(REPO_DIR)],
                 check=True,
             )
