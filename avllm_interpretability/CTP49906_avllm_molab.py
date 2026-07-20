@@ -30,12 +30,23 @@ def _(mo):
     mo.md(r"""
     # AVLLM interpretability — molab demo
 
-    Two interpretability experiments on one video with **Qwen2.5-Omni-3B**:
+    **The question:** when Qwen2.5-Omni-3B captions a video, is it really using what it
+    *sees* and what it *hears* — or narrating from language priors? A caption like
+    *"a person is playing the piano"* looks equally correct either way, so the output
+    alone can't tell you. This notebook opens the model up with two tools:
 
     1. **Logit Lens** — decode the model's intermediate predictions at audio-token
-       positions across thinker layers.
-    2. **Attention Knockout** — compare a baseline response with one generated after
-       blocking a chosen source→target attention path.
+       positions across thinker layers: watch *when* (and whether) audio content
+       becomes legible inside the network.
+    2. **Attention Knockout** — surgically cut one information pathway
+       (source→target attention) and re-run: see *causally* what breaks when a
+       modality is taken away.
+
+    Read the fixed run top-to-bottom once for the mechanics — then the real work is
+    the two interactive sections at the bottom (🎛️ and 🎯), where **you** pick the
+    clip, the prompt, and the intervention. The habit to practice there: before every
+    ▶, write down a falsifiable hypothesis — *"if I block X, the result should change
+    like Y"* — and then check whether the model agrees.
     """)
     return
 
@@ -734,11 +745,16 @@ def _(knockout_text, logit_csv_written, mo):
     _ = knockout_text  # depend on the knockout run
     _ok = logit_csv_written.is_file() and logit_csv_written.stat().st_size > 0
     mo.md(
-        f"### Done\n\n"
+        f"### Done — the fixed run ends here; the exploration starts below\n\n"
         f"- Logit-lens CSV written: **{_ok}** — `{logit_csv_written}`\n"
-        f"- Baseline vs knockout compared above.\n\n"
-        "Change `KNOCKOUT_RULES`, `NFRAMES`, or `VIDEO_PATH` in the parameters cell — "
-        "or use the **interactive logit-lens diversity scoreboard** below — to explore further."
+        f"- Baseline vs knockout compared, and the caption scored under teacher forcing, above.\n\n"
+        "Two interactive sections follow, each with suggested missions in its intro:\n\n"
+        "- **🎛️ Diversity scoreboard** — how do the *audio positions* respond to your "
+        "prompt, clip, and knockout choices?\n"
+        "- **🎯 Teacher forcing** — how much less does the model *believe its own caption* "
+        "when you cut a pathway — and on **your** clip, which words lose the belief?\n\n"
+        "Form the hypothesis first, then press ▶. (You can also edit `KNOCKOUT_RULES`, "
+        "`NFRAMES`, or `VIDEO_PATH` in the parameters cell to change the fixed run itself.)"
     )
     return
 
@@ -761,6 +777,25 @@ def _(mo):
     The score is measured at **audio** token positions, so knockouts with an `audio`
     source reshape it most directly (a `generated` source does nothing in a forward
     pass). Build one rule with the dropdowns, or enter several in the advanced field.
+
+    ### What to try (predict the trend *before* you press ▶)
+
+    - **Steer the prompt, touch nothing else.** Run the same clip with *"describe
+      what you **hear**"* and then *"describe what you **see**"* — no knockout.
+      Hypothesis first: should what the prompt asks for change what the *audio
+      positions* decode, before any pathway is cut? Whatever you find is a finding.
+    - **Hunt the fusion band.** Knock out `audio → video` over `[0, 12)`, then
+      `[12, 24)`, then `[24, 36)`. Which band moves the Δ trend the most — early,
+      middle, or late? What would each answer imply about *where* the visual stream
+      touches the audio representations?
+    - **Starve the stream.** Stack `audio,video,0,36 ; audio,query_text,0,36` in the
+      advanced field. Is the effect of cutting both neighbors the sum of cutting
+      each alone — and what would it mean if it isn't?
+
+    A flat Δ is a result too — record it. And be careful *reading* a big one: a
+    diversity shift tells you the representations changed, not by itself *why*
+    (that question gets its own week). The full experiment catalog is in the
+    repo's `avllm_interpretability/README.md`.
     """)
     return
 
@@ -1124,11 +1159,32 @@ def _(mo):
     **continuous** (you can see a *small* effect) and **deterministic** (greedy
     caption, forward-only scoring). Nothing runs until you press ▶.
 
-    > **Sanity check.** Upload `assets/02321_silent.mp4` (the same frames, but the
-    > audio track is digital silence) and run `answer → audio`: the audio tokens
-    > exist but carry no signal, so Δ should be ≈ 0. Compare against the default clip
-    > (real soundtrack), same prompt and layers — a real audio dependency shows up as
-    > a clearly larger negative Δ. A control that *can* fail is the whole point.
+    ### What to try (predict the sign and the size *before* you press ▶)
+
+    - **Sight vs. sound, in nats.** Same clip, same prompt: run `answer → audio`,
+      then `answer → video`. Which Δ is more negative — and does that agree with
+      which knockout changed the *free-generated* caption more in the W9 cell above?
+      If the binary diff and the continuous measurement disagree, which do you
+      believe, and why?
+    - **Where does the caption's audio grounding live?** Keep `answer → audio` and
+      narrow the layer band: `[0, 12)`, `[12, 24)`, `[24, 36)`. Which band costs the
+      caption the most belief? Compare with the fusion band you found in 🎛️ — do the
+      layers that *build* the audio representation match the layers the *answer*
+      reads it from?
+    - **Bring your own clip — make the modalities disagree.** The most interesting
+      trends come from clips where sound and sight tell different stories (narration
+      over unrelated footage, a music video with off-screen audio, dubbed speech).
+      Upload one, caption it, and knock out `answer → audio` vs `answer → video`:
+      which sense was the caption actually standing on? Hover the colored strip —
+      *which words* lose the belief?
+
+    > **The control that keeps you honest.** Upload `assets/02321_silent.mp4` (the
+    > same frames, but the audio track is digital silence) and run `answer → audio`:
+    > the audio tokens exist but carry no signal, so Δ should be ≈ 0. Compare against
+    > the default clip (real soundtrack), same prompt and layers — a real audio
+    > dependency shows up as a clearly larger negative Δ. Pair *every* interesting
+    > effect you find above with a control like this: a control that *can* fail is
+    > the whole point.
     """)
     return
 
