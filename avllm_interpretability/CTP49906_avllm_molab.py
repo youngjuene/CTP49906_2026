@@ -3044,11 +3044,11 @@ def _(mo, synthesis_form):
             ),
             mo.callout(
                 mo.md(
-                    "This classroom activity is not a research-readiness claim. "
-                    "Institutional governance, licensed release stimuli, live "
-                    "Molab GPU/VRAM rehearsal, and human accessibility review remain external gates."
+                    "Teaching mode keeps this session local by default. Save the "
+                    "private portfolio you want to keep, then reset the session "
+                    "and delete temporary uploads before leaving a shared device."
                 ),
-                kind="warn",
+                kind="info",
             ),
         ]
     )

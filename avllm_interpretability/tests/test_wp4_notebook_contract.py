@@ -85,8 +85,9 @@ def test_progressive_disclosure_and_student_text_boundary() -> None:
     assert "mo.accordion(" in source
     assert "lazy=True" in source
     forbidden = re.compile(
-        r"\b(?:PRD|AC-\d+|WP-\d+|reviewer|developer annotation|"
-        r"implementation history|roadmap)\b",
+        r"\b(?:PRD|FR|AC|WP)(?:[-_\s]?\d+(?:\.\d+)*)?\b|"
+        r"research[- ]readiness|external gates?|release roadmap|reviewer|"
+        r"developer annotation|implementation history",
         flags=re.IGNORECASE,
     )
     assert not forbidden.search(student_text)
