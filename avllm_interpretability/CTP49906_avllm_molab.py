@@ -28,26 +28,22 @@ def _():
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    # AVLLM interpretability lab
+    # Counterpoint Lens studio
 
-    **The question:** when Qwen2.5-Omni-3B captions a video, is it really using what it
-    *sees* and what it *hears* — or narrating from language priors? A caption like
-    *"a person is playing the piano"* looks equally correct either way, so the output
-    alone can't tell you. This notebook opens the model up with two tools:
+    **Studio question:** when a multimodal model captions a video, what evidence
+    suggests that sound, image, prompt, or learned language patterns shaped its
+    answer? A plausible caption alone cannot settle that question.
 
-    1. **Logit Lens** — apply the language head as a probe to raw intermediate
-       residual states at audio-token positions and compare patterns across thinker
-       layers (with important calibration caveats stated below).
-    2. **Attention Knockout** — surgically cut one information pathway
-       (source→target attention) and re-run. This removes selected **direct
-       attention edges** in selected layers; it does *not* remove a modality,
-       erase its residual-stream representation, or block indirect routes.
+    You will make and register a first audiovisual cut, observe a short saved
+    reference replay, change one condition at a time, compare three readings,
+    revise your explanation and artifact, and finish with a bounded architecture
+    proposal.
 
-    **Learning route:** prepare one shared reference run, work through three guided
-    measurements, test your own claim in two research playgrounds, and finish by
-    designing a sharper experiment. Before every ▶, write a falsifiable prediction —
-    *"if I block X, the result should change like Y"* — then separate what you
-    observed from what the intervention actually warrants.
+    **Required** activities form the shortest complete route. **Choice** activities
+    let you follow one evidence question. **Advanced** controls stay collapsed and
+    are never prerequisites. Before every run, commit a prediction that could be
+    wrong; after every run, separate observation, interpretation, limitation, and
+    next test.
     """)
     return
 
@@ -55,25 +51,58 @@ def _(mo):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## 1. Prepare the experiment
+    ## 1. Prepare your project
 
-    ### 1.1 Before you run
+    ### 1.1 Orient — Make, test, revise
 
-    - **GPU:** attach one via the notebook-specs button in the header; this notebook
-      uses `cuda:0`. One eager 3B thinker is shared by both probes and was validated
-      on a 24 GB RTX 3090.
-    - **Dependencies:** the setup cell pip-installs them into the kernel (molab does
-      not honor the `# /// script` block automatically) and restores
-      `torchvision.io.read_video` with a small PyAV shim, since molab's bundled
-      torchvision no longer ships a video decoder.
-    - The experiment code (`src/`) and the sample clip are cloned from
-      `youngjuene/CTP49906_2026` by the setup cell below.
+    **Required · about 10 minutes.** Follow the eight stages in order. Begin with
+    the saved course replay; it is deterministic, uses the checked-in reference
+    results, and does not allocate a GPU or download model weights. Choose the live
+    model only when your instructor has prepared the runtime.
+
+    **Evidence legend**
+
+    - **Observed:** a displayed value, text difference, or validated record.
+    - **Inferred:** a bounded interpretation that may still have rival explanations.
+    - **Not measured:** a question this activity cannot answer.
+
+    **Data boundary.** Teaching mode is the default and fail-safe mode. Uploads and
+    session records are processed inside the hosted Molab session/container, not
+    only on your device. Nothing in this notebook automatically sends student media,
+    process records, or audience readings to an instructor or outside service.
+    Private downloads happen only when you press a download control.
     """)
     return
 
 
 @app.cell(hide_code=True)
 def _(mo):
+    def _validate_execution_mode(_value):
+        if not _value:
+            return "Choose a replay or live route."
+        return None
+
+    execution_mode_form = mo.ui.dropdown(
+        ["Saved course replay", "Live model"],
+        value="Saved course replay",
+        label="Execution route",
+    ).form(
+        submit_button_label="Apply execution route",
+        validate=_validate_execution_mode,
+        bordered=True,
+    )
+    execution_mode_form
+    return (execution_mode_form,)
+
+
+@app.cell
+def _(execution_mode_form):
+    USE_PRECOMPUTED = execution_mode_form.value != "Live model"
+    return (USE_PRECOMPUTED,)
+
+
+@app.cell(hide_code=True)
+def _(USE_PRECOMPUTED, mo):
     import importlib.metadata
     import importlib.util
     import subprocess
@@ -103,12 +132,13 @@ def _(mo):
                     [sys.executable, "-m", "pip", "install", *to_install], check=True
                 )
 
-    _ensure_packages([
-        ("transformers", "transformers", "4.52.0", "transformers==4.52.0"),
-        ("accelerate", "accelerate", "1.14.0", "accelerate==1.14.0"),
-        ("qwen_omni_utils", "qwen-omni-utils", "0.0.9", "qwen-omni-utils==0.0.9"),
-        ("av", "av", None, "av"),  # PyAV — backs the video-decode shim below
-    ])
+    if not USE_PRECOMPUTED:
+        _ensure_packages([
+            ("transformers", "transformers", "4.52.0", "transformers==4.52.0"),
+            ("accelerate", "accelerate", "1.14.0", "accelerate==1.14.0"),
+            ("qwen_omni_utils", "qwen-omni-utils", "0.0.9", "qwen-omni-utils==0.0.9"),
+            ("av", "av", None, "av"),
+        ])
 
     def _ensure_video_reader():
         # molab ships its own recent torch/torchvision and ignores the
@@ -165,7 +195,8 @@ def _(mo):
         torchvision.io.read_video = _read_video_pyav
         print("patched torchvision.io.read_video (PyAV shim) for molab compatibility")
 
-    _ensure_video_reader()
+    if not USE_PRECOMPUTED:
+        _ensure_video_reader()
 
     # The experiment code (src/) and sample video live under the
     # `avllm_interpretability/` subdirectory of this repo. If the clone already
@@ -175,7 +206,7 @@ def _(mo):
     # REPO_REF selects the source version. Use "main" while iterating; distribute
     # an immutable course tag so later repository changes cannot alter the class
     # run. Fetching through FETCH_HEAD supports both branches and tags.
-    REPO_REF = "main"
+    REPO_REF = "bb12df8686c0179bf95f0cc90b90f2319ad4040c"
     _local_project = Path(__file__).resolve().parent
     if (_local_project / "src").is_dir() and (_local_project / "assets").is_dir():
         # Local development / a notebook opened from a checked-out release:
@@ -206,37 +237,136 @@ def _(mo):
             )
         PROJECT_DIR = REPO_DIR / "avllm_interpretability"
     assert PROJECT_DIR.is_dir(), f"expected code dir not found: {PROJECT_DIR}"
-    if str(PROJECT_DIR) not in sys.path:
-        sys.path.insert(0, str(PROJECT_DIR))
+    for _source_root in (PROJECT_DIR, PROJECT_DIR.parent):
+        if str(_source_root) not in sys.path:
+            sys.path.insert(0, str(_source_root))
     print("project dir:", PROJECT_DIR)
     return (PROJECT_DIR,)
 
 
 @app.cell
-def _(PROJECT_DIR):
-    # GPU-free replay of the guided demo. Flip to True to render the saved course
-    # results without a GPU or model download. The research playgrounds still
-    # need a live model and fail clearly if submitted in this mode. Refresh the
-    # saved results on a GPU with:
-    #   python avllm_interpretability/scripts/generate_precompute.py
-    USE_PRECOMPUTED = False
+def _(PROJECT_DIR, USE_PRECOMPUTED):
     PRECOMPUTED_DIR = PROJECT_DIR / "precomputed"
     if USE_PRECOMPUTED:
         print(f"USE_PRECOMPUTED=True — replaying saved course results from {PRECOMPUTED_DIR} (no GPU)")
-    return PRECOMPUTED_DIR, USE_PRECOMPUTED
+    return (PRECOMPUTED_DIR,)
+
+
+@app.cell
+def _(PROJECT_DIR, mo):
+    from hashlib import sha256
+    import json
+    from uuid import uuid4
+
+    from curriculum_common.audience_packets import (
+        AudiencePacket,
+        AudienceReading,
+        validate_audience_exchange,
+    )
+    from curriculum_common.portfolio_export import (
+        build_private_portfolio,
+        serialize_private_portfolio,
+    )
+    from curriculum_common.production_manifest import (
+        ArtifactVersion,
+        EditDecisionManifest,
+    )
+    from curriculum_common.session_records import (
+        load_jsonl,
+        new_session,
+        reduce_command,
+        teaching_mode,
+        validate_process_log,
+    )
+    from src.playground_clips import register_artifact_version
+
+    COURSE_RELEASE_ID = "counterpoint-lens-wp4-candidate-2026-07-22"
+    classroom_mode = teaching_mode(
+        "Teaching is the default; no approved Research configuration is loaded"
+    )
+    _session_pseudonym = f"studio-{uuid4().hex[:12]}"
+    _initial_log = new_session(
+        _session_pseudonym,
+        decision=classroom_mode,
+        course_release_id=COURSE_RELEASE_ID,
+    )
+    get_classroom_log, set_classroom_log = mo.state(_initial_log)
+    get_artifact_versions, set_artifact_versions = mo.state(tuple())
+    get_audience_exchange, set_audience_exchange = mo.state((None, tuple()))
+
+    PRIVATE_UPLOAD_DIR = PROJECT_DIR / "notebook_results" / "uploads"
+    PRIVATE_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    return (
+        ArtifactVersion,
+        AudiencePacket,
+        AudienceReading,
+        COURSE_RELEASE_ID,
+        EditDecisionManifest,
+        PRIVATE_UPLOAD_DIR,
+        build_private_portfolio,
+        classroom_mode,
+        get_artifact_versions,
+        get_audience_exchange,
+        get_classroom_log,
+        json,
+        load_jsonl,
+        new_session,
+        reduce_command,
+        register_artifact_version,
+        serialize_private_portfolio,
+        set_artifact_versions,
+        set_audience_exchange,
+        set_classroom_log,
+        sha256,
+        teaching_mode,
+        uuid4,
+        validate_audience_exchange,
+        validate_process_log,
+    )
+
+
+@app.cell(hide_code=True)
+def _(USE_PRECOMPUTED, classroom_mode, mo):
+    _route = "Saved course replay" if USE_PRECOMPUTED else "Live model"
+    mo.hstack(
+        [
+            mo.stat(
+                value=classroom_mode.mode.value,
+                label="Operating mode",
+                caption="no research destination or collection action",
+                bordered=True,
+            ),
+            mo.stat(
+                value=_route,
+                label="Result provenance",
+                caption="replay and live results are always labeled",
+                bordered=True,
+            ),
+            mo.stat(
+                value="Manual only",
+                label="Student-data egress",
+                caption="private download or permission-authorized exchange",
+                bordered=True,
+            ),
+        ],
+        widths="equal",
+        gap=1,
+    )
+    return
 
 
 @app.cell(hide_code=True)
 def _(USE_PRECOMPUTED):
-    import torch
-
     if USE_PRECOMPUTED:
-        DEVICE = torch.device("cpu")
-        print(f"torch={torch.__version__}, USE_PRECOMPUTED=True → CPU (no GPU required)")
+        DEVICE = "cpu"
+        torch = None
+        print("Saved course replay → CPU (no GPU allocation or model download)")
     else:
+        import torch
+
         assert torch.cuda.is_available(), (
             "No GPU visible. In molab, attach a GPU via the notebook-specs button in the header. "
-            "(Or set USE_PRECOMPUTED=True above to replay the saved course results.)"
+            "Choose Saved course replay to continue without a GPU."
         )
         DEVICE = torch.device("cuda:0")
         _free, _total = torch.cuda.mem_get_info(0)
@@ -247,17 +377,85 @@ def _(USE_PRECOMPUTED):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ### 1.2 Set the guided-demo reference
+    ### 1.2 Compose — Plan your first cut
 
-    **Leave these values unchanged on the first pass** so everyone interprets the
-    same clip, prompts, and intervention. After the guided-demo checkpoint, use the
-    forms to change one variable at a time. Direct edits here are the advanced route
-    for changing the shared reference run itself.
+    **Required.** Complete the planning card before registering V1. Name the
+    audience and artistic intention, the sound–image relationship you want to try,
+    relevant cultural or aesthetic references, source and license provenance, and
+    accessibility work. Record the common editor/export route and any human or AI
+    assistance so your later revision has a trustworthy starting point.
 
-    The cells stay separate by re-run cost: changing the model reloads its weights;
-    changing the clip, prompts, rules, or frame count reuses the loaded model.
+    The saved course clip remains the shared reference for the guided demonstration;
+    your planning card belongs to your own project and is not sent anywhere.
     """)
     return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    def _validate_planning_card(_value):
+        if not _value:
+            return "Complete the planning card."
+        _required = (
+            "creator_intention",
+            "intended_audience",
+            "sound_image_relation",
+            "cultural_context",
+            "concept_tags",
+            "source_license",
+            "accessibility_plan",
+            "editor_name_version",
+            "source_assets",
+            "edit_order",
+            "mix_levels",
+            "assistance",
+        )
+        if any(not str(_value[_field]).strip() for _field in _required):
+            return "Every required planning field needs a short response."
+        return None
+
+    planning_form = mo.md(r"""
+    **Artistic intention** {creator_intention}
+
+    **Intended audience** {intended_audience}
+
+    **Planned sound–image relationship** {sound_image_relation}
+
+    **Cultural or aesthetic context** {cultural_context}
+
+    **Concept tags** — comma separated {concept_tags}
+
+    **Sources and licenses** {source_license}
+
+    **Accessibility plan** — captions/transcript and visual-context support {accessibility_plan}
+
+    **Editor and version** {editor_name_version}
+
+    **Source assets and order** {source_assets} {edit_order}
+
+    **Mix/level decisions** {mix_levels}
+
+    **Human/AI assistance disclosure** {assistance}
+    """).batch(
+        creator_intention=mo.ui.text_area(rows=2, full_width=True),
+        intended_audience=mo.ui.text(full_width=True),
+        sound_image_relation=mo.ui.text_area(rows=2, full_width=True),
+        cultural_context=mo.ui.text_area(rows=2, full_width=True),
+        concept_tags=mo.ui.text(full_width=True),
+        source_license=mo.ui.text_area(rows=2, full_width=True),
+        accessibility_plan=mo.ui.text_area(rows=2, full_width=True),
+        editor_name_version=mo.ui.text(value="Common no-cost editor route", full_width=True),
+        source_assets=mo.ui.text_area(rows=2, full_width=True),
+        edit_order=mo.ui.text_area(rows=2, full_width=True),
+        mix_levels=mo.ui.text_area(rows=2, full_width=True),
+        assistance=mo.ui.text_area(rows=2, full_width=True),
+    ).form(
+        submit_button_label="Commit planning card",
+        validate=_validate_planning_card,
+        bordered=True,
+    )
+    planning_form
+    return (planning_form,)
 
 
 @app.cell
@@ -306,9 +504,16 @@ def _():
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ### 1.3 Inspect the course reference clip
+    ### 1.3 Register — First cut (V1)
 
-    Qwen receives sampled frames together with the clip's embedded audio.
+    **Required.** Register an immutable first cut from the saved course clip for
+    practice or from your own upload. The record keeps a content hash, a private
+    filename alias, media facts, your committed planning card, and the common edit
+    manifest. Registering a later V2 will link to this V1 instead of overwriting it.
+
+    A browser upload crosses into the hosted Molab session/container for processing.
+    It is not automatically transmitted to an instructor, model endpoint, or other
+    destination. The private portfolio download near the end is user initiated.
     """)
     return
 
@@ -321,40 +526,219 @@ def _(VIDEO_PATH, mo):
 
 @app.cell(hide_code=True)
 def _(mo):
-    mo.md(r"""
-    ### 1.4 Load the model and prepare inputs
-    """)
+    def _validate_v1_registration(_value):
+        if not _value or not _value["registration_key"].strip():
+            return "Give this registration a stable key."
+        if not _value["change_rationale"].strip():
+            return "State what makes this your first committed cut."
+        if _value["clip_source"] == "Upload":
+            _files = _value["video"]
+            if not _files or not _files[0].contents:
+                return "Choose an upload or use the saved course clip for practice."
+        return None
+
+    v1_registration_form = mo.md(r"""
+    **Clip source** {clip_source}
+
+    **Optional upload** — MP4/MOV/MKV/WEBM/AVI, up to 250 MB {video}
+
+    **Stable registration key** {registration_key}
+
+    **First-cut rationale** {change_rationale}
+    """).batch(
+        clip_source=mo.ui.dropdown(
+            ["Saved course clip", "Upload"], value="Saved course clip"
+        ),
+        video=mo.ui.file(
+            filetypes=[".mp4", ".mov", ".mkv", ".webm", ".avi"],
+            multiple=False,
+            kind="area",
+            max_size=250_000_000,
+        ),
+        registration_key=mo.ui.text(value="first-cut-v1", full_width=True),
+        change_rationale=mo.ui.text_area(rows=2, full_width=True),
+    ).form(
+        submit_button_label="Register immutable V1",
+        validate=_validate_v1_registration,
+        bordered=True,
+    )
+    v1_registration_form
+    return (v1_registration_form,)
+
+
+@app.cell(hide_code=True)
+def _(
+    EditDecisionManifest,
+    PRIVATE_UPLOAD_DIR,
+    SILENT_VIDEO_PATH,
+    VIDEO_PATH,
+    get_artifact_versions,
+    mo,
+    planning_form,
+    register_artifact_version,
+    set_artifact_versions,
+    v1_registration_form,
+):
+    from datetime import datetime as _datetime
+    from datetime import timezone as _timezone
+
+    _registration = v1_registration_form.value
+    _plan = planning_form.value
+    _current = get_artifact_versions()
+    _existing = next(
+        (_artifact for _artifact in _current if _artifact.version_label == "V1"),
+        None,
+    )
+    if _existing is not None:
+        _v1_card = mo.callout(
+            mo.md(
+                f"**V1 committed** · `{_existing.artifact_id}`  \n"
+                f"The original record remains immutable; continue to Observe."
+            ),
+            kind="success",
+        )
+    elif _registration is None or _plan is None:
+        _v1_card = mo.callout(
+            mo.md("Commit the planning card and registration form to create V1."),
+            kind="info",
+        )
+    else:
+        _source_path = VIDEO_PATH
+        if _registration["clip_source"] == "Upload":
+            from src.playground_clips import resolve_clip_selection as _resolve_v1_clip
+
+            _upload = _registration["video"][0]
+            _resolved = _resolve_v1_clip(
+                "Upload",
+                default_path=VIDEO_PATH,
+                silent_path=SILENT_VIDEO_PATH,
+                upload_dir=PRIVATE_UPLOAD_DIR,
+                upload_name=_upload.name,
+                upload_contents=_upload.contents,
+            )
+            _source_path = _resolved.path
+        _tags = tuple(
+            _tag.strip() for _tag in _plan["concept_tags"].split(",") if _tag.strip()
+        )
+        _ordering = tuple(
+            _item.strip() for _item in _plan["edit_order"].split(",") if _item.strip()
+        ) or ("recorded in planning card",)
+        _edit_manifest = EditDecisionManifest(
+            editor_name_version=_plan["editor_name_version"].strip(),
+            source_assets=({"source_note": _plan["source_assets"].strip()},),
+            ordering=_ordering,
+            trims=(),
+            mix_levels=({"decision": _plan["mix_levels"].strip()},),
+            accessibility_work={"plan": _plan["accessibility_plan"].strip()},
+            assistance_disclosure={"disclosure": _plan["assistance"].strip()},
+            export_preset_version="common-classroom-export/1.0.0",
+        )
+        try:
+            _artifact = register_artifact_version(
+                _source_path,
+                edit_manifest=_edit_manifest,
+                version_label="V1",
+                parent_artifact_id=None,
+                local_registered_at_utc=_datetime.now(_timezone.utc).isoformat(),
+                event_index=len(_current),
+                elapsed_ms=0,
+                creator_intention=_plan["creator_intention"].strip(),
+                intended_audience=_plan["intended_audience"].strip(),
+                sound_image_relation=_plan["sound_image_relation"].strip(),
+                concept_tags=_tags or ("unclassified",),
+                cultural_aesthetic_context=_plan["cultural_context"].strip(),
+                source_license_provenance={"notes": _plan["source_license"].strip()},
+                change_rationale=_registration["change_rationale"].strip(),
+                processing_boundary=(
+                    "hosted Molab session/container; no automatic student-data egress"
+                ),
+            )
+        except Exception as _error:  # noqa: BLE001 — registration errors belong in the UI
+            _v1_card = mo.callout(
+                mo.md(f"**V1 registration needs attention** — `{type(_error).__name__}: {_error}`"),
+                kind="danger",
+            )
+        else:
+            set_artifact_versions(_current + (_artifact,))
+            _v1_card = mo.callout(
+                mo.md(
+                    f"**V1 committed** · `{_artifact.artifact_id}`  \n"
+                    "The planning snapshot, media facts, and first-cut rationale are now immutable."
+                ),
+                kind="success",
+            )
+    _v1_card
     return
 
 
 @app.cell(hide_code=True)
-def _(DEVICE, MODEL_PATH, MODEL_REVISION, PROJECT_DIR):
+def _(get_artifact_versions, mo):
+    _ready = any(
+        _artifact.version_label == "V1" for _artifact in get_artifact_versions()
+    )
+    _status = "Complete" if _ready else "Waiting for V1"
+    mo.callout(
+        mo.md(
+            f"**Checkpoint · Prepare your project — {_status}**  \n"
+            "Next: replay the shared reference and write one interpretation checkpoint after each measure."
+        ),
+        kind="success" if _ready else "info",
+    )
+    return
+
+
+@app.cell(hide_code=True)
+def _(USE_PRECOMPUTED, mo):
+    _engine = "saved replay ready" if USE_PRECOMPUTED else "live model requested"
+    mo.md(f"**Reference engine:** {_engine}.")
+    return
+
+
+@app.cell(hide_code=True)
+def _(DEVICE, MODEL_PATH, MODEL_REVISION, PROJECT_DIR, USE_PRECOMPUTED):
     import csv
     from collections import Counter
 
     import matplotlib.pyplot as plt
     import numpy as np
-    from qwen_omni_utils import process_mm_info
-    from transformers import Qwen2_5OmniForConditionalGeneration, Qwen2_5OmniProcessor
-
     _ = PROJECT_DIR  # ensure the clone / sys.path cell ran first
-    from src.attention_knockout_experiment import block_attention
-    from src.attention_knockout_experiment import (
-        create_token_type_mapping as create_attention_token_mapping,
-    )
-    from src.logitlens_experiment import (
-        analyze_and_save_audio_logits_to_csv,
-        clear_logit_lens_hooks,
-        create_token_type_mapping,
-        register_logit_lens_hooks,
-    )
     from src.playground_clips import (
         CLIP_CHOICES,
         inspect_classroom_clip,
         resolve_clip_selection,
     )
 
+    if USE_PRECOMPUTED:
+        Qwen2_5OmniForConditionalGeneration = None
+        Qwen2_5OmniProcessor = None
+        analyze_and_save_audio_logits_to_csv = None
+        block_attention = None
+        clear_logit_lens_hooks = None
+        create_attention_token_mapping = None
+        create_token_type_mapping = None
+        process_mm_info = None
+        register_logit_lens_hooks = None
+    else:
+        from qwen_omni_utils import process_mm_info
+        from transformers import (
+            Qwen2_5OmniForConditionalGeneration,
+            Qwen2_5OmniProcessor,
+        )
+
+        from src.attention_knockout_experiment import block_attention
+        from src.attention_knockout_experiment import (
+            create_token_type_mapping as create_attention_token_mapping,
+        )
+        from src.logitlens_experiment import (
+            analyze_and_save_audio_logits_to_csv,
+            clear_logit_lens_hooks,
+            create_token_type_mapping,
+            register_logit_lens_hooks,
+        )
+
     def load_model_and_processor(attn_implementation):
+        if USE_PRECOMPUTED:
+            raise RuntimeError("Live model loading is disabled in saved replay mode")
         _model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
             MODEL_PATH,
             revision=MODEL_REVISION,
@@ -374,6 +758,8 @@ def _(DEVICE, MODEL_PATH, MODEL_REVISION, PROJECT_DIR):
     # video_path/nframes are arguments, not closures: this cell must depend only
     # on the model constants, or a knob tweak would cascade into the loaders.
     def prepare_video_inputs(model, processor, prompt, token_mapping_fn, video_path, nframes):
+        if USE_PRECOMPUTED:
+            raise RuntimeError("Live input preparation is disabled in saved replay mode")
         _conv = [{"role": "user", "content": [
             {"type": "text", "text": prompt},
             {"type": "video", "video": str(video_path), "nframes": nframes},
@@ -458,20 +844,23 @@ def _(attention_model):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## 2. Guided demo
+    ## 2. Guided demonstration
 
-    ### 2.1 Probe intermediate audio-position states
+    ### 2.1 Observe — Shared reference
+
+    **Required · about 15 minutes.** Replay the fixed reference before changing any
+    setting. Read the provenance badge, inspect the three measures below, and write
+    one observation and one limitation after each.
+
+    #### Measure A · Raw probe score dispersion
 
     A multimodal forward pass; the CSV analysis focuses on `audio` token positions.
 
-    **Measurement caveat.** This classroom lens takes each decoder layer's **raw
-    residual-stream output** and applies `lm_head` directly. It does **not** apply
-    the thinker's final RMSNorm first. Moreover, audio positions are multimodal
-    placeholder/feature positions, not positions with a calibrated next-token
-    language-model objective. The decoded token is therefore a diagnostic probe,
-    **not** the model's literal next-token prediction at that audio position. Treat
-    diversity as a pattern to explain and falsify with controls—not as a direct
-    measure of uncertainty, semantic quality, or fusion.
+    **What this can / cannot show.** Intermediate entropy is **raw probe score
+    dispersion** from an unnormalized probe; probability margin is a descriptive
+    score gap. Audio positions are multimodal feature positions, not positions with
+    a calibrated next-token objective. These summaries are not calibrated
+    confidence, free-generation uncertainty, or causal localization.
     """)
     return
 
@@ -605,7 +994,7 @@ def _(Counter, USE_PRECOMPUTED, csv, logit_csv_written, mo, np, plt):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ### 2.2 Intervene on direct attention edges
+    #### Measure B · Direct attention-edge knockout
 
     `KNOCKOUT_RULES` are `(source_type, target_type, start_layer, end_layer)` tuples.
     The default blocks generated tokens from attending to video tokens in layers 0–35.
@@ -906,7 +1295,7 @@ def _(baseline_attention_summary, knockout_attention_summary, mo, np, plt):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ### 2.3 Quantify edge sensitivity with teacher forcing
+    #### Measure C · Teacher-forced answer-distribution change
 
     The string diff above is **visceral but binary** — you can't see a *small*
     effect, and it depends on how generation happens to continue. This cell asks
@@ -916,11 +1305,12 @@ def _(mo):
     `KNOCKOUT_RULES` (same clip, same prompt, same layers — only the source becomes
     `answer`, because the caption is now *input*, not generation).
 
-    **Δ = knockout − baseline** per caption token; *negative = believed less = hot
-    color*. We show both the additive total and the length-normalized mean. Use the
+    **Δ = knockout − baseline** per caption token; a negative value means the fixed
+    answer token received lower log probability. Entropy and margin here describe
+    **teacher-forced answer-distribution dispersion (uncalibrated proxy)**. Use the
     mean for cross-clip comparisons, while remembering that different clips may
-    generate semantically different captions. The 🎯 playground below runs the
-    same measurement on your own clip, prompt, and layer band.
+    generate semantically different captions. This is not calibrated confidence,
+    free-generation uncertainty, or proof of a localized causal mechanism.
     """)
     return
 
@@ -941,8 +1331,8 @@ def _(
         _fixed_out = mo.callout(
             mo.md(
                 "**Teacher forcing needs the live model.** This measurement is not "
-                "included in saved-result replay; attach a GPU and set "
-                "`USE_PRECOMPUTED=False` to run it."
+                "included in the saved pack. Use the execution-route form above "
+                "only when your instructor has prepared a GPU runtime."
             ),
             kind="warn",
         )
@@ -985,7 +1375,7 @@ def _(
                     mo.stat(
                         value=f"{_fixed_total:+.2f}",
                         label="Σ Δ log-lik (nats)",
-                        caption="knockout − baseline · negative = believed less",
+                        caption="knockout − baseline · negative = lower log probability",
                         direction="decrease" if _fixed_total < 0 else "increase",
                         bordered=True,
                     ),
@@ -1016,11 +1406,65 @@ def _(
 
 @app.cell(hide_code=True)
 def _(mo):
-    mo.md(r"""
-    ## 3. Research playground
+    def _validate_observe_reflection(_value):
+        if not _value:
+            return "Record the guided interpretation checkpoints."
+        if any(not str(_value[_field]).strip() for _field in _value):
+            return "Write one observation and one limitation for each measure."
+        return None
 
-    The guided demo used one shared reference so the class could interpret the
-    same evidence. Now work in short experimental cycles:
+    observe_reflection_form = mo.md(r"""
+    **Measure A observation** {probe_observation}
+
+    **Measure A limitation** {probe_limit}
+
+    **Measure B observation** {edge_observation}
+
+    **Measure B limitation** {edge_limit}
+
+    **Measure C observation or “not measured”** {answer_observation}
+
+    **Measure C limitation** {answer_limit}
+    """).batch(
+        probe_observation=mo.ui.text_area(rows=2, full_width=True),
+        probe_limit=mo.ui.text_area(rows=2, full_width=True),
+        edge_observation=mo.ui.text_area(rows=2, full_width=True),
+        edge_limit=mo.ui.text_area(rows=2, full_width=True),
+        answer_observation=mo.ui.text_area(rows=2, full_width=True),
+        answer_limit=mo.ui.text_area(rows=2, full_width=True),
+    ).form(
+        submit_button_label="Commit guided checkpoints",
+        validate=_validate_observe_reflection,
+        bordered=True,
+    )
+    observe_reflection_form
+    return (observe_reflection_form,)
+
+
+@app.cell(hide_code=True)
+def _(mo, observe_reflection_form):
+    _complete = observe_reflection_form.value is not None
+    _status = "Complete" if _complete else "Waiting for three checkpoints"
+    mo.callout(
+        mo.md(
+            f"**Checkpoint · Guided demonstration — {_status}**  \n"
+            "Next: choose one controlled comparison, commit a prediction, then run only after the snapshot is visible."
+        ),
+        kind="success" if _complete else "info",
+    )
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## 3. Exploratory playground
+
+    ### 3.1 Experiment — Change one thing at a time
+
+    **Required · one paired investigation.** The guided demonstration used one
+    shared reference. Now choose one coded operation, keep the other settings fixed,
+    and work in a short Prepare → Run → Reflect cycle:
 
     1. **Prediction before ▶** — state a directional result that could be wrong.
     2. **Intervention** — change one variable and keep the rest fixed.
@@ -1028,8 +1472,140 @@ def _(mo):
     4. **Verdict** — supported, refuted, or not tested?
     5. **Next control** — name a rival explanation and a result that separates it.
 
-    Record each cycle in `avllm_interpretability/WORKSHEET.md`.
+    Your command key, prediction, initial explanation, and settings are committed
+    through an append-only reducer before any live computation. Replaying the same
+    command after a reactive rerun or event-log reload is idempotent; reusing its key
+    with different content is rejected.
     """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    _operation_labels = {
+        "Original reference": "original_reference",
+        "Duration-matched audio swap": "audio_swap_duration_matched",
+        "Signed temporal offset with zero-fill": "temporal_offset",
+        "Audio silence signal control": "audio_silence_control",
+        "Neutral video signal control": "video_neutral_control",
+        "True audio modality omission": "audio_omitted_model_input",
+        "True video modality omission": "video_omitted_model_input",
+        "Direct attention-edge knockout": "direct_attention_edge_knockout",
+    }
+
+    def _validate_experiment_plan(_value):
+        if not _value:
+            return "Prepare a run before continuing."
+        for _field in ("command_key", "prediction", "initial_explanation", "prompt"):
+            if not str(_value[_field]).strip():
+                return "Command key, prediction, initial explanation, and prompt are required."
+        if _value["operation"] == "temporal_offset" and _value["offset_ms"] == 0:
+            return "Choose a non-zero signed offset for the temporal-offset condition."
+        return None
+
+    experiment_plan_form = mo.md(r"""
+    **Stable command key** — reuse only to replay the identical snapshot {command_key}
+
+    **Prediction before run** {prediction}
+
+    **Initial explanation** {initial_explanation}
+
+    **Operation** {operation}
+
+    **Signed offset in milliseconds** — negative leads; positive delays {offset_ms}
+
+    **Prompt** {prompt}
+    """).batch(
+        command_key=mo.ui.text(value="paired-run-1", full_width=True),
+        prediction=mo.ui.text_area(rows=2, full_width=True),
+        initial_explanation=mo.ui.text_area(rows=2, full_width=True),
+        operation=mo.ui.dropdown(_operation_labels, value="Original reference"),
+        offset_ms=mo.ui.slider(-2000, 2000, step=100, value=500, show_value=True),
+        prompt=mo.ui.text(value="Describe what you see and hear in the video", full_width=True),
+    ).form(
+        submit_button_label="Commit immutable run snapshot",
+        validate=_validate_experiment_plan,
+        bordered=True,
+    )
+    experiment_plan_form
+    return (experiment_plan_form,)
+
+
+@app.cell(hide_code=True)
+def _(
+    MODEL_PATH,
+    MODEL_REVISION,
+    experiment_plan_form,
+    get_artifact_versions,
+    get_classroom_log,
+    mo,
+    reduce_command,
+    set_classroom_log,
+    sha256,
+):
+    _prepared = experiment_plan_form.value
+    if _prepared is None:
+        _run_snapshot_card = mo.callout(
+            mo.md("Commit a prediction and initial explanation before running."),
+            kind="info",
+        )
+    else:
+        _artifacts = get_artifact_versions()
+        _v1 = next(
+            (_artifact for _artifact in _artifacts if _artifact.version_label == "V1"),
+            None,
+        )
+        _artifact_id = _v1.artifact_id if _v1 is not None else "practice-course-reference"
+        _condition = _prepared["operation"]
+        _command = {
+            "kind": "commit_run",
+            "command_nonce": "run:" + sha256(
+                _prepared["command_key"].strip().encode("utf-8")
+            ).hexdigest(),
+            "artifact_id": _artifact_id,
+            "stimulus_id": f"condition:{_condition}",
+            "condition_code": _condition,
+            "model_id": MODEL_PATH,
+            "model_revision": MODEL_REVISION,
+            "prompt": _prepared["prompt"].strip(),
+            "parameters": {
+                "technical_operation": _condition,
+                "signed_offset_ms": int(_prepared["offset_ms"]),
+                "signal_control": _condition in {
+                    "audio_silence_control",
+                    "video_neutral_control",
+                },
+                "true_modality_omission": _condition in {
+                    "audio_omitted_model_input",
+                    "video_omitted_model_input",
+                },
+                "model_intervention": _condition == "direct_attention_edge_knockout",
+            },
+            "prediction": _prepared["prediction"].strip(),
+            "initial_explanation": _prepared["initial_explanation"].strip(),
+            "metric_versions": {
+                "probe": "probe-metric/1.0.0",
+                "teacher_forced": "compact-distribution/1.0.0",
+            },
+        }
+        try:
+            _reduction = reduce_command(get_classroom_log(), _command)
+        except Exception as _error:  # noqa: BLE001 — reducer rejection belongs in the UI
+            _run_snapshot_card = mo.callout(
+                mo.md(f"**Run snapshot rejected** — `{type(_error).__name__}: {_error}`"),
+                kind="danger",
+            )
+        else:
+            set_classroom_log(_reduction.log)
+            _run_id = _reduction.record_ids[0]
+            _run_snapshot_card = mo.callout(
+                mo.md(
+                    f"**Run snapshot committed** · `{_run_id}`  \n"
+                    f"Operation: `{_condition}` · replayed: `{_reduction.replayed}`"
+                ),
+                kind="success",
+            )
+    _run_snapshot_card
     return
 
 
@@ -1047,13 +1623,37 @@ def _(USE_PRECOMPUTED, knockout_text, logit_csv_written, mo):
         f"**Guided demo complete — now test your own hypotheses.**\n\n"
         f"- Logit-lens result available: **{_ok}** — `{logit_csv_written}`\n"
         f"{_teacher_forcing_status}"
-        "Two interactive sections follow, each with investigation routes in its intro:\n\n"
-        "- **🎛️ Diversity scoreboard** — how do the *audio positions* respond to your "
+        "Two Choice measurements follow:\n\n"
+        "- **Diversity scoreboard** — how do the *audio positions* respond to your "
         "prompt, clip, and knockout choices?\n"
-        "- **🎯 Teacher forcing** — how does caption log-likelihood change when you "
+        "- **Teacher forcing** — how does caption log-likelihood change when you "
         "block a direct edge set—and on **your** clip, which tokens move most?\n\n"
-        "Form the hypothesis first, then press ▶. To redesign the shared reference "
-        "experiment itself, edit `KNOCKOUT_RULES`, `NFRAMES`, or `VIDEO_PATH` above."
+        "Form the hypothesis first, then press ▶. Saved replay keeps personalized "
+        "live controls unavailable rather than showing stale live output as replay."
+    )
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.accordion(
+        {
+            "Advanced — layer bands, attention heads, and processor-path checks": mo.md(r"""
+            These optional controls are not required for any checkpoint. Use them
+            only after one complete paired cycle.
+
+            - Customize layer bands or direct attention-edge rules.
+            - Inspect feature/token interventions separately from media operations.
+            - A **stimulus-signal control** supplies silence or a neutral visual.
+            - **True modality omission** supplies no audio or no video through a
+              distinct processor path; silence or a black frame is never a substitute.
+            - Position-wise trajectories may be aligned only when token-layout
+              fingerprints match. Otherwise compare preregistered aggregates or
+              normalized bins and display the alignment warning.
+            """)
+        },
+        multiple=False,
+        lazy=True,
     )
     return
 
@@ -1061,7 +1661,7 @@ def _(USE_PRECOMPUTED, knockout_text, logit_csv_written, mo):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ### 3.1 Audio-position probe diversity
+    #### Choice measurement · Audio-position probe diversity
 
     Turn the **logit-lens diversity** measurement into a live experiment: pick a clip, the
     number of frames, the prompt, and (optionally) an attention knockout to apply
@@ -1102,7 +1702,15 @@ def _(mo):
 
 
 @app.cell(hide_code=True)
-def _(CLIP_CHOICES, KNOCKOUT_RULES, LOGIT_PROMPT, NFRAMES, attention_model, mo):
+def _(
+    CLIP_CHOICES,
+    KNOCKOUT_RULES,
+    LOGIT_PROMPT,
+    NFRAMES,
+    USE_PRECOMPUTED,
+    attention_model,
+    mo,
+):
     _n_layers = len(attention_model.thinker.model.layers)
     _modalities = ["audio", "video", "query_text", "image", "generated"]
     # Scoreboard-appropriate defaults: the source must be a modality that is
@@ -1179,6 +1787,7 @@ def _(CLIP_CHOICES, KNOCKOUT_RULES, LOGIT_PROMPT, NFRAMES, attention_model, mo):
         compare=mo.ui.checkbox(value=True),
     ).form(
         submit_button_label="▶ Run logit-lens diversity",
+        submit_button_disabled=USE_PRECOMPUTED,
         bordered=True,
         validate=_validate,
     )
@@ -1213,8 +1822,6 @@ def _(
 ):
     from contextlib import nullcontext as _nullcontext
 
-    from qwen_omni_utils import process_mm_info as _process_mm_info
-
     _p = scoreboard_controls.value
     mo.stop(
         _p is None,
@@ -1223,6 +1830,8 @@ def _(
             kind="info",
         ),
     )
+
+    from qwen_omni_utils import process_mm_info as _process_mm_info
 
     _results_dir = LOGIT_CSV_PATH.parent
 
@@ -1506,7 +2115,148 @@ def _(
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ### 3.2 Teacher-forced edge sensitivity
+    ### 3.2 Compare — Three readings of one work
+
+    **Required.** Import one blinded presentation packet and at least two distinct
+    audience-reading JSON files created in the separate audience surface. Creator
+    intention and the model reading stay hidden here until the import validates.
+    After reveal, compare shared and different tags with neutral language:
+    agreement, divergence, or an unrepresented reading—not truth versus error.
+
+    Two readings are the minimum classroom activity, not a research sample-size
+    claim. Consider cultural convention, accessibility barriers, prompt wording,
+    training-data unknowns, and the limits of the available label vocabulary.
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    def _validate_audience_import(_value):
+        if not _value:
+            return "Choose a packet and two reading files."
+        _packet_files = _value["packet"]
+        _reading_files = _value["readings"]
+        if not _packet_files or not _packet_files[0].contents:
+            return "Choose one blinded presentation packet."
+        if not _reading_files or len(_reading_files) < 2:
+            return "Choose at least two distinct audience-reading files."
+        return None
+
+    audience_import_form = mo.md(r"""
+    **Blinded presentation packet** {packet}
+
+    **Audience readings** — choose at least two JSON files {readings}
+    """).batch(
+        packet=mo.ui.file(filetypes=[".json"], multiple=False, kind="area"),
+        readings=mo.ui.file(filetypes=[".json"], multiple=True, kind="area"),
+    ).form(
+        submit_button_label="Validate and reveal three readings",
+        validate=_validate_audience_import,
+        bordered=True,
+    )
+    audience_import_form
+    return (audience_import_form,)
+
+
+@app.cell(hide_code=True)
+def _(
+    AudiencePacket,
+    AudienceReading,
+    audience_import_form,
+    json,
+    mo,
+    set_audience_exchange,
+    validate_audience_exchange,
+):
+    _audience_value = audience_import_form.value
+    if _audience_value is None:
+        _audience_import_card = mo.callout(
+            mo.md("Creator and model readings remain hidden until two blinded readings validate."),
+            kind="info",
+        )
+    else:
+        try:
+            _packet_payload = json.loads(
+                _audience_value["packet"][0].contents.decode("utf-8")
+            )
+            _packet = AudiencePacket.from_mapping(_packet_payload)
+            _readings = tuple(
+                AudienceReading.from_mapping(
+                    json.loads(_file.contents.decode("utf-8")), packet=_packet
+                )
+                for _file in _audience_value["readings"]
+            )
+            _report = validate_audience_exchange(_packet, _readings)
+            if not _report.is_complete:
+                _messages = "; ".join(_issue.message for _issue in _report.issues)
+                raise ValueError(_messages or "audience exchange is incomplete")
+        except Exception as _error:  # noqa: BLE001 — unsafe imports belong in the UI
+            _audience_import_card = mo.callout(
+                mo.md(f"**Audience import rejected** — `{type(_error).__name__}: {_error}`"),
+                kind="danger",
+            )
+        else:
+            _revealed_packet = _packet.reveal(
+                protocol_deviation="creator/model readings revealed after valid classroom import"
+            )
+            set_audience_exchange((_revealed_packet, _readings))
+            _audience_import_card = mo.callout(
+                mo.md(
+                    f"**Audience import complete** · {len(_readings)} distinct blinded readings  \n"
+                    "Creator and model readings are now available for comparison."
+                ),
+                kind="success",
+            )
+    _audience_import_card
+    return
+
+
+@app.cell(hide_code=True)
+def _(get_artifact_versions, get_audience_exchange, knockout_text, mo):
+    _packet, _readings = get_audience_exchange()
+    if _packet is None or len(_readings) < 2:
+        _triadic_view = mo.callout(
+            mo.md("Three-reading comparison is locked until the blinded import is complete."),
+            kind="neutral",
+        )
+    else:
+        _artifacts = get_artifact_versions()
+        _v1 = next(
+            (_artifact for _artifact in _artifacts if _artifact.version_label == "V1"),
+            None,
+        )
+        _creator_reading = (
+            _v1.creator_intention if _v1 is not None else "Practice creator statement not registered"
+        )
+        _rows = [
+            {"reading": "Creator", "interpretation": _creator_reading},
+            *[
+                {
+                    "reading": f"Audience {index + 1}",
+                    "interpretation": _reading.open_interpretation,
+                }
+                for index, _reading in enumerate(_readings)
+            ],
+            {"reading": "Model", "interpretation": knockout_text},
+        ]
+        _triadic_view = mo.vstack(
+            [
+                mo.md(
+                    "**Revealed comparison.** Describe agreement, divergence, and "
+                    "unrepresented readings without treating any reader as automatic ground truth."
+                ),
+                mo.ui.table(_rows, selection=None),
+            ]
+        )
+    _triadic_view
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    #### Choice measurement · Teacher-forced edge sensitivity
 
     The diversity scoreboard above runs one forward pass over the **prompt**, so —
     exactly like `generated` — an **`answer`** source is inert there (there are no
@@ -1561,6 +2311,7 @@ def _(
     CLIP_CHOICES,
     KNOCKOUT_RULES,
     NFRAMES,
+    USE_PRECOMPUTED,
     attention_model,
     mo,
 ):
@@ -1620,6 +2371,7 @@ def _(
         ),
     ).form(
         submit_button_label="▶ Run teacher-forced Δ log-lik",
+        submit_button_disabled=USE_PRECOMPUTED,
         bordered=True,
         validate=_validate,
     )
@@ -1644,11 +2396,6 @@ def _(
     resolve_clip_selection,
     teacher_forcing_controls,
 ):
-    from qwen_omni_utils import process_mm_info as _tf_mm_info
-
-    from src.teacher_forcing import render_delta_strip as _render_strip
-    from src.teacher_forcing import teacher_forced_delta as _tfd
-
     _tp = teacher_forcing_controls.value
     mo.stop(
         _tp is None,
@@ -1657,6 +2404,11 @@ def _(
             kind="info",
         ),
     )
+
+    from qwen_omni_utils import process_mm_info as _tf_mm_info
+
+    from src.teacher_forcing import render_delta_strip as _render_strip
+    from src.teacher_forcing import teacher_forced_delta as _tfd
 
     # Resolve the explicit choice with the same safe content-addressed helper
     # used by 🎛️, so the two playgrounds also share cache identities.
@@ -1751,7 +2503,7 @@ def _(
             mo.stat(
                 value=f"{_tf_total:+.2f}",
                 label="Σ Δ log-lik (nats)",
-                caption="knockout − baseline · negative = believed less",
+                caption="knockout − baseline · negative = lower log probability",
                 direction="decrease" if _tf_total < 0 else "increase",
                 bordered=True,
             ),
@@ -1799,33 +2551,507 @@ def _(
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
+    ### 3.3 Revise — Explanation and second cut (V2)
+
+    **Required.** Choose the evidence trigger that changed—or strengthened—your
+    account. Commit the observed result, limitation, rival explanation, revised
+    explanation, and next control to the selected run. Then register a linked V2
+    and name the creative decisions made between V1 and V2. Neither action mutates
+    the first-cut record or the initial explanation.
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    def _validate_revision(_value):
+        if not _value:
+            return "Complete the revision record."
+        _required = (
+            "reflection_key",
+            "observed_evidence",
+            "verdict",
+            "evidence_trigger",
+            "limitation",
+            "rival_explanation",
+            "revised_explanation",
+            "next_control",
+            "creative_decisions",
+            "v2_rationale",
+        )
+        if any(not str(_value[_field]).strip() for _field in _required):
+            return "Every revision field needs a short response."
+        if _value["v2_source"] == "Upload":
+            _files = _value["video"]
+            if not _files or not _files[0].contents:
+                return "Choose a V2 upload or use the saved course clip for practice."
+        return None
+
+    revision_form = mo.md(r"""
+    **Stable reflection key** {reflection_key}
+
+    **Observed evidence** {observed_evidence}
+
+    **Verdict** — supported, refuted, or not tested {verdict}
+
+    **Evidence trigger** {evidence_trigger}
+
+    **Limitation** {limitation}
+
+    **Rival explanation** {rival_explanation}
+
+    **Revised explanation** {revised_explanation}
+
+    **Next control** {next_control}
+
+    **V1 → V2 creative decisions** {creative_decisions}
+
+    **V2 source** {v2_source}
+
+    **Optional V2 upload** {video}
+
+    **V2 change rationale** {v2_rationale}
+    """).batch(
+        reflection_key=mo.ui.text(value="paired-run-1-reflection", full_width=True),
+        observed_evidence=mo.ui.text_area(rows=2, full_width=True),
+        verdict=mo.ui.dropdown(["supported", "refuted", "not tested"], value="not tested"),
+        evidence_trigger=mo.ui.text_area(rows=2, full_width=True),
+        limitation=mo.ui.text_area(rows=2, full_width=True),
+        rival_explanation=mo.ui.text_area(rows=2, full_width=True),
+        revised_explanation=mo.ui.text_area(rows=2, full_width=True),
+        next_control=mo.ui.text_area(rows=2, full_width=True),
+        creative_decisions=mo.ui.text_area(rows=2, full_width=True),
+        v2_source=mo.ui.dropdown(["Saved course clip", "Upload"], value="Saved course clip"),
+        video=mo.ui.file(
+            filetypes=[".mp4", ".mov", ".mkv", ".webm", ".avi"],
+            multiple=False,
+            kind="area",
+            max_size=250_000_000,
+        ),
+        v2_rationale=mo.ui.text_area(rows=2, full_width=True),
+    ).form(
+        submit_button_label="Commit reflection and linked V2",
+        validate=_validate_revision,
+        bordered=True,
+    )
+    revision_form
+    return (revision_form,)
+
+
+@app.cell(hide_code=True)
+def _(
+    EditDecisionManifest,
+    PRIVATE_UPLOAD_DIR,
+    SILENT_VIDEO_PATH,
+    VIDEO_PATH,
+    get_artifact_versions,
+    get_classroom_log,
+    mo,
+    reduce_command,
+    register_artifact_version,
+    revision_form,
+    set_artifact_versions,
+    set_classroom_log,
+    sha256,
+):
+    from datetime import datetime as _datetime
+    from datetime import timezone as _timezone
+
+    _revision = revision_form.value
+    _artifacts = get_artifact_versions()
+    _v1 = next(
+        (_artifact for _artifact in _artifacts if _artifact.version_label == "V1"),
+        None,
+    )
+    _v2 = next(
+        (_artifact for _artifact in _artifacts if _artifact.version_label == "V2"),
+        None,
+    )
+    _log = get_classroom_log()
+    _runs = _log.records_of_type("run")
+    if _v2 is not None:
+        _revision_card = mo.callout(
+            mo.md(
+                f"**V2 committed** · `{_v2.artifact_id}`  \n"
+                f"Parent V1 remains `{_v2.parent_artifact_id}`."
+            ),
+            kind="success",
+        )
+    elif _revision is None:
+        _revision_card = mo.callout(
+            mo.md("Complete the revision form after one committed run."), kind="info"
+        )
+    elif _v1 is None or not _runs:
+        _revision_card = mo.callout(
+            mo.md("Register V1 and commit one run snapshot before creating V2."),
+            kind="danger",
+        )
+    else:
+        _run_id = _runs[-1].record_id
+        _key_digest = sha256(_revision["reflection_key"].strip().encode("utf-8")).hexdigest()
+        _result_command = {
+            "kind": "attach_result",
+            "command_nonce": f"result:{_key_digest}",
+            "run_id": _run_id,
+            "result_digest": sha256(
+                _revision["observed_evidence"].strip().encode("utf-8")
+            ).hexdigest(),
+            "metrics": {
+                "student_observation": _revision["observed_evidence"].strip(),
+                "verdict": _revision["verdict"],
+            },
+            "metric_versions": {
+                "student_evidence_summary": "classroom-reflection/1.0.0"
+            },
+            "status": "completed",
+        }
+        _reflection_command = {
+            "kind": "commit_reflection",
+            "command_nonce": f"reflection:{_key_digest}",
+            "run_id": _run_id,
+            "reflection": {
+                "evidence_trigger": _revision["evidence_trigger"].strip(),
+                "limitation": _revision["limitation"].strip(),
+                "rival_explanation": _revision["rival_explanation"].strip(),
+                "revised_explanation": _revision["revised_explanation"].strip(),
+                "next_control": _revision["next_control"].strip(),
+                "creative_decisions": _revision["creative_decisions"].strip(),
+            },
+            "tags": ["V1-to-V2", _revision["verdict"]],
+        }
+        try:
+            _with_result = reduce_command(_log, _result_command)
+            _with_reflection = reduce_command(
+                _with_result.log, _reflection_command
+            )
+            _source_path = VIDEO_PATH
+            if _revision["v2_source"] == "Upload":
+                from src.playground_clips import resolve_clip_selection as _resolve_v2_clip
+
+                _upload = _revision["video"][0]
+                _resolved = _resolve_v2_clip(
+                    "Upload",
+                    default_path=VIDEO_PATH,
+                    silent_path=SILENT_VIDEO_PATH,
+                    upload_dir=PRIVATE_UPLOAD_DIR,
+                    upload_name=_upload.name,
+                    upload_contents=_upload.contents,
+                )
+                _source_path = _resolved.path
+            _edit_manifest = EditDecisionManifest(
+                editor_name_version=_v1.editor_name_version,
+                source_assets=_v1.source_assets,
+                ordering=tuple(_v1.edit_decisions.get("ordering", ())),
+                trims=tuple(_v1.edit_decisions.get("trims", ())),
+                mix_levels=tuple(_v1.edit_decisions.get("mix_levels", ())),
+                accessibility_work=_v1.accessibility,
+                assistance_disclosure=_v1.assistance_disclosure,
+                export_preset_version=_v1.export_preset_version,
+            )
+            _new_v2 = register_artifact_version(
+                _source_path,
+                edit_manifest=_edit_manifest,
+                version_label="V2",
+                parent_artifact_id=_v1.artifact_id,
+                local_registered_at_utc=_datetime.now(_timezone.utc).isoformat(),
+                event_index=len(_artifacts),
+                elapsed_ms=0,
+                creator_intention=_v1.creator_intention,
+                intended_audience=_v1.intended_audience,
+                sound_image_relation=_v1.sound_image_relation,
+                concept_tags=_v1.concept_tags,
+                cultural_aesthetic_context=_v1.cultural_aesthetic_context,
+                source_license_provenance=_v1.source_license_provenance,
+                change_rationale=(
+                    _revision["v2_rationale"].strip()
+                    + " | creative decisions: "
+                    + _revision["creative_decisions"].strip()
+                ),
+                processing_boundary=_v1.processing_boundary,
+            )
+        except Exception as _error:  # noqa: BLE001 — revision errors belong in the UI
+            _revision_card = mo.callout(
+                mo.md(f"**Revision needs attention** — `{type(_error).__name__}: {_error}`"),
+                kind="danger",
+            )
+        else:
+            set_classroom_log(_with_reflection.log)
+            set_artifact_versions(_artifacts + (_new_v2,))
+            _revision_card = mo.callout(
+                mo.md(
+                    f"**Reflection and V2 committed** · `{_new_v2.artifact_id}`  \n"
+                    f"V1 preserved: `{_new_v2.parent_artifact_id}` · run: `{_run_id}`"
+                ),
+                kind="success",
+            )
+    _revision_card
+    return
+
+
+@app.cell(hide_code=True)
+def _(get_artifact_versions, get_audience_exchange, get_classroom_log, mo):
+    _versions = {artifact.version_label for artifact in get_artifact_versions()}
+    _packet, _readings = get_audience_exchange()
+    _has_reflection = bool(get_classroom_log().records_of_type("reflection"))
+    _complete = {"V1", "V2"}.issubset(_versions) and len(_readings) >= 2 and _has_reflection
+    _status = "Complete" if _complete else "Waiting for comparison, reflection, and V2"
+    mo.callout(
+        mo.md(
+            f"**Checkpoint · Exploratory playground — {_status}**  \n"
+            "Next: export the private portfolio and make one bounded architecture proposal."
+        ),
+        kind="success" if _complete else "info",
+    )
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
     ## 4. Synthesis and architecture challenge
 
-    ### 4.1 Audit the evidence
+    ### 4.1 Synthesize — Portfolio and architecture challenge
 
-    Use one playground run from each measurement to answer:
+    **Required.** Use one committed run and reflection to make a bounded proposal.
+    Distinguish the evidence you observed from your interpretation, then name the
+    measurement limits, a viable alternative, and the next test.
 
-    1. What changed in **probe-token diversity** and in **mean Δ/token**? What did
-       not change?
-    2. State the narrowest mechanism claim supported by both results. Then name a
-       stronger claim—such as “the model ignored audio” or “this is the fusion
-       layer”—that the interventions do **not** establish.
-    3. Give one rival explanation (mask renormalization, an indirect route, prompt
-       sensitivity, or probe miscalibration) and one control that distinguishes it.
-       Explain what both a positive and a negative control result would teach you.
+    Your proposal may change modality routing or fusion—for example, a learned gate,
+    bottleneck token set, late fusion, or sparse cross-modal router. Predict one
+    distinctive signature and one result that would make you reject the proposal.
 
-    ### 4.2 Design a different multimodal architecture
-
-    Propose one change to modality routing or fusion: for example, a learned gate,
-    a bottleneck token set, late fusion, or a sparse cross-modal router. Sketch the
-    information path, then predict its distinctive signature in **both** playgrounds
-    across early/middle/late layer bands and the silent control. End with the result
-    that would make you reject your design hypothesis and one performance or
-    interpretability trade-off your design introduces.
-
-    **Exit ticket:** write one sentence that clearly separates your observation,
-    your interpretation, and the evidence still needed.
+    **Measurement boundary.** Raw-probe entropy and probability margin are
+    uncalibrated descriptive summaries. Teacher-forced entropy/margin condition on a
+    fixed answer. Position-wise trajectories are comparable only when token-layout
+    fingerprints match; otherwise use declared aggregate or normalized-bin
+    comparisons. None of these measures alone establishes calibrated confidence,
+    free-generation uncertainty, or causal localization.
     """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    def _validate_synthesis(_value):
+        if not _value:
+            return "Complete the synthesis card."
+        if any(not str(_value[_field]).strip() for _field in _value):
+            return "Every synthesis field needs a short response."
+        return None
+
+    synthesis_form = mo.md(r"""
+    **Observed evidence** {evidence}
+
+    **Bounded interpretation** {interpretation}
+
+    **Architecture proposal and information path** {proposal}
+
+    **Predicted signature** {signature}
+
+    **Distribution/alignment limitation** {measurement_limit}
+
+    **Alternative or rival account** {alternative}
+
+    **Next test and rejection condition** {next_test}
+
+    **Performance or interpretability trade-off** {tradeoff}
+
+    **Exit ticket** — one sentence separating observation, interpretation, and needed evidence {exit_ticket}
+    """).batch(
+        evidence=mo.ui.text_area(rows=2, full_width=True),
+        interpretation=mo.ui.text_area(rows=2, full_width=True),
+        proposal=mo.ui.text_area(rows=3, full_width=True),
+        signature=mo.ui.text_area(rows=2, full_width=True),
+        measurement_limit=mo.ui.text_area(rows=2, full_width=True),
+        alternative=mo.ui.text_area(rows=2, full_width=True),
+        next_test=mo.ui.text_area(rows=2, full_width=True),
+        tradeoff=mo.ui.text_area(rows=2, full_width=True),
+        exit_ticket=mo.ui.text_area(rows=2, full_width=True),
+    ).form(
+        submit_button_label="Commit synthesis card",
+        validate=_validate_synthesis,
+        bordered=True,
+    )
+    synthesis_form
+    return (synthesis_form,)
+
+
+@app.cell(hide_code=True)
+def _(
+    build_private_portfolio,
+    get_artifact_versions,
+    get_classroom_log,
+    mo,
+    serialize_private_portfolio,
+    validate_process_log,
+):
+    _log = get_classroom_log()
+    _artifacts = tuple(
+        _artifact.to_dict() for _artifact in get_artifact_versions()
+    )
+    _portfolio = build_private_portfolio(
+        _log,
+        artifact_versions=_artifacts,
+        boundary_disclosure=(
+            "Session state is processed inside the hosted Molab session/container "
+            "boundary, not solely on the student's device. This private download "
+            "is user-initiated and is not research data."
+        ),
+    )
+    _issues = validate_process_log(_log)
+    _portfolio_bytes = serialize_private_portfolio(_portfolio)
+    mo.vstack(
+        [
+            mo.hstack(
+                [
+                    mo.stat(value=str(len(_artifacts)), label="Artifact versions", bordered=True),
+                    mo.stat(value=str(len(_log.records)), label="Process records", bordered=True),
+                    mo.stat(
+                        value="Valid" if not _issues else "Needs attention",
+                        label="Record links",
+                        bordered=True,
+                    ),
+                ],
+                widths="equal",
+                gap=1,
+            ),
+            mo.download(
+                data=_portfolio_bytes,
+                filename="counterpoint-lens-private-portfolio.json",
+                label="Download private learning portfolio",
+            ),
+            mo.callout(
+                mo.md(
+                    "This button downloads to your device. It does not create a "
+                    "research submission or send the portfolio to an instructor."
+                ),
+                kind="neutral",
+            ),
+        ]
+    )
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    portfolio_import_form = mo.ui.file(
+        filetypes=[".json"], multiple=False, kind="area"
+    ).form(
+        label="Restore a private portfolio after a kernel restart",
+        submit_button_label="Validate and restore private portfolio",
+        bordered=True,
+    )
+    reset_session_button = mo.ui.run_button(
+        label="Delete session state and temporary uploads",
+        kind="danger",
+    )
+    mo.accordion(
+        {
+            "Choice — restore or reset this teaching session": mo.vstack(
+                [portfolio_import_form, reset_session_button]
+            )
+        },
+        multiple=False,
+    )
+    return portfolio_import_form, reset_session_button
+
+
+@app.cell(hide_code=True)
+def _(
+    ArtifactVersion,
+    COURSE_RELEASE_ID,
+    PRIVATE_UPLOAD_DIR,
+    classroom_mode,
+    json,
+    load_jsonl,
+    mo,
+    new_session,
+    portfolio_import_form,
+    reset_session_button,
+    set_artifact_versions,
+    set_audience_exchange,
+    set_classroom_log,
+    uuid4,
+):
+    _restore_card = None
+    if portfolio_import_form.value:
+        try:
+            _upload = portfolio_import_form.value[0]
+            _payload = json.loads(_upload.contents.decode("utf-8"))
+            _record_lines = [
+                json.dumps(
+                    _record,
+                    ensure_ascii=False,
+                    allow_nan=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+                for _record in _payload.get("records", [])
+            ]
+            _restored_log = load_jsonl(("\n".join(_record_lines) + "\n").encode("utf-8"))
+            _restored_artifacts = tuple(
+                ArtifactVersion.from_dict(_artifact)
+                for _artifact in _payload.get("artifacts", [])
+            )
+        except Exception as _error:  # noqa: BLE001 — unsafe restore belongs in the UI
+            _restore_card = mo.callout(
+                mo.md(f"**Portfolio restore rejected** — `{type(_error).__name__}: {_error}`"),
+                kind="danger",
+            )
+        else:
+            set_classroom_log(_restored_log)
+            set_artifact_versions(_restored_artifacts)
+            set_audience_exchange((None, tuple()))
+            _restore_card = mo.callout(
+                mo.md(
+                    f"**Portfolio restored** · {len(_restored_log.records)} records · "
+                    f"{len(_restored_artifacts)} artifact versions"
+                ),
+                kind="success",
+            )
+    if reset_session_button.value:
+        _fresh_log = new_session(
+            f"studio-{uuid4().hex[:12]}",
+            decision=classroom_mode,
+            course_release_id=COURSE_RELEASE_ID,
+        )
+        set_classroom_log(_fresh_log)
+        set_artifact_versions(tuple())
+        set_audience_exchange((None, tuple()))
+        for _path in PRIVATE_UPLOAD_DIR.glob("*"):
+            if _path.is_file() or _path.is_symlink():
+                _path.unlink()
+        _restore_card = mo.callout(
+            mo.md("**Session reset complete.** In-memory records and temporary uploads were deleted."),
+            kind="success",
+        )
+    _restore_card
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo, synthesis_form):
+    _complete = synthesis_form.value is not None
+    _status = "Complete" if _complete else "Waiting for synthesis"
+    mo.vstack(
+        [
+            mo.callout(
+                mo.md(
+                    f"**Checkpoint · Synthesis and architecture challenge — {_status}**  \n"
+                    "Stop after your private portfolio and exit ticket are saved."
+                ),
+                kind="success" if _complete else "info",
+            ),
+            mo.callout(
+                mo.md(
+                    "Teaching mode keeps this session local by default. Save the "
+                    "private portfolio you want to keep, then reset the session "
+                    "and delete temporary uploads before leaving a shared device."
+                ),
+                kind="info",
+            ),
+        ]
+    )
     return
 
 
