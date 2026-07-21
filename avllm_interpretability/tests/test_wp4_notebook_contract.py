@@ -79,6 +79,11 @@ def test_exact_four_section_eight_stage_route() -> None:
 def test_progressive_disclosure_and_student_text_boundary() -> None:
     source = _source()
     student_text = _student_markdown_literals(source)
+    numbered_internal_identifier = re.compile(
+        r"\b(?:PRD|FR|AC|WP)[-_\s]?\d+(?:\.\d+)*\b",
+        flags=re.IGNORECASE,
+    )
+    assert not numbered_internal_identifier.search(source)
     assert student_text.count("**Required") >= 8
     assert "**Choice" in student_text
     assert "Advanced —" in source
