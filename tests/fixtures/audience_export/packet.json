@@ -1,0 +1,26 @@
+{
+  "packet_schema_version": "audience-packet/1.0.0",
+  "exchange_artifact_id": "exchange-00000000-0000-4000-8000-000000000001",
+  "presentation_asset": {
+    "asset_reference": "course-asset-opaque-001",
+    "media_type": "video/mp4",
+    "duration_ms": 1200,
+    "caption_reference": "caption-opaque-001",
+    "language": "en"
+  },
+  "presentation_checksum": "3a7291ca81552e780b3e295c8675748a586a25316a787c1bbd5810d32efd7a94",
+  "permitted_accessibility_overlays": [
+    "caption-opaque-001"
+  ],
+  "excluded_field_attestation": [
+    "condition_assignment",
+    "content_sha256",
+    "creator_intention",
+    "model_output",
+    "private_artifact_id",
+    "unapproved_raw_media"
+  ],
+  "reveal_state": "blinded",
+  "protocol_deviation": null,
+  "sharing_permission_scope": "classroom_or_audience_sharing"
+}

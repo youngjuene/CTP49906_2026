@@ -1,14 +1,13 @@
 """Teacher-forced attention knockout (F1).
 
 The playground runs a single forward pass, so `generated` tokens never exist and
-the most intuitive student rule -- `generated -> audio` ("if the answer can't
-hear, does it still describe the sound?") -- is inert there. Teacher forcing
-fixes that: generate the caption `C` once, feed it back in as input tagged
-`answer`, and score how much less the model believes what it said when a pathway
-is knocked out.
+the tempting student rule `generated -> audio` is inert there. Teacher forcing
+makes answer queries observable: generate caption `C` once, feed it back in as
+input tagged `answer`, and measure how its assigned log-probability changes when
+selected direct attention edges are blocked.
 
 The metric is per-token delta log-likelihood, `delta = knockout - baseline`
-(negative = the model believed its own caption *less* after the knockout). Unlike
+(negative = the model assigns its own caption less probability after knockout). Unlike
 a free-generation string diff it is continuous (you can see a *small* effect) and
 deterministic (greedy caption, forward-only scoring).
 
@@ -19,10 +18,17 @@ needs the model.
 """
 
 from contextlib import nullcontext
+from typing import Any
 
 import torch
 
 from .attention_knockout_experiment import block_attention
+from .probe_metrics import (
+    MEASUREMENT_CAVEATS,
+    MeasurementKind,
+    metric_version,
+    summarize_logits,
+)
 
 
 def build_answer_token_types(prompt_token_types, n_answer):
@@ -60,6 +66,57 @@ def caption_logprobs(logits, input_ids, prompt_len):
     return logp.gather(1, targets.unsqueeze(1)).squeeze(1)
 
 
+def answer_distribution_summaries(
+    logits,
+    input_ids,
+    prompt_len,
+    *,
+    top_k=5,
+    target_token_set_version=None,
+):
+    """Compact final answer-token distributions for teacher-forced positions."""
+
+    if logits.dim() == 3:
+        logits = logits[0]
+    if input_ids.dim() == 2:
+        input_ids = input_ids[0]
+    sequence_length = int(input_ids.shape[0])
+    if not 1 <= prompt_len <= sequence_length:
+        raise ValueError(
+            f"prompt_len {prompt_len} out of range for seq {sequence_length}"
+        )
+    kind = MeasurementKind.TEACHER_FORCED_ANSWER_DISTRIBUTION_DISPERSION
+    version = metric_version(
+        kind,
+        target_token_set_version=target_token_set_version,
+    )
+    positions = []
+    for answer_position in range(prompt_len, sequence_length):
+        target_token_id = int(input_ids[answer_position])
+        distribution = summarize_logits(
+            logits[answer_position - 1],
+            top_k=top_k,
+            target_token_ids=[target_token_id],
+            measurement_kind=kind,
+            version=version,
+        )
+        positions.append(
+            {
+                "answer_position": answer_position,
+                "target_token_id": target_token_id,
+                "target_log_probability": distribution.targets[0].log_probability,
+                "distribution": distribution.to_dict(),
+            }
+        )
+    return {
+        "schema_version": "teacher-forced-distribution/1.0.0",
+        "measurement_kind": kind.value,
+        "caveat": MEASUREMENT_CAVEATS[kind],
+        "metric_version": version,
+        "positions": positions,
+    }
+
+
 def delta_logprobs(knockout_logprobs, baseline_logprobs):
     """`delta = knockout - baseline` per token (negative = believed less)."""
     return knockout_logprobs - baseline_logprobs
@@ -75,7 +132,7 @@ def group_tokens_into_words(caption_tokens, delta):
     the **sum** of the pieces' deltas (log-probs add: the word's log-likelihood
     change).
     """
-    words = []
+    words: list[list[Any]] = []
     for tok, val in zip(caption_tokens, [float(x) for x in delta]):
         text = tok or ""
         starts_word = (not words) or text[:1].isspace()
@@ -145,6 +202,8 @@ def teacher_forced_delta(
     rules,
     max_new_tokens=32,
     cached_caption_ids=None,
+    distribution_top_k=5,
+    target_token_set_version=None,
 ):
     """Score a caption under `rules` vs baseline in two forward passes.
 
@@ -163,7 +222,8 @@ def teacher_forced_delta(
             an unchanged (clip, prompt, nframes) submit skips regeneration.
 
     Returns a dict with per-token `delta` (= knockout - baseline), `delta_total`,
-    the caption token strings, and both log-prob vectors.
+    length-normalized `delta_mean`, the caption token strings, and both log-prob
+    vectors.
     """
     device = inputs["input_ids"].device
     prompt_len = inputs["input_ids"].shape[1]
@@ -210,8 +270,30 @@ def teacher_forced_delta(
         with ctx, torch.no_grad():
             return model.thinker(**ext).logits
 
-    base_logp = caption_logprobs(_logits([]), ext["input_ids"], prompt_len)
-    ko_logp = caption_logprobs(_logits(rules), ext["input_ids"], prompt_len) if rules else base_logp
+    base_logits = _logits([])
+    base_logp = caption_logprobs(base_logits, ext["input_ids"], prompt_len)
+    baseline_distribution = answer_distribution_summaries(
+        base_logits,
+        ext["input_ids"],
+        prompt_len,
+        top_k=distribution_top_k,
+        target_token_set_version=target_token_set_version,
+    )
+    if rules:
+        knockout_logits = _logits(rules)
+        ko_logp = caption_logprobs(knockout_logits, ext["input_ids"], prompt_len)
+        knockout_distribution = answer_distribution_summaries(
+            knockout_logits,
+            ext["input_ids"],
+            prompt_len,
+            top_k=distribution_top_k,
+            target_token_set_version=target_token_set_version,
+        )
+        del knockout_logits
+    else:
+        ko_logp = base_logp
+        knockout_distribution = baseline_distribution
+    del base_logits
 
     caption_tokens = [processor.tokenizer.decode([t]) for t in caption_ids[0].tolist()]
     delta = delta_logprobs(ko_logp, base_logp)
@@ -220,6 +302,9 @@ def teacher_forced_delta(
         "caption_tokens": caption_tokens,
         "baseline_logprobs": base_logp,
         "knockout_logprobs": ko_logp,
+        "baseline_distribution": baseline_distribution,
+        "knockout_distribution": knockout_distribution,
         "delta": delta,
         "delta_total": float(delta.sum()),
+        "delta_mean": float(delta.mean()),
     }

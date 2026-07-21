@@ -1,0 +1,326 @@
+{
+  "boundaries": {
+    "audience_gpu_or_model_imports": false,
+    "curriculum_common_treatment_imports": false,
+    "generated_artifacts_in_patch": false,
+    "licensed_course_stimulus_manifest_added": false,
+    "omx_or_ultragoal_in_patch": false,
+    "protected_notebook_changed": false,
+    "protected_notebook_sha256": "4302b5933fed8d7e54b39c2e8e2989d7e4a786630391c636a082bbd8a873c064",
+    "wp4_started": false
+  },
+  "changed_file_ownership": {
+    "lane_1_media_identity_variants_edit_manifests": [
+      "curriculum_common/__init__.py",
+      "curriculum_common/production_manifest.py",
+      "avllm_interpretability/src/playground_clips.py",
+      "avllm_interpretability/src/stimulus_variants.py",
+      "avllm_interpretability/tests/test_playground_clips.py",
+      "avllm_interpretability/tests/test_stimulus_variants.py",
+      "avllm_interpretability/tests/test_production_manifest.py"
+    ],
+    "lane_2_metrics_trajectories_cache_omission": [
+      "avllm_interpretability/scripts/generate_precompute.py",
+      "avllm_interpretability/src/logitlens_experiment.py",
+      "avllm_interpretability/src/modality_omission.py",
+      "avllm_interpretability/src/precompute.py",
+      "avllm_interpretability/src/probe_metrics.py",
+      "avllm_interpretability/src/teacher_forcing.py",
+      "avllm_interpretability/tests/test_logitlens_output.py",
+      "avllm_interpretability/tests/test_metrics_contract_integration.py",
+      "avllm_interpretability/tests/test_modality_omission.py",
+      "avllm_interpretability/tests/test_precompute.py",
+      "avllm_interpretability/tests/test_probe_metrics.py",
+      "avllm_interpretability/tests/test_teacher_forcing.py"
+    ],
+    "lane_3_process_exactly_once_projections": [
+      "curriculum_common/session_records.py",
+      "curriculum_common/portfolio_export.py",
+      "tests/test_session_records.py",
+      "tests/test_portfolio_export.py"
+    ],
+    "lane_4_audience_export_fixtures_regressions": [
+      "audience/CTP49906_audience_response_molab.py",
+      "curriculum_common/audience_packets.py",
+      "curriculum_common/export_validation.py",
+      "tests/fixtures/audience_export/packet.json",
+      "tests/fixtures/audience_export/reading-1.json",
+      "tests/fixtures/audience_export/reading-2.json",
+      "tests/fixtures/audience_export/response-form.json",
+      "tests/test_audience_exchange.py",
+      "tests/test_export_validation.py"
+    ]
+  },
+  "evidence_kind": "wp1-wp3-team-integration-checkpoint",
+  "file_sha256": {
+    "audience/CTP49906_audience_response_molab.py": "79447881938063dd72c42537fd5a081abefbcdc4c447f0295e9a70a5dcce58e4",
+    "avllm_interpretability/scripts/generate_precompute.py": "5bcfcfa008aaf62b321a0d29d3cf8a320514e71456afcdc85d883e6cdce92684",
+    "avllm_interpretability/src/logitlens_experiment.py": "51c8a25cc1a2e64912a2ab8f5930566b0f88a4820fa413a6e20f731846f41777",
+    "avllm_interpretability/src/modality_omission.py": "3be7ed70aedefb3f3291a2c422c88d279c011f0cd0c2c212f09019818b3ca0a5",
+    "avllm_interpretability/src/playground_clips.py": "06c833f8649d2efc5ecb83f61829abb020e87ce348ff794f90b465266b0bef07",
+    "avllm_interpretability/src/precompute.py": "b97b1108e047d2d049dcf4d3b9f72f36c626cc49a248b8e75f848c18ad12e8e9",
+    "avllm_interpretability/src/probe_metrics.py": "1dad6922cd8679933120a7cb5fcd668302fb80648bc89a9084f4208e23d802f5",
+    "avllm_interpretability/src/stimulus_variants.py": "c6c96f0f6b2064acabba917575078a4fc24df3a16407678a9870c4924a296110",
+    "avllm_interpretability/src/teacher_forcing.py": "72bb397f7ef50775d3074304b634088c4f3d2683637a061aa458ee6735a526b9",
+    "avllm_interpretability/tests/test_logitlens_output.py": "3ec5fbb36629123957c64af45d0a841578ffc563d83bdb431c62d87a9681c062",
+    "avllm_interpretability/tests/test_metrics_contract_integration.py": "03192ca60716e88e1a293fa0e26bfe9cd50ec3f4dfcfec103d2ae7e1876bec93",
+    "avllm_interpretability/tests/test_modality_omission.py": "c60ea4c2847ebc8ea16ed0ba47c761a52b04597e19a3f815dd523e0f12724a37",
+    "avllm_interpretability/tests/test_playground_clips.py": "e78ea80bd5f595313b702c394136626665d1a26a61842fbdc0048e778b9dbefa",
+    "avllm_interpretability/tests/test_precompute.py": "0b8476028561650c70186e2222b06f4452a1fcc411bba9118c1bb81445726cdb",
+    "avllm_interpretability/tests/test_probe_metrics.py": "e449164988974f0c71feadb99a5bbafbaf67118e737c365c24b228c40ab4f4fc",
+    "avllm_interpretability/tests/test_production_manifest.py": "ea543fc9c7f9e47403c547406b8687ef245b7a7d3d1f6b74b7f10c5253e2061c",
+    "avllm_interpretability/tests/test_stimulus_variants.py": "a652b43e6f12fe35fd3a9f04480d02d620bbe0bc7ee1ded924e59be45f9b9ec0",
+    "avllm_interpretability/tests/test_teacher_forcing.py": "11d4352635c5bea599ec9ac6dbf6558cccd4a42ec3b20f3eb2a6d9a53d7d391b",
+    "curriculum_common/__init__.py": "7a1b64e959c44dff9ac91144e7ab9d320210653c30103e30df9c7db276c50bc6",
+    "curriculum_common/audience_packets.py": "ac1d90020c900c4ac5d5776a70d01a0241c1e76daffb41c7d2f42ba8773aa85f",
+    "curriculum_common/export_validation.py": "66df432db6fbd6a02451774179d6179a19d1ae30fce12f86693140be11752de9",
+    "curriculum_common/portfolio_export.py": "b1dc12bb3df3e0f1cccc4bc108cfd487cb7d725b5fa6b62ea4619624fc5c291f",
+    "curriculum_common/production_manifest.py": "60feed9f28c4e4b48fad4e3aca377242fa5e196e2a8612839cb749b2eb7819ba",
+    "curriculum_common/session_records.py": "a591c21e381f125c8671e67d062f16f4aca40ca2b4ee5c9dce6fc3bd9b3ad798",
+    "tests/fixtures/audience_export/packet.json": "2fe0e295e386edb9522a6c0d59505a4336d278a399fdfa6a550e1155ae01a9fa",
+    "tests/fixtures/audience_export/reading-1.json": "d050ade7b9f22a7325ede7b5b285c34faebfe8436e2969bbe7744e180e6b5b8d",
+    "tests/fixtures/audience_export/reading-2.json": "692cc55d2c2b29925d45ca7ea0ce1fde5262abe8e586265ef2f2c8d0010b784b",
+    "tests/fixtures/audience_export/response-form.json": "b16a8d574ff44f3e7aac89c981059b092fc3122c532a8fe52e137e60b082a98e",
+    "tests/test_audience_exchange.py": "0663e3ebf08898b4ac114cf3669ce6d90cb6ff198c97ed552cb822850f396420",
+    "tests/test_export_validation.py": "f797590ad351791ffdc64b7d3b5856ffe1a86f59fcf5a79d61e739cf2c41d93d",
+    "tests/test_portfolio_export.py": "40a1f1d67ed8e696e76cbff88a43bf76f8bbda5fd249d57532878da8f131a10c",
+    "tests/test_session_records.py": "a2617cf229b147aa49a1e002d267d5334c8470ce955761191839ff925ba30399"
+  },
+  "generated_at": "2026-07-21T09:14:13.792030Z",
+  "integration": {
+    "isolated_integration_head": "b0165413aa34459945e81d9454218fcda8a4813b",
+    "original_tree_matches_integration": true,
+    "patch_file_persisted": false,
+    "patch_materialized_in_worktree": true,
+    "patch_sha256": "9b78cd8a8e24ed0297b9ed696fdee0462e73d58713e10f9b425aaf58e4d7ab10",
+    "patch_size_bytes": 275699,
+    "snapshot_baseline": "60bc2aa34460bb6af5e4368fd47017f6cbe12496",
+    "transferred_paths": 32,
+    "transferred_tree_sha256": "926b8948f167457991479a42f48d17a2c51a3f08fee43b573fad4798636b40cc"
+  },
+  "memory_observations_kib": {
+    "lane_1_targeted_tests": 28944,
+    "lane_2_full_avllm_tests": 678904,
+    "lane_3_focused_tests": 20328,
+    "lane_4_neutral_tests": 28500,
+    "leader_combined_tests": 682040
+  },
+  "remaining_gates": [
+    "Licensed course stimulus selection and release authorization remain unresolved.",
+    "Target Molab live-GPU, VRAM, processor omission traces, and immutable replay regeneration remain unresolved.",
+    "Rendered browser/accessibility rehearsal and human audience procedure remain unresolved.",
+    "Institutional ethics/governance approvals remain unresolved; no research-ready claim is made.",
+    "WP-4 and later work packages were not begun."
+  ],
+  "schema_version": "1.0",
+  "scope": {
+    "excluded": [
+      "WP-4+"
+    ],
+    "executed": [
+      "WP-1",
+      "WP-2",
+      "WP-3"
+    ],
+    "protected_notebook": "avllm_interpretability/CTP49906_avllm_molab.py"
+  },
+  "tasks": [
+    {
+      "completed_at": "2026-07-21T09:04:58.076Z",
+      "coordination": {
+        "activation_reasons": [
+          "no_interdependence_signal"
+        ],
+        "mode": "lightweight",
+        "source": "synthesized"
+      },
+      "created_at": "2026-07-21T08:49:10.590Z",
+      "delegation": {
+        "child_model": "gpt-5.6-terra",
+        "child_model_policy": "standard",
+        "child_report_format": "bullets",
+        "max_parallel_subtasks": 3,
+        "mode": "auto",
+        "required_parallel_probe": true,
+        "skip_allowed_reason_required": true,
+        "spawn_before_serial_search_threshold": 3,
+        "subtask_candidates": [
+          "Test probe: identify existing coverage and missing regression checks."
+        ]
+      },
+      "delegation_compliance": {
+        "detail": "3, wp1_contract_map (/root/wp1_contract_map), wp1_test_probe (/root/wp1_test_probe), wp1_change_slice (/root/wp1_change_slice); integrated frozen field/version boundaries, missing U-M03-U-M14 coverage, exact owned paths, Python 3.8 constraints, and licensing/PyAV stop gates.",
+        "recorded_at": "2026-07-21T09:04:58.076Z",
+        "source": "terminal_result",
+        "status": "spawned"
+      },
+      "depends_on": [],
+      "description": "Execute only WP-1 through WP-3 from .omx/plans/prd-avllm-arts-integrated-classroom.md and .omx/plans/test-spec-avllm-arts-integrated-classroom.md, using .omx/context/wp1-wp3-classroom-contracts-20260721T084300Z.md and frozen study_materials/wp0 contracts. Four exclusive lanes: (1) media identity, controlled variants, and edit-decision manifests",
+      "id": "1",
+      "owner": "worker-1",
+      "result": "Task 1/lane 1 completed and committed at 8fe93ed2e3f89e19a7182958ccb33a7820073729.\nChanged-file ownership: curriculum_common/__init__.py; curriculum_common/production_manifest.py; avllm_interpretability/src/playground_clips.py; avllm_interpretability/src/stimulus_variants.py; avllm_interpretability/tests/test_playground_clips.py; avllm_interpretability/tests/test_stimulus_variants.py; avllm_interpretability/tests/test_production_manifest.py.\nContract evidence: stable filename-independent SHA media facts; immutable content-derived V1/V2 lineage; exact frozen artifact/stimulus field validation; canonical recipes/IDs/checksums; deterministic trim/zero-pad, signed offset, 16 kHz donor resampling, silence and neutral-video signal controls; treatment-neutral edit-decision round trip. Signal controls remain distinct from true processor modality omission and direct attention-edge knockout.\nVerification:\nPASS targeted+frozen regression: PYTHONDONTWRITEBYTECODE=1 python -m pytest -q -p no:cacheprovider avllm_interpretability/tests/test_playground_clips.py avllm_interpretability/tests/test_stimulus_variants.py avllm_interpretability/tests/test_production_manifest.py study_materials/wp0/test_rq3_estimability.py -> 32 passed in 1.35s.\nPASS lint: uvx ruff check <7 owned source/test paths> -> All checks passed.\nPASS type/static equivalent: PYTHONPYCACHEPREFIX=/tmp/worker-1-final-pycache python -m py_compile <owned Python files> -> exit 0.\nPASS hygiene: git diff --check; forbidden-path scan; generated-artifact scan; git status -> clean, no .omx/WP-4/notebook/pycache edits.\nFAIL environment-only full suite: python -m pytest avllm_interpretability/tests study_materials/wp0/test_rq3_estimability.py -> collection blocked because torch is not installed; no lane-1 failure observed.\nMemory observation: /usr/bin/time -v targeted lane suite -> maximum RSS 28,944 kB, elapsed 0.49s; no GPU/model allocation.\nIntegration risk: final licensed stimulus manifest, target PyAV codec/browser/reingest evidence, Molab memory/restart evidence, and release authorization remain frozen WP-0 blockers; no readiness claim made.\nCheckpoint-ready: commit is clean and self-contained for leader integration; no student media or course-license claim added.\nSubagent spawn evidence: 3, wp1_contract_map (/root/wp1_contract_map), wp1_test_probe (/root/wp1_test_probe), wp1_change_slice (/root/wp1_change_slice); integrated frozen field/version boundaries, missing U-M03-U-M14 coverage, exact owned paths, Python 3.8 constraints, and licensing/PyAV stop gates.",
+      "role": "executor",
+      "status": "completed",
+      "subject": "Execute only WP-1 through WP-3 from .omx/plans/prd-avllm-arts-integrated-classro",
+      "version": 3
+    },
+    {
+      "completed_at": "2026-07-21T09:05:54.022Z",
+      "coordination": {
+        "activation_reasons": [
+          "no_interdependence_signal"
+        ],
+        "mode": "lightweight",
+        "source": "synthesized"
+      },
+      "created_at": "2026-07-21T08:49:10.593Z",
+      "delegation": {
+        "child_model": "gpt-5.6-terra",
+        "child_model_policy": "standard",
+        "max_parallel_subtasks": 2,
+        "mode": "optional"
+      },
+      "depends_on": [],
+      "description": "(2) distribution metrics, trajectories, cache identity, and true modality-omission contracts",
+      "id": "2",
+      "owner": "worker-3",
+      "result": "Commit: 8b8af0c1fa61afdbd9379990dd3a4ec9db3a350c\nChanged-file ownership: avllm_interpretability/scripts/generate_precompute.py; avllm_interpretability/src/{logitlens_experiment.py,modality_omission.py,precompute.py,probe_metrics.py,teacher_forcing.py}; avllm_interpretability/tests/{test_logitlens_output.py,test_metrics_contract_integration.py,test_modality_omission.py,test_precompute.py,test_probe_metrics.py,test_teacher_forcing.py}.\nVerification:\nPASS focused lane: PYTHONDONTWRITEBYTECODE=1 <venv>/python -m pytest -q test_probe_metrics.py test_modality_omission.py test_metrics_contract_integration.py test_logitlens_output.py test_teacher_forcing.py test_precompute.py -> 38 passed in 3.59s.\nPASS full regression: PYTHONDONTWRITEBYTECODE=1 <venv>/python -m pytest -q avllm_interpretability/tests -> 47 passed in 3.57s.\nPASS lint: ruff check <12 changed Python files> -> All checks passed.\nPASS typecheck: uvx --offline mypy --explicit-package-bases --follow-imports=skip --ignore-missing-imports --check-untyped-defs <6 lane source files> -> exit 0.\nPASS static: python -m compileall -> exit 0; git diff --check -> exit 0.\nPASS boundaries: protected notebook SHA-256 4302b5933fed8d7e54b39c2e8e2989d7e4a786630391c636a082bbd8a873c064; no .omx/WP0/notebook/media/edge-knockout diff; generated caches removed.\nMemory observation: full CPU AVLLM suite peak RSS 678904 KiB, swaps 0. Compact summaries perform entropy, stable ordering, margin, and target-rank work on-device; only top-k/target scalars move to CPU, and full-vocabulary logits are absent from serialization.\nCheckpoint evidence: versioned top-k/entropy/margin/target-rank schemas; deterministic layout alignment gate; semantic cache keys; separate true audio/video omission processor paths; teacher-forced distribution caveat distinct from raw probe dispersion; legacy precompute loads as legacy_argmax_only/not_measured.\nIntegration risks: live GPU regeneration and target Molab omission traces were not run; WP0 correctly remains target-runtime/release blocked. Existing WP4 notebook retains the legacy full-capture default until its integration owner opts into CaptureSpec.",
+      "role": "executor",
+      "status": "completed",
+      "subject": "(2) distribution metrics, trajectories, cache identity, and true modality-omissi",
+      "version": 5
+    },
+    {
+      "completed_at": "2026-07-21T09:02:08.177Z",
+      "coordination": {
+        "activation_reasons": [
+          "no_interdependence_signal"
+        ],
+        "mode": "lightweight",
+        "source": "synthesized"
+      },
+      "created_at": "2026-07-21T08:49:10.595Z",
+      "delegation": {
+        "child_model": "gpt-5.6-terra",
+        "child_model_policy": "standard",
+        "max_parallel_subtasks": 2,
+        "mode": "optional"
+      },
+      "depends_on": [],
+      "description": "(3) append-only process records, exactly-once Marimo commands, Teaching/Research modes, and private/research projections",
+      "id": "3",
+      "owner": "worker-2",
+      "result": "Task 3 complete at commit 9b6d91fb65f3b99c583bcdaa0089ab64db5ebd64.\nChanged files: curriculum_common/session_records.py; curriculum_common/portfolio_export.py; tests/test_session_records.py; tests/test_portfolio_export.py.\nImplemented: immutable append-only run/result/reflection/revision/withdrawal records; nonce-bound exactly-once pure reducer with event-log restart replay; fail-closed Teaching/Research mode resolution with independent permissions; rich private portfolios; pure minimized Research projection with study-ID replacement, withdrawal policy, forbidden-field stripping, checksums, and redaction report.\nVerification:\nPASS focused tests: PYTHONDONTWRITEBYTECODE=1 python -B -m unittest discover -s tests -p test_*.py -v -> 9/9 passed.\nPASS related regressions: PYTHONDONTWRITEBYTECODE=1 python -B -m unittest discover -s study_materials/wp0 -p test_*.py -v -> 10/10 passed.\nPASS typecheck: MYPYPATH=. uvx --from mypy==1.14.1 mypy --python-version 3.8 --check-untyped-defs --explicit-package-bases curriculum_common/session_records.py curriculum_common/portfolio_export.py -> no issues in 2 files.\nPASS lint: uvx --from ruff==0.8.6 ruff check on 4 modified files -> all checks passed; AST/import/whitespace and tabnanny audits also passed.\nPASS E2E: Marimo command replay before/after JSONL restart stayed at one event; private bytes unchanged; approved study ID emitted; zero forbidden Research paths; 19 redactions reported.\nPASS hygiene: git diff --check; post-commit worktree clean.\nMemory: focused suite peak RSS 20,328 KB; pure CPU path, no GPU/model allocation.\nKnown integration gap: repository-wide pytest collection is blocked before tests by the pre-existing environment mismatch transformers requires huggingface-hub<1.0 but installed is 1.20.1; lane-focused and frozen WP-0 suites pass independently.\nIntegration risks: WP-4 notebook wiring, browser transport, audience packet flow, and human/institutional Research approval remain outside this lane; lane 4 should consume the projection API for export validation.\nSubagent skip reason: Three bounded repository reads established the frozen requirements; direct serial implementation was safer because the two production files share one reducer/projection contract and no independent write slice remained.",
+      "role": "executor",
+      "status": "completed",
+      "subject": "(3) append-only process records, exactly-once Marimo commands, Teaching/Research",
+      "version": 3
+    },
+    {
+      "completed_at": "2026-07-21T09:07:59.054Z",
+      "coordination": {
+        "activation_reasons": [
+          "cross_boundary_or_handoff_language"
+        ],
+        "mode": "coordinated",
+        "required_mechanisms": [
+          "shared_mental_model",
+          "closed_loop_communication",
+          "mutual_performance_monitoring",
+          "backup_behavior",
+          "adaptability_checkpoint",
+          "team_orientation"
+        ],
+        "source": "synthesized"
+      },
+      "coordination_compliance": {
+        "detail": "leader boundary ACK/readback completed; worker-2 projection API request, handoff, real integration validation, and ACK completed; lane-3 files were consumed without edits.",
+        "recorded_at": "2026-07-21T09:07:59.054Z",
+        "source": "terminal_result",
+        "status": "checked"
+      },
+      "created_at": "2026-07-21T08:49:10.597Z",
+      "delegation": {
+        "child_model": "gpt-5.6-terra",
+        "child_model_policy": "standard",
+        "child_report_format": "bullets",
+        "max_parallel_subtasks": 3,
+        "mode": "auto",
+        "required_parallel_probe": true,
+        "skip_allowed_reason_required": true,
+        "spawn_before_serial_search_threshold": 3,
+        "subtask_candidates": [
+          "Debug/root-cause probe: trace likely failure paths and summarize evidence.",
+          "Test probe: identify existing coverage and missing regression checks.",
+          "Change-slice probe: isolate safe implementation slices and migration hazards."
+        ]
+      },
+      "delegation_compliance": {
+        "detail": "required prevalidated attempt `omx ralplan role-intent write --role test-engineer --parent-thread $CODEX_THREAD_ID --json` returned `{ok:false,reason:native_anchor_mismatch}` because this nested team worker is not the canonical native leader; no unvalidated spawn was performed.",
+        "recorded_at": "2026-07-21T09:07:59.053Z",
+        "source": "terminal_result",
+        "status": "skipped"
+      },
+      "depends_on": [],
+      "description": "(4) audience exchange, export validation, fixtures, and regression tests. Do not begin WP-4 or edit avllm_interpretability/CTP49906_avllm_molab.py. Do not redesign approved contracts. Keep technical signal controls, true modality omission, and attention-edge knockout distinct. Do not edit any .omx artifacts. No worker may edit another lane's files. Run lane unit and integration tests and report changed-file ownership, test results, memory observations, integration risks, and checkpoint-ready evidence. Keep tasks terminal only after commits and evidence.",
+      "id": "4",
+      "owner": "worker-4",
+      "result": "Commit: 19ee72cbeef8164cc6930ac6af702843604c55c1 (Lore terminal record); integrated HEAD: 8f864143be4a551be1fe3bfff42be404988317d7.\nChanged files: audience/CTP49906_audience_response_molab.py; curriculum_common/audience_packets.py; curriculum_common/export_validation.py; tests/fixtures/audience_export/packet.json; tests/fixtures/audience_export/reading-1.json; tests/fixtures/audience_export/reading-2.json; tests/fixtures/audience_export/response-form.json; tests/test_audience_exchange.py; tests/test_export_validation.py. Generated __pycache__/*.pyc removed. No .omx, worker-2, WP-4, technical-control, true-modality-omission, attention-edge-knockout, or primary-notebook files edited.\nSubagent skip reason: required prevalidated attempt `omx ralplan role-intent write --role test-engineer --parent-thread $CODEX_THREAD_ID --json` returned `{ok:false,reason:native_anchor_mismatch}` because this nested team worker is not the canonical native leader; no unvalidated spawn was performed.\nCoordination protocol: coordinated - leader boundary ACK/readback completed; worker-2 projection API request, handoff, real integration validation, and ACK completed; lane-3 files were consumed without edits.\nVerification:\nPASS AST compile of 5 owned Python source/test files.\nPASS `PYTHONDONTWRITEBYTECODE=1 python -m pytest -q tests` -> 25 passed in 0.14s.\nPASS `python -m pytest -q study_materials/wp0/test_rq3_estimability.py avllm_interpretability/tests/test_playground_clips.py` -> 20 passed in 1.35s.\nPASS dependency boundary scan: audience surface is GPU-free and curriculum_common has no treatment import.\nPASS `git diff --check`; clean worktree; protected notebook SHA-256 remains 4302b5933fed8d7e54b39c2e8e2989d7e4a786630391c636a082bbd8a873c064.\nLIMITATION full AVLLM collection: 6 modules require unavailable `torch`; no dependency was installed.\nMemory observation: `/usr/bin/time -v python -m pytest -q tests` maximum RSS 28,500 KB, exit 0.\nCheckpoint evidence: frozen audience packet allowlist/checksum enforced; creator/model/private fields rejected recursively; reveal is monotonic; post-reveal response requires a deviation and does not count as blinded; two distinct respondent/session pseudonyms are required; standard-library GPU-free CLI round-trip passes; CSV formula and HTML markup are neutralized; actual lane-3 private/Research outputs validate for redaction, forbidden fields, record linkage, and private-byte immutability.\nRisks: rendered Marimo/browser UX and torch-dependent model paths are not exercised; external WP-0 Molab/licensing/governance gates remain unresolved and no research-ready claim is made.",
+      "role": "executor",
+      "status": "completed",
+      "subject": "(4) audience exchange, export validation, fixtures, and regression tests. Do not",
+      "version": 9
+    },
+    {
+      "completed_at": "2026-07-21T09:11:22.728Z",
+      "created_at": "2026-07-21T09:09:53.296Z",
+      "depends_on": [],
+      "description": "Leader combined verification found exactly 7 mypy 1.14.1 errors in avllm_interpretability/src/stimulus_variants.py lines ~415 and ~458 from **dict inference in StimulusVariant.from_dict and StimulusManifest.from_dict. Make the smallest Python-3.10-compatible typed repair inside stimulus_variants.py and, if needed, its owned test_stimulus_variants.py only. Do not redesign contracts; do not touch .omx, WP-4, notebook, or other lanes. Run targeted tests, ruff, py_compile, and exact leader mypy command; remove generated artifacts; commit with Lore and report evidence.",
+      "id": "5",
+      "owner": "worker-1",
+      "requires_code_change": true,
+      "result": "Verification fix completed at Lore commit 7180ef71dac1ee8904a0a3129b8b1bcfa9067305.\nChanged file: avllm_interpretability/src/stimulus_variants.py only.\nRepair: replaced heterogeneous **dict dataclass construction with explicit StimulusVariant and StimulusManifest constructor arguments; checksum and serialized contract behavior are unchanged.\nVerification:\nPASS reproduce-before: exact mypy command reported 7 errors at lines 415/458.\nPASS tests: PYTHONDONTWRITEBYTECODE=1 python -m pytest -q -p no:cacheprovider avllm_interpretability/tests/test_playground_clips.py avllm_interpretability/tests/test_stimulus_variants.py avllm_interpretability/tests/test_production_manifest.py study_materials/wp0/test_rq3_estimability.py -> 32 passed in 1.46s.\nPASS lint: uvx --from ruff==0.8.6 ruff check avllm_interpretability/src/stimulus_variants.py avllm_interpretability/tests/test_stimulus_variants.py -> All checks passed.\nPASS static: PYTHONPYCACHEPREFIX=/tmp/worker-1-task5-pycache python -m py_compile avllm_interpretability/src/stimulus_variants.py avllm_interpretability/tests/test_stimulus_variants.py.\nPASS exact typecheck: uvx --from mypy==1.14.1 mypy --python-version 3.10 --check-untyped-defs --explicit-package-bases avllm_interpretability/src/stimulus_variants.py -> Success: no issues found in 1 source file.\nPASS hygiene: git diff --check; generated caches removed; worktree clean.\nBoundaries: no .omx, WP-4, notebook, other lane, schema, or test changes.",
+      "status": "completed",
+      "subject": "Verification fix: make lane-1 manifest deserializers pass mypy",
+      "version": 3
+    }
+  ],
+  "team_name": "execute-only-wp-1-thr-5cc0fadc",
+  "team_terminal": {
+    "delivery_tasks_completed": 4,
+    "failed": 0,
+    "phase": "complete",
+    "verification_fix_tasks_completed": 1
+  },
+  "verification": {
+    "combined_pytest": {
+      "max_rss_kib": 682040,
+      "seconds": 4.92,
+      "status": "pass",
+      "swaps": 0,
+      "tests": 95
+    },
+    "git_apply_reverse_check": {
+      "status": "pass"
+    },
+    "marimo_protected_notebook_check": {
+      "status": "pass",
+      "version": "0.23.14"
+    },
+    "mypy": {
+      "python_version": "3.10",
+      "source_files": 15,
+      "status": "pass",
+      "version": "1.14.1"
+    },
+    "py_compile": {
+      "python_files": 28,
+      "status": "pass"
+    },
+    "ruff": {
+      "python_files": 28,
+      "status": "pass",
+      "version": "0.8.6"
+    }
+  }
+}

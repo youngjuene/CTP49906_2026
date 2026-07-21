@@ -1,0 +1,101 @@
+{
+  "schema_version": "wp0.course-release-profile/1.0.0",
+  "profile_status": "FAIL_INCOMPLETE",
+  "immutable": false,
+  "immutable_course_release_id": null,
+  "candidate_observation_only": true,
+  "repository": {
+    "observed_head": "f504baf6810d47f30f3bcc4ebc61ba9c9f41e8bb",
+    "release_commit": null,
+    "release_tag": null,
+    "repo_ref": "main",
+    "repo_ref_status": "FAIL_MUTABLE"
+  },
+  "notebook": {
+    "path": "avllm_interpretability/CTP49906_avllm_molab.py",
+    "sha256": "4302b5933fed8d7e54b39c2e8e2989d7e4a786630391c636a082bbd8a873c064"
+  },
+  "model": {
+    "id": "Qwen/Qwen2.5-Omni-3B",
+    "revision": "f75b40e3da2003cdd6e1829b1f420ca70797c34e",
+    "license": "Qwen Research License",
+    "institutional_license_fit_approval": null
+  },
+  "processor": {
+    "id": "Qwen/Qwen2.5-Omni-3B",
+    "revision": "f75b40e3da2003cdd6e1829b1f420ca70797c34e",
+    "target_deployment_verified": false
+  },
+  "runtime": {
+    "molab_image": null,
+    "python": null,
+    "cuda": null,
+    "driver": null,
+    "gpu": null,
+    "cpu_count": null,
+    "host_ram_bytes": null,
+    "pyav": null,
+    "linked_ffmpeg_libraries": null
+  },
+  "candidate_local_packages": {
+    "transformers": "4.52.0",
+    "accelerate": "1.14.0",
+    "qwen-omni-utils": "0.0.9",
+    "torch": "2.6.0+cu124"
+  },
+  "complete_transitive_lock": null,
+  "package_or_wheel_hashes": null,
+  "prompts": {
+    "logit_prompt_sha256": "9ae6f33d7819d950a312efd140f22994a8f414b46221c77b7f21e7234cbb140e",
+    "attention_prompt_sha256": "504ff2634f208d77ddb5bb0c9461285d9682a5fd0a513856c2c1554c0b78ee70",
+    "chat_template_sha256": null
+  },
+  "assets": {
+    "stimulus_manifest": null,
+    "licensed_release_set": false,
+    "hashes_identity_only": true
+  },
+  "shared_course_contract": {
+    "editor_id": null,
+    "export_preset_id": null,
+    "condition_catalog_version": null,
+    "metric_release_versions": null,
+    "treatment_route_id": "classroom-ia/1.0.0",
+    "comparison_route_id": "matched-comparison/1.0.0",
+    "audience_route_id": null
+  },
+  "human_approved_versions": {
+    "study_protocol": null,
+    "instruments": null,
+    "rubrics": null,
+    "translations": null,
+    "privacy_projection": null,
+    "research_configuration": null,
+    "approval_dates": null
+  },
+  "release_thresholds": {
+    "planned_device_envelope_bytes": 25769803776,
+    "peak_host_rss_bytes": null,
+    "peak_allocated_vram_bytes": null,
+    "peak_reserved_vram_bytes": null,
+    "required_route_time_seconds": null,
+    "usability_thresholds": null
+  },
+  "cache_and_replay": {
+    "manifest_version": null,
+    "artifact_hashes_frozen": false,
+    "replay_tolerances": null,
+    "target_restart_replay_verified": false
+  },
+  "blockers": [
+    "mutable REPO_REF=main",
+    "no release commit or tag",
+    "incomplete transitive dependency lock and wheel hashes",
+    "target Molab runtime and PyAV/FFmpeg unverified",
+    "stimulus provenance and rights unresolved",
+    "Qwen Research License institutional fit unresolved",
+    "editor/export/condition/metric versions unresolved",
+    "protocol/instrument/rubric/translation/privacy approvals unresolved",
+    "pilot-derived resource/time/usability thresholds unresolved"
+  ]
+}

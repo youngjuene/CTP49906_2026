@@ -1,0 +1,24 @@
+{
+  "schema_version": "audience-reading/1.0.0",
+  "response_id": "response-00000000-0000-4000-8000-000000000001",
+  "exchange_artifact_id": "exchange-00000000-0000-4000-8000-000000000001",
+  "audience_pseudonym": "audience-alpha",
+  "respondent_session_pseudonym": "audience-session-alpha",
+  "local_created_at_utc": "2026-07-21T09:00:00Z",
+  "event_index": 0,
+  "elapsed_ms": 1000,
+  "blindness_attestation": true,
+  "permission_scope": "classroom_or_audience_sharing",
+  "open_interpretation": "The sound makes the repeated movement feel anticipatory.",
+  "sound_image_relation": "rhythmic reinforcement",
+  "shared_tags": [
+    "anticipation",
+    "repetition"
+  ],
+  "self_described_tags": [
+    "patient"
+  ],
+  "accessibility_barriers": "prefer not to answer",
+  "confidence_or_ambiguity": "moderate confidence; another reading is possible",
+  "withdrawn": false
+}

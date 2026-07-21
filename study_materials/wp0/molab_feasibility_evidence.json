@@ -1,0 +1,232 @@
+{
+  "schema_version": "wp0.molab-feasibility-evidence/1.0.0",
+  "evidence_cut_utc": "2026-07-21T08:11:28Z",
+  "overall_target_molab_gate": "UNVERIFIED",
+  "promotion_rule": "Local tx01 evidence must not be promoted to target-Molab evidence.",
+  "local_context": {
+    "host": "tx01",
+    "kernel": "Linux 5.15.0-139-generic x86_64",
+    "is_target_molab": false
+  },
+  "target_context": {
+    "platform": "Molab public preview",
+    "advertised_cpu_count": 4,
+    "advertised_host_ram_bytes": 34359738368,
+    "advertised_gpu": "RTX Pro 6000 Blackwell",
+    "advertised_vram_bytes": 103079215104,
+    "advertised_session_limit_hours": 12,
+    "resource_sla": null,
+    "status": "UNVERIFIED",
+    "sources": [
+      "https://molab.marimo.io/features/vs-colab-alternative",
+      "https://marimo.io/blog/reintroducing-molab",
+      "https://molab.marimo.io/pages/legal/terms"
+    ]
+  },
+  "probes": [
+    {
+      "probe_id": "local-host-ram",
+      "scope": "local_only",
+      "status": "PASS",
+      "command": "hostname; uname -srmo; free -b",
+      "observed": {
+        "ram_total_bytes": 134939664384,
+        "ram_available_bytes": 126354604032
+      },
+      "limitation": "tx01 is not Molab."
+    },
+    {
+      "probe_id": "local-gpus",
+      "scope": "local_only",
+      "status": "PASS",
+      "command": "nvidia-smi --query-gpu=index,name,memory.total,memory.free,driver_version --format=csv,noheader",
+      "observed": {
+        "gpu_count": 2,
+        "gpus": [
+          {
+            "index": 0,
+            "name": "NVIDIA GeForce RTX 3090",
+            "memory_total_mib": 24576,
+            "driver": "560.35.03"
+          },
+          {
+            "index": 1,
+            "name": "NVIDIA GeForce RTX 3090",
+            "memory_total_mib": 24576,
+            "driver": "560.35.03"
+          }
+        ]
+      },
+      "limitation": "Not the advertised Molab GPU and not an enforced 24 GiB rehearsal."
+    },
+    {
+      "probe_id": "local-runtime-versions",
+      "scope": "local_only",
+      "status": "PASS",
+      "command": "ffmpeg -version; python package version probes",
+      "observed": {
+        "ffmpeg": "4.2.7",
+        "PyAV": "17.1.0",
+        "torch": "2.6.0+cu124",
+        "transformers": "4.52.0",
+        "marimo": "0.23.14",
+        "psutil": "7.2.2",
+        "qwen-omni-utils": "0.0.9"
+      },
+      "limitation": "Target runtime image and linked FFmpeg libraries are unverified."
+    },
+    {
+      "probe_id": "cached-model-revision",
+      "scope": "local_only",
+      "status": "PASS",
+      "command": "offline cached snapshot inspection",
+      "observed": {
+        "model_id": "Qwen/Qwen2.5-Omni-3B",
+        "revision": "f75b40e3da2003cdd6e1829b1f420ca70797c34e"
+      },
+      "limitation": "Cache presence does not prove Molab persistence or release rights."
+    },
+    {
+      "probe_id": "replay-cache-regressions",
+      "scope": "local_only",
+      "status": "PASS",
+      "command": "PYTHONDONTWRITEBYTECODE=1 avllm_interpretability/.venv/bin/pytest -q -p no:cacheprovider avllm_interpretability/tests/test_precompute.py avllm_interpretability/tests/test_playground_clips.py",
+      "observed": {
+        "tests_passed": 20,
+        "focused_committed_replay_passed": 1
+      },
+      "limitation": "Target no-network replay after restart remains unverified."
+    },
+    {
+      "probe_id": "current-cache-contract",
+      "scope": "local_only",
+      "status": "PASS",
+      "command": "static contract inspection plus upload/cache regression tests",
+      "observed": {
+        "key_fields": [
+          "content_sha256",
+          "nframes",
+          "prompt"
+        ],
+        "eviction": "FIFO",
+        "keep": 4,
+        "upload_content_addressed": true
+      },
+      "limitation": "Molab quota, persistence, restart survival, and deletion behavior remain unverified."
+    },
+    {
+      "probe_id": "audio-omitted-full-forward",
+      "scope": "local_only",
+      "status": "PASS",
+      "command": "TRANSFORMERS_OFFLINE=1 HF_HUB_OFFLINE=1 PYTHONDONTWRITEBYTECODE=1 CUDA_VISIBLE_DEVICES=0 avllm_interpretability/.venv/bin/python <offline omission probe>",
+      "observed": {
+        "present_modality": "video",
+        "absent_modality": "audio",
+        "input_keys": [
+          "attention_mask",
+          "input_ids",
+          "pixel_values_videos",
+          "video_grid_thw",
+          "video_second_per_grid"
+        ],
+        "token_types": {
+          "text": 26,
+          "video": 299,
+          "audio": 0
+        },
+        "logits_shape": [
+          1,
+          325,
+          151936
+        ],
+        "peak_allocated_bytes": 9803844608,
+        "peak_reserved_bytes": 10315890688
+      },
+      "limitation": "Local short forward, not Molab or complete classroom route."
+    },
+    {
+      "probe_id": "video-omitted-full-forward",
+      "scope": "local_only",
+      "status": "PASS",
+      "command": "same offline omission probe",
+      "observed": {
+        "present_modality": "audio",
+        "absent_modality": "video",
+        "input_keys": [
+          "attention_mask",
+          "feature_attention_mask",
+          "input_features",
+          "input_ids"
+        ],
+        "token_types": {
+          "text": 26,
+          "audio": 50,
+          "video": 0
+        },
+        "logits_shape": [
+          1,
+          76,
+          151936
+        ],
+        "peak_allocated_bytes": 9582769152,
+        "peak_reserved_bytes": 9959374848
+      },
+      "limitation": "Local short forward, not Molab or complete classroom route."
+    },
+    {
+      "probe_id": "target-pyav-codec-browser-reingest",
+      "scope": "target_molab",
+      "status": "UNVERIFIED",
+      "command": null,
+      "observed": null,
+      "limitation": "Target linked codec/muxer, PTS, browser playback, download/re-upload, and processor ingestion were not exercised."
+    },
+    {
+      "probe_id": "credible-24-gib-full-route",
+      "scope": "target_or_enforced_cap",
+      "status": "UNVERIFIED",
+      "command": null,
+      "observed": {
+        "local_short_probe_below_24_gib": true
+      },
+      "limitation": "A 96 GiB Molab GPU cannot reproduce 24 GiB allocation, fragmentation, or OOM behavior without an enforceable cap; full-route rehearsal is absent."
+    }
+  ],
+  "artifact_evidence": {
+    "assets/02321.mp4": {
+      "sha256": "9dcf1572e593777267eab01351022fcaf7b00f9a564da6059eb97f422266ddec",
+      "streams": "H.264 640x360 25 FPS + AAC 44.1 kHz stereo",
+      "duration_seconds": 10.0,
+      "rights_proven": false
+    },
+    "assets/02321_silent.mp4": {
+      "sha256": "88c72f00bf52f18b1a62a31d3f187990518bdb7b0b77b64b75bf2b4c5295e231",
+      "streams": "H.264 640x360 25 FPS + AAC 16 kHz mono",
+      "duration_seconds": 10.048,
+      "semantic_warning": "signal control, not modality omission",
+      "rights_proven": false
+    },
+    "precomputed/captions.json": {
+      "sha256": "09d30b17693280ff6550eac3cb46701e245684006e399195d5390de7005ed2f4"
+    },
+    "precomputed/meta.json": {
+      "sha256": "86fb2a46c274c8f5c3a3c8a68c153e5c1269023230707885a4a4be805517ee04"
+    },
+    "precomputed/attention_summary.json": {
+      "sha256": "8d1de50b36e64c357b036c24c9ab09d36bdcc1028f02154548c4b0562beb12a3"
+    },
+    "precomputed/logit_lens_audio_token_analysis.csv": {
+      "sha256": "a3f4dc0ececd7893bcd8a02b296019bb6788a70a345622eefb068c8f42954d7f"
+    }
+  },
+  "mandatory_target_gates": {
+    "runtime_resource_fingerprint": "UNVERIFIED",
+    "full_route_host_rss_and_cuda_peaks": "UNVERIFIED",
+    "credible_24_gib_behavior": "UNVERIFIED",
+    "cold_warm_cache_and_restart_survival": "UNVERIFIED",
+    "offline_replay_after_restart": "UNVERIFIED",
+    "upload_deletion_egress_observation": "UNVERIFIED",
+    "pyav_encode_mux_decode_browser_reingest": "UNVERIFIED",
+    "audio_and_video_omission_assertions": "UNVERIFIED"
+  }
+}

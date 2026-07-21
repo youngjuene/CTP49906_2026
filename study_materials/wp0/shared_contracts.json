@@ -1,0 +1,267 @@
+{
+  "shared_contract_schema": "wp0.shared-contracts/1.0.0",
+  "contract_status": "frozen_technical_interface",
+  "implementation_status": "not_started_by_wp0",
+  "artifact_version_schema": "artifact-version/1.0.0",
+  "stimulus_variant_schema": "stimulus-variant/1.0.0",
+  "model_run_schema": "model-run/1.0.0",
+  "reflection_schema": "reflection/1.0.0",
+  "audience_reading_schema": "audience-reading/1.0.0",
+  "audience_packet_schema": "audience-packet/1.0.0",
+  "private_projection_schema": "private-portfolio/1.0.0",
+  "research_projection_schema": "research-projection/1.0.0",
+  "process_protocol": "append-only-process/1.0.0",
+  "mode_protocol": "teaching-research-mode/1.0.0",
+  "versions": {
+    "artifact_version_schema": "artifact-version/1.0.0",
+    "stimulus_variant_schema": "stimulus-variant/1.0.0",
+    "model_run_schema": "model-run/1.0.0",
+    "reflection_schema": "reflection/1.0.0",
+    "audience_reading_schema": "audience-reading/1.0.0",
+    "audience_packet_schema": "audience-packet/1.0.0",
+    "private_projection_schema": "private-portfolio/1.0.0",
+    "research_projection_schema": "research-projection/1.0.0",
+    "process_protocol": "append-only-process/1.0.0",
+    "mode_protocol": "teaching-research-mode/1.0.0"
+  },
+  "approved_study_protocol_version": null,
+  "immutable_course_release_id": null,
+  "schemas": {
+    "artifact_version": {
+      "required_fields": [
+        "schema_version",
+        "artifact_id",
+        "content_sha256",
+        "version_label",
+        "parent_artifact_id",
+        "local_registered_at_utc",
+        "event_index",
+        "elapsed_ms",
+        "media_facts",
+        "creator_intention",
+        "intended_audience",
+        "sound_image_relation",
+        "concept_tags",
+        "cultural_aesthetic_context",
+        "source_license_provenance",
+        "accessibility",
+        "editor_name_version",
+        "source_assets",
+        "edit_decisions",
+        "assistance_disclosure",
+        "export_preset_version",
+        "change_rationale",
+        "processing_boundary"
+      ]
+    },
+    "stimulus_variant": {
+      "required_fields": [
+        "schema_version",
+        "stimulus_id",
+        "pair_id",
+        "parent_content_sha256",
+        "condition_code",
+        "technical_operation",
+        "congruence_level",
+        "congruence_coding_provenance",
+        "pairing_block",
+        "manipulation_check",
+        "recipe",
+        "donor_stimulus_id",
+        "offset_ms",
+        "duration_ms",
+        "audio_facts",
+        "video_facts",
+        "processor_path",
+        "token_layout_fingerprint",
+        "provenance",
+        "checksum"
+      ]
+    },
+    "model_run": {
+      "required_fields": [
+        "schema_version",
+        "run_id",
+        "session_pseudonym",
+        "local_created_at_utc",
+        "event_index",
+        "elapsed_ms",
+        "mode",
+        "protocol_version",
+        "artifact_id",
+        "stimulus_id",
+        "condition_code",
+        "model_id",
+        "model_revision",
+        "prompt",
+        "parameters",
+        "command_nonce",
+        "prediction",
+        "initial_explanation",
+        "result_digest",
+        "metrics",
+        "metric_versions",
+        "token_layout_fingerprint",
+        "elapsed_seconds",
+        "peak_vram_bytes",
+        "peak_host_rss_bytes",
+        "status"
+      ]
+    },
+    "reflection": {
+      "required_fields": [
+        "schema_version",
+        "reflection_id",
+        "run_id",
+        "local_created_at_utc",
+        "event_index",
+        "elapsed_ms",
+        "initial_explanation_snapshot",
+        "result_interpretation",
+        "verdict",
+        "evidence_trigger",
+        "revised_explanation",
+        "rival_explanation",
+        "next_control",
+        "artifact_revision_intent",
+        "withdrawn"
+      ]
+    },
+    "audience_reading": {
+      "required_fields": [
+        "schema_version",
+        "response_id",
+        "exchange_artifact_id",
+        "audience_pseudonym",
+        "local_created_at_utc",
+        "event_index",
+        "elapsed_ms",
+        "blindness_attestation",
+        "permission_scope",
+        "open_interpretation",
+        "sound_image_relation",
+        "shared_tags",
+        "self_described_tags",
+        "accessibility_barriers",
+        "confidence_or_ambiguity",
+        "withdrawn"
+      ]
+    },
+    "audience_packet": {
+      "required_fields": [
+        "packet_schema_version",
+        "exchange_artifact_id",
+        "presentation_asset",
+        "presentation_checksum",
+        "permitted_accessibility_overlays",
+        "excluded_field_attestation",
+        "reveal_state",
+        "protocol_deviation",
+        "sharing_permission_scope"
+      ],
+      "forbidden_fields": [
+        "creator_intention",
+        "model_output",
+        "condition_assignment",
+        "private_artifact_id",
+        "content_sha256",
+        "unapproved_raw_media"
+      ]
+    }
+  },
+  "stable_identifier_invariants": [
+    "Identifiers are never reused, retargeted, or silently rewritten.",
+    "Filename is never identity.",
+    "A hash proves byte association and change history, not truth, authorship, provenance, or rights.",
+    "stimulus_id derives from source hash, canonical normalized recipe, and transform schema version.",
+    "pair_id, pairing block, donor/source, condition, and congruence are explicit and never inferred from one another.",
+    "exchange_artifact_id is opaque and contains no private content hash.",
+    "Only an approved Research projection maps exchange/private IDs to investigator-issued study_artifact_id.",
+    "session_pseudonym is pseudonymous, never anonymous.",
+    "Parent/version links are immutable."
+  ],
+  "append_only_process": {
+    "commands_commit_once_by_unique_command_nonce": true,
+    "identical_replay_is_idempotent": true,
+    "conflicting_nonce_reuse": "reject",
+    "result_attachment": "committed_run_only",
+    "reflection_initial_explanation": "immutable_snapshot",
+    "edits": "new_linked_revision",
+    "prior_serialized_records": "byte_unchanged",
+    "withdrawal": "append_state_or_tombstone_never_rewrite_history",
+    "private_timing": "exact_local_utc_may_be_retained",
+    "research_timing_default": "event_index_and_elapsed_ms"
+  },
+  "mode_state_machine": {
+    "initial_mode": "Teaching",
+    "safe_fallback_mode": "Teaching",
+    "invalid_config_behavior": "missing, invalid, expired, over-permissive, wrong-version, or unapproved config remains or falls back to Teaching",
+    "research_transition_required_fields": [
+      "approved_protocol_version",
+      "approved_wording_reference",
+      "independent_permission_scopes",
+      "permitted_fields",
+      "destination",
+      "retention_period",
+      "withdrawal_path",
+      "contact",
+      "expiry",
+      "compatible_schema_version",
+      "compatible_course_release_id"
+    ],
+    "notebook_acknowledgement_is_consent": false,
+    "research_fields_available_in_teaching": false,
+    "independent_permission_scopes": [
+      "process_data_analysis",
+      "classroom_or_audience_sharing",
+      "quotation_or_reproduction",
+      "future_reuse"
+    ],
+    "authorized_egress": [
+      "user_initiated_private_device_download",
+      "permission_authorized_blinded_audience_packet",
+      "approved_research_mode_minimized_projection"
+    ],
+    "expected_non_student_data_reads": [
+      "repository_code",
+      "dependencies",
+      "model_weights"
+    ],
+    "automatic_unapproved_student_data_transmission": false
+  },
+  "projections": {
+    "private_portfolio": {
+      "may_include": [
+        "content_hashes",
+        "aliases",
+        "exact_local_history",
+        "selected_private_media"
+      ],
+      "owner": "student_or_creator"
+    },
+    "audience_packet": {
+      "allowlist": "audience_packet.required_fields",
+      "reveal_is_monotonic": true,
+      "blindness_restorable_after_reveal": false
+    },
+    "research_projection": {
+      "enabled": false,
+      "enablement_gate": "approved compatible Research configuration",
+      "transformation": "pure_versioned_with_redaction_report",
+      "private_input_mutated": false,
+      "maximum_allowlist": "approved versioned structural and coded fields only",
+      "always_forbidden": [
+        "raw_content_hashes",
+        "filenames",
+        "raw_media",
+        "exact_utc",
+        "device_metadata",
+        "platform_metadata",
+        "legal_name",
+        "email",
+        "uncontrolled_demographics",
+        "non_allowlisted_free_text"
+      ]
+    }
+  }
+}

@@ -28,25 +28,26 @@ def _():
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    # AVLLM interpretability — molab demo
+    # AVLLM interpretability lab
 
     **The question:** when Qwen2.5-Omni-3B captions a video, is it really using what it
     *sees* and what it *hears* — or narrating from language priors? A caption like
     *"a person is playing the piano"* looks equally correct either way, so the output
     alone can't tell you. This notebook opens the model up with two tools:
 
-    1. **Logit Lens** — decode the model's intermediate predictions at audio-token
-       positions across thinker layers: watch *when* (and whether) audio content
-       becomes legible inside the network.
+    1. **Logit Lens** — apply the language head as a probe to raw intermediate
+       residual states at audio-token positions and compare patterns across thinker
+       layers (with important calibration caveats stated below).
     2. **Attention Knockout** — surgically cut one information pathway
-       (source→target attention) and re-run: see *causally* what breaks when a
-       modality is taken away.
+       (source→target attention) and re-run. This removes selected **direct
+       attention edges** in selected layers; it does *not* remove a modality,
+       erase its residual-stream representation, or block indirect routes.
 
-    Read the fixed run top-to-bottom once for the mechanics — then the real work is
-    the two interactive sections at the bottom (🎛️ and 🎯), where **you** pick the
-    clip, the prompt, and the intervention. The habit to practice there: before every
-    ▶, write down a falsifiable hypothesis — *"if I block X, the result should change
-    like Y"* — and then check whether the model agrees.
+    **Learning route:** prepare one shared reference run, work through three guided
+    measurements, test your own claim in two research playgrounds, and finish by
+    designing a sharper experiment. Before every ▶, write a falsifiable prediction —
+    *"if I block X, the result should change like Y"* — then separate what you
+    observed from what the intervention actually warrants.
     """)
     return
 
@@ -54,10 +55,13 @@ def _(mo):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## Running in molab
+    ## 1. Prepare the experiment
+
+    ### 1.1 Before you run
 
     - **GPU:** attach one via the notebook-specs button in the header; this notebook
-      uses `cuda:0`. The two 3B models load comfortably in molab's VRAM.
+      uses `cuda:0`. One eager 3B thinker is shared by both probes and was validated
+      on a 24 GB RTX 3090.
     - **Dependencies:** the setup cell pip-installs them into the kernel (molab does
       not honor the `# /// script` block automatically) and restores
       `torchvision.io.read_video` with a small PyAV shim, since molab's bundled
@@ -68,7 +72,7 @@ def _(mo):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     import importlib.metadata
     import importlib.util
@@ -76,29 +80,22 @@ def _(mo):
     import sys
     from pathlib import Path
 
-    def _ver_tuple(v):
-        out = []
-        for part in v.split(".")[:3]:
-            digits = "".join(ch for ch in part if ch.isdigit())
-            out.append(int(digits) if digits else 0)
-        return tuple(out)
-
     def _ensure_packages(specs):
-        # specs: (import_name, dist_name, min_version_or_None, pip_spec).
+        # specs: (import_name, dist_name, exact_version_or_None, pip_spec).
         # molab does not install the `# /// script` block into the running
-        # kernel, so pip-install anything missing (or too old) at runtime.
+        # kernel, so enforce the versions used in the rehearsal at runtime.
         to_install = []
-        for import_name, dist_name, min_version, pip_spec in specs:
+        for import_name, dist_name, exact_version, pip_spec in specs:
             if importlib.util.find_spec(import_name) is None:
                 to_install.append(pip_spec)
                 continue
-            if min_version is not None:
+            if exact_version is not None:
                 try:
                     have = importlib.metadata.version(dist_name)
                 except importlib.metadata.PackageNotFoundError:
                     to_install.append(pip_spec)
                     continue
-                if _ver_tuple(have) < _ver_tuple(min_version):
+                if have != exact_version:
                     to_install.append(pip_spec)
         if to_install:
             with mo.status.spinner(title=f"Installing {', '.join(to_install)}…"):
@@ -109,7 +106,7 @@ def _(mo):
     _ensure_packages([
         ("transformers", "transformers", "4.52.0", "transformers==4.52.0"),
         ("accelerate", "accelerate", "1.14.0", "accelerate==1.14.0"),
-        ("qwen_omni_utils", "qwen-omni-utils", None, "qwen-omni-utils==0.0.9"),
+        ("qwen_omni_utils", "qwen-omni-utils", "0.0.9", "qwen-omni-utils==0.0.9"),
         ("av", "av", None, "av"),  # PyAV — backs the video-decode shim below
     ])
 
@@ -175,17 +172,31 @@ def _(mo):
     # exists, hard-sync it to REPO_REF so pushed fixes reach molab (a kernel
     # restart is still needed to re-import updated modules).
     #
-    # REPO_REF selects which branch or tag to sync: "main" for normal class use;
-    # a feature branch to smoke-test unmerged work; a release tag (risk R7 in
-    # the PRD) to pin the semester so September pushes can't change what
-    # students execute mid-course. Works for branches and tags alike (fetch +
-    # FETCH_HEAD, not origin/<branch>).
+    # REPO_REF selects the source version. Use "main" while iterating; distribute
+    # an immutable course tag so later repository changes cannot alter the class
+    # run. Fetching through FETCH_HEAD supports both branches and tags.
     REPO_REF = "main"
-    REPO_DIR = Path("CTP49906_2026").resolve()
-    if REPO_REF != "main":
-        print(f"⚠️ REPO_REF={REPO_REF!r} — this notebook is pinned to a non-main ref.")
-    if REPO_DIR.exists():
-        with mo.status.spinner(title=f"Updating CTP49906_2026 to latest {REPO_REF}…"):
+    _local_project = Path(__file__).resolve().parent
+    if (_local_project / "src").is_dir() and (_local_project / "assets").is_dir():
+        # Local development / a notebook opened from a checked-out release:
+        # use that exact working tree rather than cloning a second, stale copy.
+        PROJECT_DIR = _local_project
+        print(f"using checked-out project: {PROJECT_DIR}")
+    else:
+        REPO_DIR = Path("CTP49906_2026").resolve()
+        if REPO_REF != "main":
+            print(f"⚠️ REPO_REF={REPO_REF!r} — notebook source pinned to that ref.")
+        if REPO_DIR.exists():
+            _sync_title = f"Updating CTP49906_2026 to {REPO_REF}…"
+        else:
+            _sync_title = f"Cloning CTP49906_2026 @ {REPO_REF} (src + sample video)…"
+        with mo.status.spinner(title=_sync_title):
+            if not REPO_DIR.exists():
+                subprocess.run(
+                    ["git", "clone", "--depth", "1", "--branch", REPO_REF,
+                     "https://github.com/youngjuene/CTP49906_2026.git", str(REPO_DIR)],
+                    check=True,
+                )
             subprocess.run(
                 ["git", "-C", str(REPO_DIR), "fetch", "--depth", "1", "origin", REPO_REF],
                 check=True,
@@ -193,14 +204,7 @@ def _(mo):
             subprocess.run(
                 ["git", "-C", str(REPO_DIR), "reset", "--hard", "FETCH_HEAD"], check=True
             )
-    else:
-        with mo.status.spinner(title=f"Cloning CTP49906_2026 @ {REPO_REF} (src + sample video)…"):
-            subprocess.run(
-                ["git", "clone", "--depth", "1", "--branch", REPO_REF,
-                 "https://github.com/youngjuene/CTP49906_2026.git", str(REPO_DIR)],
-                check=True,
-            )
-    PROJECT_DIR = REPO_DIR / "avllm_interpretability"
+        PROJECT_DIR = REPO_DIR / "avllm_interpretability"
     assert PROJECT_DIR.is_dir(), f"expected code dir not found: {PROJECT_DIR}"
     if str(PROJECT_DIR) not in sys.path:
         sys.path.insert(0, str(PROJECT_DIR))
@@ -210,21 +214,19 @@ def _(mo):
 
 @app.cell
 def _(PROJECT_DIR):
-    # F5a — GPU-free replay. Flip to True to render every non-interactive
-    # fixed-run plot from committed artifacts (no GPU, no 8 GB download): a
-    # break-glass mode for when molab's GPU is unavailable. Default False = live
-    # model. The interactive playground / teacher-forcing sections still need a
-    # GPU and fail loudly if submitted in this mode. Generate the artifacts on a
-    # GPU with:
+    # GPU-free replay of the guided demo. Flip to True to render the saved course
+    # results without a GPU or model download. The research playgrounds still
+    # need a live model and fail clearly if submitted in this mode. Refresh the
+    # saved results on a GPU with:
     #   python avllm_interpretability/scripts/generate_precompute.py
     USE_PRECOMPUTED = False
     PRECOMPUTED_DIR = PROJECT_DIR / "precomputed"
     if USE_PRECOMPUTED:
-        print(f"USE_PRECOMPUTED=True — replaying the fixed run from {PRECOMPUTED_DIR} (no GPU)")
+        print(f"USE_PRECOMPUTED=True — replaying saved course results from {PRECOMPUTED_DIR} (no GPU)")
     return PRECOMPUTED_DIR, USE_PRECOMPUTED
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(USE_PRECOMPUTED):
     import torch
 
@@ -234,7 +236,7 @@ def _(USE_PRECOMPUTED):
     else:
         assert torch.cuda.is_available(), (
             "No GPU visible. In molab, attach a GPU via the notebook-specs button in the header. "
-            "(Or set USE_PRECOMPUTED=True in the cell above to replay the fixed run from committed artifacts.)"
+            "(Or set USE_PRECOMPUTED=True above to replay the saved course results.)"
         )
         DEVICE = torch.device("cuda:0")
         _free, _total = torch.cuda.mem_get_info(0)
@@ -245,16 +247,15 @@ def _(USE_PRECOMPUTED):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## Parameters
+    ### 1.2 Set the guided-demo reference
 
-    Edit these to point at your own video or change the intervention. On molab's
-    large GPU you can safely raise `NFRAMES`.
+    **Leave these values unchanged on the first pass** so everyone interprets the
+    same clip, prompts, and intervention. After the guided-demo checkpoint, use the
+    forms to change one variable at a time. Direct edits here are the advanced route
+    for changing the shared reference run itself.
 
-    The parameters are split across three cells *by re-run cost* (marimo re-runs
-    every cell downstream of an edit): the model id — editing it reloads the
-    models; the paths; and the **knobs** — prompts, rules, frames. Tweak the knob
-    cell freely: it re-runs the experiments against the already-loaded models
-    (seconds), never the model loads themselves.
+    The cells stay separate by re-run cost: changing the model reloads its weights;
+    changing the clip, prompts, rules, or frame count reuses the loaded model.
     """)
     return
 
@@ -264,20 +265,23 @@ def _():
     # Own cell on purpose: nothing but a genuine model change should ever
     # invalidate the loader cells below.
     MODEL_PATH = "Qwen/Qwen2.5-Omni-3B"
-    return (MODEL_PATH,)
+    MODEL_REVISION = "f75b40e3da2003cdd6e1829b1f420ca70797c34e"
+    return MODEL_PATH, MODEL_REVISION
 
 
 @app.cell
 def _(PROJECT_DIR):
     VIDEO_PATH = PROJECT_DIR / "assets" / "02321.mp4"
+    SILENT_VIDEO_PATH = PROJECT_DIR / "assets" / "02321_silent.mp4"
 
     RESULTS_DIR = PROJECT_DIR / "notebook_results"
     RESULTS_DIR.mkdir(exist_ok=True)
     LOGIT_CSV_PATH = RESULTS_DIR / "logit_lens_audio_token_analysis.csv"
 
     assert VIDEO_PATH.is_file(), f"video not found: {VIDEO_PATH}"
+    assert SILENT_VIDEO_PATH.is_file(), f"silent control not found: {SILENT_VIDEO_PATH}"
     print("video:", VIDEO_PATH)
-    return LOGIT_CSV_PATH, VIDEO_PATH
+    return LOGIT_CSV_PATH, SILENT_VIDEO_PATH, VIDEO_PATH
 
 
 @app.cell
@@ -302,7 +306,9 @@ def _():
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## Preview the video (frames + embedded audio go to Qwen)
+    ### 1.3 Inspect the course reference clip
+
+    Qwen receives sampled frames together with the clip's embedded audio.
     """)
     return
 
@@ -316,13 +322,13 @@ def _(VIDEO_PATH, mo):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## Model and input helpers
+    ### 1.4 Load the model and prepare inputs
     """)
     return
 
 
-@app.cell
-def _(DEVICE, MODEL_PATH, PROJECT_DIR):
+@app.cell(hide_code=True)
+def _(DEVICE, MODEL_PATH, MODEL_REVISION, PROJECT_DIR):
     import csv
     from collections import Counter
 
@@ -342,17 +348,27 @@ def _(DEVICE, MODEL_PATH, PROJECT_DIR):
         create_token_type_mapping,
         register_logit_lens_hooks,
     )
+    from src.playground_clips import (
+        CLIP_CHOICES,
+        inspect_classroom_clip,
+        resolve_clip_selection,
+    )
 
     def load_model_and_processor(attn_implementation):
         _model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
-            MODEL_PATH, torch_dtype="auto", attn_implementation=attn_implementation
+            MODEL_PATH,
+            revision=MODEL_REVISION,
+            torch_dtype="auto",
+            attn_implementation=attn_implementation,
         )
         # Free the talker + (float32) token2wav BEFORE moving to GPU so they never
         # occupy VRAM — this experiment only needs the thinker.
         _model.disable_talker()
         _model = _model.to(DEVICE)
         _model.eval()
-        _proc = Qwen2_5OmniProcessor.from_pretrained(MODEL_PATH)
+        _proc = Qwen2_5OmniProcessor.from_pretrained(
+            MODEL_PATH, revision=MODEL_REVISION
+        )
         return _model, _proc
 
     # video_path/nframes are arguments, not closures: this cell must depend only
@@ -374,6 +390,7 @@ def _(DEVICE, MODEL_PATH, PROJECT_DIR):
         return _inputs, _types
 
     return (
+        CLIP_CHOICES,
         Counter,
         analyze_and_save_audio_logits_to_csv,
         block_attention,
@@ -381,33 +398,33 @@ def _(DEVICE, MODEL_PATH, PROJECT_DIR):
         create_attention_token_mapping,
         create_token_type_mapping,
         csv,
+        inspect_classroom_clip,
         load_model_and_processor,
         np,
         plt,
         prepare_video_inputs,
         register_logit_lens_hooks,
+        resolve_clip_selection,
     )
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(USE_PRECOMPUTED, load_model_and_processor, mo):
-    # Dedicated loader cell: depends only on the model constants, so tweaking
-    # prompts/rules/frames re-runs the experiments against this already-loaded
-    # instance instead of reloading ~7 GB of weights.
+    # One eager model serves both probes. Keeping separate SDPA + eager copies
+    # exhausted a 24 GB RTX 3090 during the fixed knockout run; logit-lens hooks
+    # work on the eager model too. Knob edits still reuse this one instance.
     if USE_PRECOMPUTED:
         logit_model, logit_processor = None, None
     else:
-        with mo.status.spinner(title="Loading Qwen2.5-Omni-3B (SDPA, first run downloads ~8 GB)…"):
-            logit_model, logit_processor = load_model_and_processor("sdpa")
+        with mo.status.spinner(title="Loading Qwen2.5-Omni-3B (eager, first run downloads ~8 GB)…"):
+            logit_model, logit_processor = load_model_and_processor("eager")
     return logit_model, logit_processor
 
 
-@app.cell
-def _(PRECOMPUTED_DIR, USE_PRECOMPUTED, load_model_and_processor, mo):
-    # Dedicated loader cell for the eager model (knockout hooks + both
-    # playgrounds). In precomputed mode a layer-count stub stands in so the
-    # playground forms can render; it cannot compute, and the forms fail loudly
-    # if submitted.
+@app.cell(hide_code=True)
+def _(PRECOMPUTED_DIR, USE_PRECOMPUTED, logit_model, logit_processor):
+    # Alias the one eager live model for knockout + playground work. In replay
+    # mode, a layer-count stub lets forms render but cannot compute.
     if USE_PRECOMPUTED:
         from src.precompute import StubModel as _StubModel
         from src.precompute import load_precompute as _load_pre
@@ -415,15 +432,14 @@ def _(PRECOMPUTED_DIR, USE_PRECOMPUTED, load_model_and_processor, mo):
         attention_model = _StubModel(_load_pre(PRECOMPUTED_DIR)["meta"].get("n_layers", 36))
         attention_processor = None
     else:
-        with mo.status.spinner(title="Loading Qwen2.5-Omni-3B (eager attention)…"):
-            attention_model, attention_processor = load_model_and_processor("eager")
+        attention_model, attention_processor = logit_model, logit_processor
     return attention_model, attention_processor
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(attention_model):
     # Submit-to-submit caches for the two playground forms, keyed on
-    # (clip name, clip bytes, nframes, prompt): "encode" holds prepared inputs +
+    # (clip SHA-256, nframes, prompt): "encode" holds prepared inputs +
     # token types, "caption" holds greedy caption ids for teacher forcing — so a
     # layer-band sweep re-encodes and re-captions nothing after the first ▶.
     # Depending on attention_model flushes them whenever the model is reloaded.
@@ -442,9 +458,20 @@ def _(attention_model):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## Logit Lens
+    ## 2. Guided demo
+
+    ### 2.1 Probe intermediate audio-position states
 
     A multimodal forward pass; the CSV analysis focuses on `audio` token positions.
+
+    **Measurement caveat.** This classroom lens takes each decoder layer's **raw
+    residual-stream output** and applies `lm_head` directly. It does **not** apply
+    the thinker's final RMSNorm first. Moreover, audio positions are multimodal
+    placeholder/feature positions, not positions with a calibrated next-token
+    language-model objective. The decoded token is therefore a diagnostic probe,
+    **not** the model's literal next-token prediction at that audio position. Treat
+    diversity as a pattern to explain and falsify with controls—not as a direct
+    measure of uncertainty, semantic quality, or fusion.
     """)
     return
 
@@ -454,6 +481,8 @@ def _(
     LOGIT_CSV_PATH,
     LOGIT_PROMPT,
     MAX_NEW_TOKENS,
+    MODEL_PATH,
+    MODEL_REVISION,
     NFRAMES,
     PRECOMPUTED_DIR,
     USE_PRECOMPUTED,
@@ -470,11 +499,21 @@ def _(
 ):
     if USE_PRECOMPUTED:
         from src.precompute import load_precompute as _load_pre
+        from src.precompute import validate_precompute_meta as _validate_pre
 
         _pre = _load_pre(PRECOMPUTED_DIR)
+        _validate_pre(
+            _pre["meta"],
+            clip=VIDEO_PATH.name,
+            nframes=NFRAMES,
+            logit_prompt=LOGIT_PROMPT,
+            max_new_tokens=MAX_NEW_TOKENS,
+            model=MODEL_PATH,
+            model_revision=MODEL_REVISION,
+        )
         logit_csv_written = _pre["logit_csv"]
         _logit_out = mo.vstack([
-            mo.callout(mo.md("**Replayed from cache** — precomputed, no GPU."), kind="neutral"),
+            mo.callout(mo.md("**Saved course replay** — no GPU."), kind="neutral"),
             mo.md(f"**Generated caption:**\n\n> {_pre['logit_caption']}"),
         ])
     else:
@@ -491,6 +530,11 @@ def _(
                 analyze_and_save_audio_logits_to_csv(
                     logit_model, logit_processor, logit_token_types, filename=str(LOGIT_CSV_PATH)
                 )
+                if not LOGIT_CSV_PATH.is_file():
+                    raise RuntimeError(
+                        "The fixed logit-lens run produced no CSV (usually no audio tokens); "
+                        "refusing to reuse a result from an earlier run."
+                    )
         finally:
             clear_logit_lens_hooks()
         logit_csv_written = LOGIT_CSV_PATH
@@ -507,8 +551,11 @@ def _(
                 _ids = logit_model.thinker.generate(
                     **logit_inputs, max_new_tokens=MAX_NEW_TOKENS, do_sample=False
                 )
+        _logit_prompt_len = logit_inputs["input_ids"].shape[1]
         _logit_caption = logit_processor.batch_decode(
-            _ids, skip_special_tokens=True, clean_up_tokenization_spaces=False
+            _ids[:, _logit_prompt_len:],
+            skip_special_tokens=True,
+            clean_up_tokenization_spaces=False,
         )[0]
         _logit_out = mo.md(f"**Generated caption:**\n\n> {_logit_caption}")
     _logit_out
@@ -518,7 +565,7 @@ def _(
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## Logit-lens diversity by layer
+    #### Result: probe-token diversity by layer
 
     Left: how many distinct decoded predictions appear across audio-token positions
     at each layer. Right: how dominant the most common prediction is.
@@ -546,7 +593,7 @@ def _(Counter, USE_PRECOMPUTED, csv, logit_csv_written, mo, np, plt):
         _ax.grid(axis="y", alpha=0.25)
     if USE_PRECOMPUTED:
         _div_out = mo.vstack([
-            mo.callout(mo.md("**Replayed from cache** — precomputed, no GPU."), kind="neutral"),
+            mo.callout(mo.md("**Saved course replay** — no GPU."), kind="neutral"),
             _fig,
         ])
     else:
@@ -558,10 +605,16 @@ def _(Counter, USE_PRECOMPUTED, csv, logit_csv_written, mo, np, plt):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## Attention Knockout
+    ### 2.2 Intervene on direct attention edges
 
     `KNOCKOUT_RULES` are `(source_type, target_type, start_layer, end_layer)` tuples.
     The default blocks generated tokens from attending to video tokens in layers 0–35.
+
+    This is a **direct-edge intervention**, not modality ablation: video tokens and
+    their residual-stream states remain present, and information can still travel
+    through unblocked layers, token types, and earlier indirect paths. A changed
+    caption is evidence about this particular edge set under this prompt; an
+    unchanged caption does not prove the modality was unused.
     """)
     return
 
@@ -651,6 +704,8 @@ def _(
     ATTENTION_PROMPT,
     KNOCKOUT_RULES,
     MAX_NEW_TOKENS,
+    MODEL_PATH,
+    MODEL_REVISION,
     NFRAMES,
     PRECOMPUTED_DIR,
     USE_PRECOMPUTED,
@@ -665,16 +720,29 @@ def _(
 ):
     if USE_PRECOMPUTED:
         from src.precompute import load_precompute as _load_pre
+        from src.precompute import validate_precompute_meta as _validate_pre
 
         _pre = _load_pre(PRECOMPUTED_DIR)
+        _validate_pre(
+            _pre["meta"],
+            clip=VIDEO_PATH.name,
+            nframes=NFRAMES,
+            attention_prompt=ATTENTION_PROMPT,
+            knockout_rules=[list(_rule) for _rule in KNOCKOUT_RULES],
+            max_new_tokens=MAX_NEW_TOKENS,
+            attention_capture_layers=list(ATTENTION_CAPTURE_LAYERS),
+            model=MODEL_PATH,
+            model_revision=MODEL_REVISION,
+        )
         baseline_text = _pre["baseline_text"]
         knockout_text = _pre["knockout_text"]
-        attention_summary = _pre["attention_summary"]
+        baseline_attention_summary = _pre["baseline_attention_summary"]
+        knockout_attention_summary = _pre["knockout_attention_summary"]
         attention_token_types = _pre["attention_token_types"]
         attention_inputs = None
         attention_baseline_ids = None
         _ko_rules = _pre["knockout_rules"]
-        _ko_banner = mo.callout(mo.md("**Replayed from cache** — precomputed, no GPU."), kind="neutral")
+        _ko_banner = mo.callout(mo.md("**Saved course replay** — no GPU."), kind="neutral")
     else:
         from src.precompute import summarize_attention as _summarize_attention
 
@@ -683,20 +751,31 @@ def _(
             VIDEO_PATH, NFRAMES,
         )
 
-        with mo.status.spinner(title="Baseline generation…"):
-            with torch.no_grad():
-                # Thinker-direct generation (see the logit cell): avoids the omni
-                # wrapper's talker requirement. Knockout hooks live on the thinker's
-                # layers, so they still fire below. Greedy (do_sample=False) so the
-                # baseline caption — reused as C by the teacher-forced cell below —
-                # is deterministic.
-                _base = attention_model.thinker.generate(
-                    **attention_inputs, max_new_tokens=MAX_NEW_TOKENS, do_sample=False,
-                    return_dict_in_generate=True,
-                )
-        attention_baseline_ids = _base.sequences
+        with block_attention(
+            attention_model, [], attention_token_types, len(attention_token_types),
+            track_attention=True, capture_layer_range=ATTENTION_CAPTURE_LAYERS,
+        ) as _base_cap:
+            with mo.status.spinner(title="Baseline generation + attention capture…"):
+                with torch.no_grad():
+                    # Thinker-direct generation (see the logit cell): avoids the omni
+                    # wrapper's talker requirement. Greedy decoding makes the baseline
+                    # caption reused by teacher forcing deterministic.
+                    _base_ids = attention_model.thinker.generate(
+                        **attention_inputs, max_new_tokens=MAX_NEW_TOKENS,
+                        do_sample=False,
+                        return_dict_in_generate=False,
+                    )
+            _base_captured = {layer: list(v) for layer, v in _base_cap.items()}
+        baseline_attention_summary = _summarize_attention(
+            _base_captured, attention_token_types, decode_only=True
+        )
+        del _base_captured
+        attention_baseline_ids = _base_ids
+        _attention_prompt_len = attention_inputs["input_ids"].shape[1]
         baseline_text = attention_processor.batch_decode(
-            _base.sequences, skip_special_tokens=True, clean_up_tokenization_spaces=False
+            _base_ids[:, _attention_prompt_len:],
+            skip_special_tokens=True,
+            clean_up_tokenization_spaces=False,
         )[0]
 
         with block_attention(
@@ -705,17 +784,21 @@ def _(
         ) as _cap:
             with mo.status.spinner(title="Knockout generation…"):
                 with torch.no_grad():
-                    _ko = attention_model.thinker.generate(
+                    _ko_ids = attention_model.thinker.generate(
                         **attention_inputs, max_new_tokens=MAX_NEW_TOKENS, do_sample=False,
-                        output_attentions=True, return_dict_in_generate=True,
+                        return_dict_in_generate=False,
                     )
             _captured = {layer: list(v) for layer, v in _cap.items()}
         knockout_text = attention_processor.batch_decode(
-            _ko.sequences, skip_special_tokens=True, clean_up_tokenization_spaces=False
+            _ko_ids[:, _attention_prompt_len:],
+            skip_special_tokens=True,
+            clean_up_tokenization_spaces=False,
         )[0]
-        # Reduce to the plot-ready matrix now, so the heatmap cell consumes the
-        # same shape whether live or replayed (raw tensors are never committed).
-        attention_summary = _summarize_attention(_captured, attention_token_types)
+        # Reduce to plot-ready matrices now, so the heatmap consumes the same
+        # shape live and replayed (raw tensors are never committed).
+        knockout_attention_summary = _summarize_attention(
+            _captured, attention_token_types, decode_only=True
+        )
         _ko_rules = KNOCKOUT_RULES
         _ko_banner = None
 
@@ -730,9 +813,10 @@ def _(
     _ko_display
     return (
         attention_baseline_ids,
+        baseline_attention_summary,
         attention_inputs,
-        attention_summary,
         attention_token_types,
+        knockout_attention_summary,
         knockout_text,
     )
 
@@ -740,38 +824,81 @@ def _(
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## Captured attention by key modality
+    #### Descriptive check: baseline vs knockout attention
 
     A **descriptive** summary (not causal importance): for each captured layer we
-    average heads and sum the final query's attention over each token group. Read it
-    alongside the baseline-vs-knockout text above.
+    average heads and **autoregressive decode steps**, then sum each generated-token
+    query's attention over token groups. The prompt-prefill snapshot is excluded so
+    a `generated → video` mask has the same query semantics throughout. The two
+    conditions use the same scale; the delta is `knockout − baseline`. Attention
+    redistribution is an expected mechanical consequence of masking and is not by
+    itself evidence that a modality supplied semantic information.
     """)
     return
 
 
 @app.cell
-def _(attention_summary, mo, np, plt):
-    # `attention_summary` is `(layers, modalities, matrix)` — computed live from
-    # captured tensors, or loaded from the committed matrix in USE_PRECOMPUTED
-    # mode. Same shape either way, so the plot below is unchanged.
-    if attention_summary is None:
+def _(baseline_attention_summary, knockout_attention_summary, mo, np, plt):
+    if knockout_attention_summary is None:
         _out = mo.md("> No attention tensors were returned by this build; the text comparison above is the result.")
-    else:
-        _layers, _mods, _mat = attention_summary
+    elif baseline_attention_summary is None:
+        _layers, _mods, _mat = knockout_attention_summary
         _mat = np.asarray(_mat, dtype=float)
-        _fig, _ax = plt.subplots(figsize=(8, max(3, len(_layers) * 0.6)), constrained_layout=True)
+        _fig, _ax = plt.subplots(
+            figsize=(8, max(3, len(_layers) * 0.6)), constrained_layout=True
+        )
         _im = _ax.imshow(_mat, aspect="auto", cmap="magma")
         _ax.set(
-            title="Captured final-query attention mass by key modality",
+            title="Knockout attention (legacy cache has no baseline)",
             xlabel="Key modality", ylabel="Thinker layer",
             xticks=np.arange(len(_mods)), xticklabels=_mods,
             yticks=np.arange(len(_layers)), yticklabels=_layers,
         )
-        for _ri in range(_mat.shape[0]):
-            for _ci in range(_mat.shape[1]):
-                _ax.text(_ci, _ri, f"{_mat[_ri, _ci]:.2f}", ha="center", va="center", color="white", fontsize=9)
         _fig.colorbar(_im, ax=_ax, label="Attention mass")
         _out = _fig
+    else:
+        _layers, _mods, _base_mat = baseline_attention_summary
+        _ko_layers, _ko_mods, _ko_mat = knockout_attention_summary
+        if _layers != _ko_layers or _mods != _ko_mods:
+            _out = mo.callout(
+                mo.md("**Attention summaries cannot be compared:** layer/modality axes differ."),
+                kind="danger",
+            )
+        else:
+            _base_mat = np.asarray(_base_mat, dtype=float)
+            _ko_mat = np.asarray(_ko_mat, dtype=float)
+            _delta_mat = _ko_mat - _base_mat
+            _mass_max = max(1e-9, float(max(_base_mat.max(), _ko_mat.max())))
+            _delta_max = max(1e-9, float(np.abs(_delta_mat).max()))
+            _fig, _axes = plt.subplots(
+                1, 3, figsize=(16, max(3, len(_layers) * 0.6)), constrained_layout=True
+            )
+            _ims = [
+                _axes[0].imshow(_base_mat, aspect="auto", cmap="magma", vmin=0, vmax=_mass_max),
+                _axes[1].imshow(_ko_mat, aspect="auto", cmap="magma", vmin=0, vmax=_mass_max),
+                _axes[2].imshow(
+                    _delta_mat, aspect="auto", cmap="RdBu", vmin=-_delta_max, vmax=_delta_max
+                ),
+            ]
+            for _ax, _title, _mat in zip(
+                _axes,
+                ("Baseline", "Knockout", "Δ knockout − baseline"),
+                (_base_mat, _ko_mat, _delta_mat),
+            ):
+                _ax.set(
+                    title=_title, xlabel="Key modality", ylabel="Thinker layer",
+                    xticks=np.arange(len(_mods)), xticklabels=_mods,
+                    yticks=np.arange(len(_layers)), yticklabels=_layers,
+                )
+                for _ri in range(_mat.shape[0]):
+                    for _ci in range(_mat.shape[1]):
+                        _ax.text(
+                            _ci, _ri, f"{_mat[_ri, _ci]:+.2f}" if _title.startswith("Δ") else f"{_mat[_ri, _ci]:.2f}",
+                            ha="center", va="center", color="white", fontsize=8,
+                        )
+            _fig.colorbar(_ims[1], ax=_axes[:2], label="Attention mass")
+            _fig.colorbar(_ims[2], ax=_axes[2], label="Δ attention mass")
+            _out = _fig
     _out
     return
 
@@ -779,19 +906,21 @@ def _(attention_summary, mo, np, plt):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## Teacher-forced Δ log-likelihood (fixed parameters)
+    ### 2.3 Quantify edge sensitivity with teacher forcing
 
     The string diff above is **visceral but binary** — you can't see a *small*
     effect, and it depends on how generation happens to continue. This cell asks
     the same question as a **measurement**: it feeds the baseline caption back in
-    tagged `answer` and scores, per token, **how much less the model believes what
-    it said** when the answer is cut off from the same target modality as
+    tagged `answer` and scores, per token, how its assigned probability changes
+    when the answer's direct attention edges to the same target token type as
     `KNOCKOUT_RULES` (same clip, same prompt, same layers — only the source becomes
     `answer`, because the caption is now *input*, not generation).
 
     **Δ = knockout − baseline** per caption token; *negative = believed less = hot
-    color*. The 🎯 playground section below runs the same measurement on your own
-    clip, prompt, and layer band.
+    color*. We show both the additive total and the length-normalized mean. Use the
+    mean for cross-clip comparisons, while remembering that different clips may
+    generate semantically different captions. The 🎯 playground below runs the
+    same measurement on your own clip, prompt, and layer band.
     """)
     return
 
@@ -811,8 +940,9 @@ def _(
         fixed_tf_result = None
         _fixed_out = mo.callout(
             mo.md(
-                "**Teacher forcing needs the live model** — this cell is skipped while "
-                "`USE_PRECOMPUTED=True`. (Cached replay of this measurement lands with F5b.)"
+                "**Teacher forcing needs the live model.** This measurement is not "
+                "included in saved-result replay; attach a GPU and set "
+                "`USE_PRECOMPUTED=False` to run it."
             ),
             kind="warn",
         )
@@ -847,6 +977,7 @@ def _(
         if fixed_tf_result is not None:
             _fixed_delta = [float(x) for x in fixed_tf_result["delta"].detach().cpu().float().tolist()]
             _fixed_total = fixed_tf_result["delta_total"]
+            _fixed_mean = fixed_tf_result["delta_mean"]
             _fixed_rule_txt = " + ".join(f"`answer→{_r[1]}` [{_r[2]},{_r[3]})" for _r in _fixed_rules)
             _fixed_out = mo.vstack([
                 mo.md(f"**Knockout** {_fixed_rule_txt} &nbsp;·&nbsp; baseline caption teacher-forced as `answer`"),
@@ -859,13 +990,20 @@ def _(
                         bordered=True,
                     ),
                     mo.stat(
+                        value=f"{_fixed_mean:+.3f}",
+                        label="Mean Δ / token (nats)",
+                        caption="length-normalized comparison",
+                        direction="decrease" if _fixed_mean < 0 else "increase",
+                        bordered=True,
+                    ),
+                    mo.stat(
                         value=str(len(_fixed_delta)),
                         label="Caption tokens scored",
                         caption="greedy baseline, teacher-forced",
                         bordered=True,
                     ),
                 ], widths="equal", gap=1),
-                mo.md("###### Per-token Δ log-likelihood (hover a word for its tokens' nats)"),
+                mo.md("#### Per-token Δ log-likelihood"),
                 mo.Html(
                     "<div style='line-height:2.1;font-family:monospace;font-size:15px'>"
                     + _fixed_strip(fixed_tf_result["caption_tokens"], _fixed_delta)
@@ -879,26 +1017,43 @@ def _(
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## Wrap-up
+    ## 3. Research playground
+
+    The guided demo used one shared reference so the class could interpret the
+    same evidence. Now work in short experimental cycles:
+
+    1. **Prediction before ▶** — state a directional result that could be wrong.
+    2. **Intervention** — change one variable and keep the rest fixed.
+    3. **Observation** — report the metric before telling a mechanism story.
+    4. **Verdict** — supported, refuted, or not tested?
+    5. **Next control** — name a rival explanation and a result that separates it.
+
+    Record each cycle in `avllm_interpretability/WORKSHEET.md`.
     """)
     return
 
 
-@app.cell
-def _(knockout_text, logit_csv_written, mo):
+@app.cell(hide_code=True)
+def _(USE_PRECOMPUTED, knockout_text, logit_csv_written, mo):
     _ = knockout_text  # depend on the knockout run
     _ok = logit_csv_written.is_file() and logit_csv_written.stat().st_size > 0
+    _teacher_forcing_status = (
+        "- Teacher forcing: **skipped in GPU-free replay** (the guided logit-lens, "
+        "caption knockout, and attention panels are saved).\n\n"
+        if USE_PRECOMPUTED
+        else "- Baseline vs knockout compared, and the caption scored under teacher forcing, above.\n\n"
+    )
     mo.md(
-        f"### Done — the fixed run ends here; the exploration starts below\n\n"
-        f"- Logit-lens CSV written: **{_ok}** — `{logit_csv_written}`\n"
-        f"- Baseline vs knockout compared, and the caption scored under teacher forcing, above.\n\n"
-        "Two interactive sections follow, each with suggested missions in its intro:\n\n"
+        f"**Guided demo complete — now test your own hypotheses.**\n\n"
+        f"- Logit-lens result available: **{_ok}** — `{logit_csv_written}`\n"
+        f"{_teacher_forcing_status}"
+        "Two interactive sections follow, each with investigation routes in its intro:\n\n"
         "- **🎛️ Diversity scoreboard** — how do the *audio positions* respond to your "
         "prompt, clip, and knockout choices?\n"
-        "- **🎯 Teacher forcing** — how much less does the model *believe its own caption* "
-        "when you cut a pathway — and on **your** clip, which words lose the belief?\n\n"
-        "Form the hypothesis first, then press ▶. (You can also edit `KNOCKOUT_RULES`, "
-        "`NFRAMES`, or `VIDEO_PATH` in the parameters cell to change the fixed run itself.)"
+        "- **🎯 Teacher forcing** — how does caption log-likelihood change when you "
+        "block a direct edge set—and on **your** clip, which tokens move most?\n\n"
+        "Form the hypothesis first, then press ▶. To redesign the shared reference "
+        "experiment itself, edit `KNOCKOUT_RULES`, `NFRAMES`, or `VIDEO_PATH` above."
     )
     return
 
@@ -906,10 +1061,9 @@ def _(knockout_text, logit_csv_written, mo):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## 🎛️ Interactive: logit-lens diversity scoreboard
+    ### 3.1 Audio-position probe diversity
 
-    Everything above ran once with the fixed parameters. This section turns the
-    **logit-lens diversity** measurement into a live playground: pick a clip, the
+    Turn the **logit-lens diversity** measurement into a live experiment: pick a clip, the
     number of frames, the prompt, and (optionally) an attention knockout to apply
     **during** the forward pass, then submit to score every thinker layer by how
     many *distinct* tokens it decodes across the audio-token positions.
@@ -922,32 +1076,33 @@ def _(mo):
     source reshape it most directly (a `generated` source does nothing in a forward
     pass). Build one rule with the dropdowns, or enter several in the advanced field.
 
-    ### What to try (predict the trend *before* you press ▶)
+    #### Investigation routes
 
     - **Steer the prompt, touch nothing else.** Run the same clip with *"describe
       what you **hear**"* and then *"describe what you **see**"* — no knockout.
       Hypothesis first: should what the prompt asks for change what the *audio
-      positions* decode, before any pathway is cut? Whatever you find is a finding.
-    - **Hunt the fusion band.** Knock out `audio → video` over `[0, 12)`, then
-      `[12, 24)`, then `[24, 36)`. Which band moves the Δ trend the most — early,
-      middle, or late? What would each answer imply about *where* the visual stream
-      touches the audio representations?
+      positions* decode, before any pathway is cut? State what result would refute
+      your prompt-steering explanation.
+    - **Test a candidate cross-modal edge band.** Knock out `audio → video` over
+      `[0, 12)`, then `[12, 24)`, then `[24, 36)`. Which band moves the Δ trend
+      most? Now try to falsify the "fusion" interpretation: can prompt sensitivity,
+      attention renormalization, or a different edge rule reproduce the change?
     - **Starve the stream.** Stack `audio,video,0,36 ; audio,query_text,0,36` in the
       advanced field. Is the effect of cutting both neighbors the sum of cutting
       each alone — and what would it mean if it isn't?
 
-    A flat Δ is a result too — record it. And be careful *reading* a big one: a
-    diversity shift tells you the representations changed, not by itself *why*
-    (that question gets its own week). Log every run in the lab worksheet
-    (`avllm_interpretability/WORKSHEET.md`): hypothesis **before** ▶, result,
-    verdict. The full experiment catalog is in the repo's
-    `avllm_interpretability/README.md`.
+    A flat Δ is a result too — record it. And be careful *reading* a big one:
+    diversity is only the count of distinct argmax probe tokens. A shift does not
+    prove fusion, grounding, or even improved/worsened representations. For every
+    effect, write one rival explanation and one control that could make your claim
+    fail. The experiment catalog in `avllm_interpretability/README.md` offers
+    further contrasts after you complete one controlled cycle here.
     """)
     return
 
 
-@app.cell
-def _(KNOCKOUT_RULES, LOGIT_PROMPT, NFRAMES, attention_model, mo):
+@app.cell(hide_code=True)
+def _(CLIP_CHOICES, KNOCKOUT_RULES, LOGIT_PROMPT, NFRAMES, attention_model, mo):
     _n_layers = len(attention_model.thinker.model.layers)
     _modalities = ["audio", "video", "query_text", "image", "generated"]
     # Scoreboard-appropriate defaults: the source must be a modality that is
@@ -963,8 +1118,22 @@ def _(KNOCKOUT_RULES, LOGIT_PROMPT, NFRAMES, attention_model, mo):
         f"pass). Layer `end` is exclusive; this thinker has **{_n_layers}** layers, so "
         f"`[0, {_n_layers})` spans all of them."
     )
+
+    def _validate(_value):
+        if not _value or not _value["hypothesis"].strip():
+            return "Write a falsifiable prediction before running."
+        if not _value["prompt"].strip():
+            return "Enter a non-empty prompt."
+        return None
+
     _template = (
-        "**Video** — upload `mp4 / mov / mkv / webm`, or leave empty to reuse the default clip:\n\n"
+        "**Prediction before ▶** — state a direction or contrast that could be wrong:\n\n"
+        "{hypothesis}\n\n"
+        "**Clip** {clip_choice}\n\n"
+        "Choose **Default**, the matched **Silent control**, or **Upload**. "
+        "Uploads must be ≤250 MB, ≤120 s, ≤1080p/60 FPS, use ≤1.5 GB estimated "
+        "decoded-frame memory, be decodable, and contain both video and audio "
+        "(`mp4 / mov / mkv / webm / avi`):\n\n"
         "{video}\n\n"
         "**Frames sampled from the clip** {nframes}\n\n"
         "**Prompt** {prompt}\n\n"
@@ -979,10 +1148,20 @@ def _(KNOCKOUT_RULES, LOGIT_PROMPT, NFRAMES, attention_model, mo):
     )
 
     scoreboard_controls = mo.md(_template).batch(
+        hypothesis=mo.ui.text_area(
+            placeholder=(
+                "e.g. Blocking audio→video in middle layers will change diversity "
+                "more than the silent-control contrast; a flat or reversed effect refutes this."
+            ),
+            rows=2,
+            full_width=True,
+        ),
+        clip_choice=mo.ui.dropdown(CLIP_CHOICES, value="Default"),
         video=mo.ui.file(
             filetypes=[".mp4", ".mov", ".mkv", ".webm", ".avi"],
             multiple=False,
             kind="area",
+            max_size=250_000_000,
         ),
         nframes=mo.ui.slider(
             2, 32, step=2, value=NFRAMES, show_value=True, include_input=True
@@ -1001,16 +1180,18 @@ def _(KNOCKOUT_RULES, LOGIT_PROMPT, NFRAMES, attention_model, mo):
     ).form(
         submit_button_label="▶ Run logit-lens diversity",
         bordered=True,
+        validate=_validate,
     )
     scoreboard_controls
     return (scoreboard_controls,)
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(
     Counter,
     LOGIT_CSV_PATH,
     LOGIT_PROMPT,
+    SILENT_VIDEO_PATH,
     VIDEO_PATH,
     analyze_and_save_audio_logits_to_csv,
     attention_model,
@@ -1026,6 +1207,8 @@ def _(
     playground_caches,
     plt,
     register_logit_lens_hooks,
+    resolve_clip_selection,
+    inspect_classroom_clip,
     torch,
 ):
     from contextlib import nullcontext as _nullcontext
@@ -1043,13 +1226,34 @@ def _(
 
     _results_dir = LOGIT_CSV_PATH.parent
 
-    # Resolve the video: an uploaded clip wins, otherwise reuse the default sample.
+    # Resolve an explicit clip choice. Uploads are persisted under a digest-derived
+    # filename; their original names never become filesystem paths or cache keys.
     _uploads = _p["video"]
-    if _uploads and _uploads[0].contents:
-        _video_path = _results_dir / f"uploaded_{_uploads[0].name}"
-        _video_path.write_bytes(_uploads[0].contents)
-    else:
-        _video_path = VIDEO_PATH
+    _upload = _uploads[0] if _uploads and _uploads[0].contents else None
+    _clip_error = None
+    try:
+        _resolved_clip = resolve_clip_selection(
+            _p["clip_choice"],
+            default_path=VIDEO_PATH,
+            silent_path=SILENT_VIDEO_PATH,
+            upload_dir=_results_dir / "uploads",
+            upload_name=_upload.name if _upload is not None else None,
+            upload_contents=_upload.contents if _upload is not None else None,
+        )
+        _clip_inspection = inspect_classroom_clip(_resolved_clip.path)
+    except Exception as _e:  # noqa: BLE001 — media parser errors belong in the UI
+        _resolved_clip, _clip_inspection, _clip_error = None, None, str(_e)
+    mo.stop(
+        _clip_error is not None,
+        mo.callout(mo.md(f"**Clip selection failed** — {_clip_error}"), kind="danger"),
+    )
+    _video_path = _resolved_clip.path
+    _clip_cache_id = _resolved_clip.cache_id
+    _clip_duration_text = (
+        f"{_clip_inspection.duration_seconds:.1f}s"
+        if _clip_inspection.duration_seconds is not None
+        else "duration unknown"
+    )
     _nframes = int(_p["nframes"])
     _prompt = _p["prompt"].strip() or LOGIT_PROMPT
 
@@ -1097,10 +1301,10 @@ def _(
     )
     _compare = bool(_p["compare"])
 
-    def _prep(video_path, nframes, prompt):
+    def _prep(video_path, clip_cache_id, nframes, prompt):
         # Encoding (video decode + feature extraction) dominates a submit when
         # only the rule/layer band changed — cache it across ▶ presses.
-        _key = (video_path.name, video_path.stat().st_size, nframes, prompt)
+        _key = (clip_cache_id, nframes, prompt)
         if _key in playground_caches["encode"]:
             return playground_caches["encode"][_key]
         _conv = [{"role": "user", "content": [
@@ -1162,7 +1366,9 @@ def _(
         with mo.status.spinner(
             title=f"Logit-lens forward pass · {_nframes} frames · {_video_path.name}…"
         ):
-            _inp, _types = _prep(_video_path, _nframes, _prompt)  # encode the clip once
+            _inp, _types = _prep(
+                _video_path, _clip_cache_id, _nframes, _prompt
+            )  # encode the clip once
             if _rules:
                 _ko_u, _ko_d, _n_audio = _run_pass(_rules, "knockout", _inp, _types)
                 _bl_u, _bl_d = (None, None)
@@ -1281,12 +1487,15 @@ def _(
             ))
         _children += [
             mo.md(
-                f"**Video** `{_video_path.name}` &nbsp;·&nbsp; **Frames** {_nframes} "
+                f"**Prediction recorded before run:** {_p['hypothesis']}  \n"
+                f"**Clip** {_resolved_clip.choice}: `{_video_path.name}` "
+                f"({_clip_duration_text}) "
+                f"&nbsp;·&nbsp; **Frames** {_nframes} "
                 f"&nbsp;·&nbsp; **Prompt** _{_prompt}_ &nbsp;·&nbsp; **Knockout** {_rule_txt}"
             ),
             mo.hstack(_stats, widths="equal", gap=1),
             _fig,
-            mo.md("###### Layers ranked by decoded-prediction diversity (higher = more distinct audio-token predictions)"),
+            mo.md("#### Layers ranked by decoded-prediction diversity"),
             _table,
         ]
         _scoreboard = mo.vstack(_children)
@@ -1297,59 +1506,88 @@ def _(
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## 🎯 Interactive: teacher-forced Δ log-likelihood
+    ### 3.2 Teacher-forced edge sensitivity
 
     The diversity scoreboard above runs one forward pass over the **prompt**, so —
     exactly like `generated` — an **`answer`** source is inert there (there are no
     answer tokens to block). This section closes that gap. It generates the caption
-    once, feeds it back in tagged **`answer`**, and measures **how much less the
-    model believes what it said** when the answer is forbidden from attending to a
-    modality.
+    once, feeds it back in tagged **`answer`**, and measures how its token
+    log-likelihood changes when answer queries are forbidden from directly
+    attending to one target token type in a chosen layer band.
 
     The metric is **Δ log-likelihood, `knockout − baseline`** — *negative* means the
-    model believed its own caption **less** after the knockout, i.e. that pathway was
-    holding the caption up. Unlike the free-generation string diff above it is
+    model assigned its own caption less probability after these direct edges were
+    blocked. This is consistent with reliance on the edge set, but attention
+    renormalization and indirect pathways remain rival explanations. Unlike the
+    free-generation string diff above it is
     **continuous** (you can see a *small* effect) and **deterministic** (greedy
-    caption, forward-only scoring). Nothing runs until you press ▶.
+    caption, forward-only scoring). Compare clips using **mean Δ/token**, not only
+    total Δ; even then, their captions may differ semantically. Nothing runs until
+    you press ▶.
 
-    ### What to try (predict the sign and the size *before* you press ▶)
+    #### Investigation routes
 
     - **Sight vs. sound, in nats.** Same clip, same prompt: run `answer → audio`,
       then `answer → video`. Which Δ is more negative — and does that agree with
       which knockout changed the *free-generated* caption more in the knockout cell above?
       If the binary diff and the continuous measurement disagree, which do you
       believe, and why?
-    - **Where does the caption's audio grounding live?** Keep `answer → audio` and
+    - **Which layer band is this score sensitive to?** Keep `answer → audio` and
       narrow the layer band: `[0, 12)`, `[12, 24)`, `[24, 36)`. Which band costs the
-      caption the most belief? Compare with the fusion band you found in 🎛️ — do the
-      layers that *build* the audio representation match the layers the *answer*
-      reads it from?
+      caption the most log-likelihood? Compare with 🎛️, then name at least one
+      explanation that does **not** require a localized "fusion module."
     - **Bring your own clip — make the modalities disagree.** The most interesting
       trends come from clips where sound and sight tell different stories (narration
       over unrelated footage, a music video with off-screen audio, dubbed speech).
-      Upload one, caption it, and knock out `answer → audio` vs `answer → video`:
-      which sense was the caption actually standing on? Hover the colored strip —
-      *which words* lose the belief?
+      Upload one, caption it, and knock out `answer → audio` vs `answer → video`.
+      Which edge set changes mean Δ/token more, and can a silent or mismatched control
+      falsify the tempting modality-reliance story? Hover the colored strip to find
+      which words move.
 
-    > **The control that keeps you honest.** Upload `assets/02321_silent.mp4` (the
-    > same frames, but the audio track is digital silence) and run `answer → audio`:
-    > the audio tokens exist but carry no signal, so Δ should be ≈ 0. Compare against
-    > the default clip (real soundtrack), same prompt and layers — a real audio
-    > dependency shows up as a clearly larger negative Δ. Pair *every* interesting
-    > effect you find above with a control like this: a control that *can* fail is
-    > the whole point. Log each run in `avllm_interpretability/WORKSHEET.md` —
-    > hypothesis **before** ▶, result, verdict; its last block is the exact
-    > question your final project is graded on.
+    > **The control that keeps you honest.** Choose **Silent control** (the same
+    > frames, but the audio track is digital silence) and run `answer → audio`:
+    > audio tokens still exist, so **predict** whether Δ should approach zero. Silence
+    > is not guaranteed to be a perfect null: preprocessing, positional effects, and
+    > mask renormalization remain. Compare against the default clip with all other
+    > settings fixed. Pair *every* interesting effect with a control and state what
+    > observation would falsify your interpretation.
     """)
     return
 
 
-@app.cell
-def _(LOGIT_PROMPT, NFRAMES, attention_model, mo):
+@app.cell(hide_code=True)
+def _(
+    ATTENTION_PROMPT,
+    CLIP_CHOICES,
+    KNOCKOUT_RULES,
+    NFRAMES,
+    attention_model,
+    mo,
+):
     _n_layers = len(attention_model.thinker.model.layers)
     _tf_targets = ["audio", "video", "query_text", "image"]
+    _fixed_rule = KNOCKOUT_RULES[0] if KNOCKOUT_RULES else ("generated", "video", 0, _n_layers)
+    _tf_default_target = _fixed_rule[1] if _fixed_rule[1] in _tf_targets else "video"
+    _tf_default_layers = [
+        max(0, int(_fixed_rule[2])), min(_n_layers, int(_fixed_rule[3]))
+    ]
+
+    def _validate(_value):
+        if not _value or not _value["hypothesis"].strip():
+            return "Write a falsifiable prediction before running."
+        if not _value["prompt"].strip():
+            return "Enter a non-empty prompt."
+        return None
+
     _tf_template = (
-        "**Video** — upload `mp4 / mov / mkv / webm`, or leave empty to reuse the default clip:\n\n"
+        "*Defaults mirror the guided teacher-forcing demo above.*\n\n"
+        "**Prediction before ▶** — state the expected sign or token-level contrast:\n\n"
+        "{hypothesis}\n\n"
+        "**Clip** {clip_choice}\n\n"
+        "Choose **Default**, the matched **Silent control**, or **Upload**. "
+        "Uploads must be ≤250 MB, ≤120 s, ≤1080p/60 FPS, use ≤1.5 GB estimated "
+        "decoded-frame memory, be decodable, and contain both video and audio "
+        "(`mp4 / mov / mkv / webm / avi`):\n\n"
         "{video}\n\n"
         "**Frames sampled from the clip** {nframes}\n\n"
         "**Prompt** {prompt}\n\n"
@@ -1359,21 +1597,41 @@ def _(LOGIT_PROMPT, NFRAMES, attention_model, mo):
         f"**{_n_layers}** layers, `end` exclusive.)"
     )
     teacher_forcing_controls = mo.md(_tf_template).batch(
+        hypothesis=mo.ui.text_area(
+            placeholder=(
+                "e.g. answer→audio will reduce mean log-likelihood more on the "
+                "sound clip than on silence; the opposite result refutes this."
+            ),
+            rows=2,
+            full_width=True,
+        ),
+        clip_choice=mo.ui.dropdown(CLIP_CHOICES, value="Default"),
         video=mo.ui.file(
-            filetypes=[".mp4", ".mov", ".mkv", ".webm", ".avi"], multiple=False, kind="area"
+            filetypes=[".mp4", ".mov", ".mkv", ".webm", ".avi"],
+            multiple=False,
+            kind="area",
+            max_size=250_000_000,
         ),
         nframes=mo.ui.slider(2, 32, step=2, value=NFRAMES, show_value=True, include_input=True),
-        prompt=mo.ui.text(value=LOGIT_PROMPT, full_width=True),
-        target=mo.ui.dropdown(_tf_targets, value="audio"),
-        layers=mo.ui.range_slider(0, _n_layers, step=1, value=[0, _n_layers], show_value=True),
-    ).form(submit_button_label="▶ Run teacher-forced Δ log-lik", bordered=True)
+        prompt=mo.ui.text(value=ATTENTION_PROMPT, full_width=True),
+        target=mo.ui.dropdown(_tf_targets, value=_tf_default_target),
+        layers=mo.ui.range_slider(
+            0, _n_layers, step=1, value=_tf_default_layers, show_value=True
+        ),
+    ).form(
+        submit_button_label="▶ Run teacher-forced Δ log-lik",
+        bordered=True,
+        validate=_validate,
+    )
     teacher_forcing_controls
     return (teacher_forcing_controls,)
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(
-    LOGIT_PROMPT,
+    ATTENTION_PROMPT,
+    LOGIT_CSV_PATH,
+    SILENT_VIDEO_PATH,
     VIDEO_PATH,
     attention_model,
     attention_processor,
@@ -1382,10 +1640,10 @@ def _(
     mo,
     np,
     playground_caches,
+    inspect_classroom_clip,
+    resolve_clip_selection,
     teacher_forcing_controls,
 ):
-    from pathlib import Path as _Path
-
     from qwen_omni_utils import process_mm_info as _tf_mm_info
 
     from src.teacher_forcing import render_delta_strip as _render_strip
@@ -1400,23 +1658,45 @@ def _(
         ),
     )
 
-    # Resolve the clip: an uploaded file wins, else reuse the sample.
+    # Resolve the explicit choice with the same safe content-addressed helper
+    # used by 🎛️, so the two playgrounds also share cache identities.
     _tf_uploads = _tp["video"]
-    if _tf_uploads and _tf_uploads[0].contents:
-        _tf_video = _Path(VIDEO_PATH).parent / "notebook_results" / f"tf_upload_{_tf_uploads[0].name}"
-        _tf_video.parent.mkdir(exist_ok=True)
-        _tf_video.write_bytes(_tf_uploads[0].contents)
-    else:
-        _tf_video = _Path(VIDEO_PATH)
+    _tf_upload = _tf_uploads[0] if _tf_uploads and _tf_uploads[0].contents else None
+    _tf_clip_error = None
+    try:
+        _tf_resolved_clip = resolve_clip_selection(
+            _tp["clip_choice"],
+            default_path=VIDEO_PATH,
+            silent_path=SILENT_VIDEO_PATH,
+            upload_dir=LOGIT_CSV_PATH.parent / "uploads",
+            upload_name=_tf_upload.name if _tf_upload is not None else None,
+            upload_contents=_tf_upload.contents if _tf_upload is not None else None,
+        )
+        _tf_clip_inspection = inspect_classroom_clip(_tf_resolved_clip.path)
+    except Exception as _e:  # noqa: BLE001 — media parser errors belong in the UI
+        _tf_resolved_clip, _tf_clip_inspection, _tf_clip_error = None, None, str(_e)
+    mo.stop(
+        _tf_clip_error is not None,
+        mo.callout(
+            mo.md(f"**Clip selection failed** — {_tf_clip_error}"), kind="danger"
+        ),
+    )
+    _tf_video = _tf_resolved_clip.path
+    _tf_clip_cache_id = _tf_resolved_clip.cache_id
+    _tf_duration_text = (
+        f"{_tf_clip_inspection.duration_seconds:.1f}s"
+        if _tf_clip_inspection.duration_seconds is not None
+        else "duration unknown"
+    )
     _tf_nframes = int(_tp["nframes"])
-    _tf_prompt = _tp["prompt"].strip() or LOGIT_PROMPT
+    _tf_prompt = _tp["prompt"].strip() or ATTENTION_PROMPT
     _tf_lo, _tf_hi = int(_tp["layers"][0]), int(_tp["layers"][1])
     _tf_rules = [("answer", _tp["target"], _tf_lo, _tf_hi)]
 
-    def _tf_prep(video_path, nframes, prompt):
+    def _tf_prep(video_path, clip_cache_id, nframes, prompt):
         # Shared encode cache with the 🎛️ section: a layer-band or target sweep
         # on the same clip/prompt re-encodes nothing after the first ▶.
-        _key = (video_path.name, video_path.stat().st_size, nframes, prompt)
+        _key = (clip_cache_id, nframes, prompt)
         if _key in playground_caches["encode"]:
             return playground_caches["encode"][_key]
         _conv = [{"role": "user", "content": [
@@ -1439,16 +1719,17 @@ def _(
 
     _tf_out = None
     try:
-        # Caption cache (the F1 spec's "cached keyed on (clip, prompt, nframes)"):
-        # the greedy caption depends only on the encoded inputs, so a rule/layer
-        # sweep reuses C instead of regenerating it every submit.
-        _tf_cap_key = (_tf_video.name, _tf_video.stat().st_size, _tf_nframes, _tf_prompt)
+        # Caption cache, keyed by clip content, frame count, and prompt. The greedy
+        # caption depends only on the encoded inputs, so rule/layer sweeps reuse it.
+        _tf_cap_key = (_tf_clip_cache_id, _tf_nframes, _tf_prompt)
         _tf_cached_c = playground_caches["caption"].get(_tf_cap_key)
         with mo.status.spinner(
             title=f"Teacher forcing · {_tf_nframes} frames · {_tf_video.name}"
             + (" · caption cached…" if _tf_cached_c is not None else "…")
         ):
-            _tf_inp, _tf_types = _tf_prep(_tf_video, _tf_nframes, _tf_prompt)
+            _tf_inp, _tf_types = _tf_prep(
+                _tf_video, _tf_clip_cache_id, _tf_nframes, _tf_prompt
+            )
             _tf_res = _tfd(
                 attention_model, attention_processor, _tf_inp, _tf_types, _tf_rules,
                 cached_caption_ids=_tf_cached_c,
@@ -1462,6 +1743,7 @@ def _(
     if _tf_out is None:
         _tf_delta = [float(x) for x in _tf_res["delta"].detach().cpu().float().tolist()]
         _tf_total = _tf_res["delta_total"]
+        _tf_mean = _tf_res["delta_mean"]
         _tf_toks = _tf_res["caption_tokens"]
         _tf_worst = int(np.argmin(_tf_delta)) if _tf_delta else 0
         _tf_rule_txt = f"`answer→{_tp['target']}` [{_tf_lo},{_tf_hi})"
@@ -1471,6 +1753,13 @@ def _(
                 label="Σ Δ log-lik (nats)",
                 caption="knockout − baseline · negative = believed less",
                 direction="decrease" if _tf_total < 0 else "increase",
+                bordered=True,
+            ),
+            mo.stat(
+                value=f"{_tf_mean:+.3f}",
+                label="Mean Δ / token (nats)",
+                caption="use for cross-clip comparisons",
+                direction="decrease" if _tf_mean < 0 else "increase",
                 bordered=True,
             ),
             mo.stat(
@@ -1492,15 +1781,51 @@ def _(
         ]
         _tf_out = mo.vstack([
             mo.md(
-                f"**Video** `{_tf_video.name}` &nbsp;·&nbsp; **Frames** {_tf_nframes} "
+                f"**Prediction recorded before run:** {_tp['hypothesis']}  \n"
+                f"**Clip** {_tf_resolved_clip.choice}: `{_tf_video.name}` "
+                f"({_tf_duration_text}) "
+                f"&nbsp;·&nbsp; **Frames** {_tf_nframes} "
                 f"&nbsp;·&nbsp; **Prompt** _{_tf_prompt}_ &nbsp;·&nbsp; **Knockout** {_tf_rule_txt}"
             ),
             mo.hstack(_tf_stats, widths="equal", gap=1),
-            mo.md("###### Per-token Δ log-likelihood (hot = believed less after the knockout; hover a word for its tokens' nats)"),
+            mo.md("#### Per-token Δ log-likelihood"),
             mo.Html(f"<div style='line-height:2.1;font-family:monospace;font-size:15px'>{_render_strip(_tf_toks, _tf_delta)}</div>"),
             mo.ui.table(_tf_rows, selection=None, pagination=True, page_size=16),
         ])
     _tf_out
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## 4. Synthesis and architecture challenge
+
+    ### 4.1 Audit the evidence
+
+    Use one playground run from each measurement to answer:
+
+    1. What changed in **probe-token diversity** and in **mean Δ/token**? What did
+       not change?
+    2. State the narrowest mechanism claim supported by both results. Then name a
+       stronger claim—such as “the model ignored audio” or “this is the fusion
+       layer”—that the interventions do **not** establish.
+    3. Give one rival explanation (mask renormalization, an indirect route, prompt
+       sensitivity, or probe miscalibration) and one control that distinguishes it.
+       Explain what both a positive and a negative control result would teach you.
+
+    ### 4.2 Design a different multimodal architecture
+
+    Propose one change to modality routing or fusion: for example, a learned gate,
+    a bottleneck token set, late fusion, or a sparse cross-modal router. Sketch the
+    information path, then predict its distinctive signature in **both** playgrounds
+    across early/middle/late layer bands and the silent control. End with the result
+    that would make you reject your design hypothesis and one performance or
+    interpretability trade-off your design introduces.
+
+    **Exit ticket:** write one sentence that clearly separates your observation,
+    your interpretation, and the evidence still needed.
+    """)
     return
 
 
