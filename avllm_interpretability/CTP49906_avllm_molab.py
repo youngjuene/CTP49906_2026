@@ -2114,7 +2114,148 @@ def _(
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ### 3.2 Teacher-forced edge sensitivity
+    ### 3.2 Compare — Three readings of one work
+
+    **Required.** Import one blinded presentation packet and at least two distinct
+    audience-reading JSON files created in the separate audience surface. Creator
+    intention and the model reading stay hidden here until the import validates.
+    After reveal, compare shared and different tags with neutral language:
+    agreement, divergence, or an unrepresented reading—not truth versus error.
+
+    Two readings are the minimum classroom activity, not a research sample-size
+    claim. Consider cultural convention, accessibility barriers, prompt wording,
+    training-data unknowns, and the limits of the available label vocabulary.
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    def _validate_audience_import(_value):
+        if not _value:
+            return "Choose a packet and two reading files."
+        _packet_files = _value["packet"]
+        _reading_files = _value["readings"]
+        if not _packet_files or not _packet_files[0].contents:
+            return "Choose one blinded presentation packet."
+        if not _reading_files or len(_reading_files) < 2:
+            return "Choose at least two distinct audience-reading files."
+        return None
+
+    audience_import_form = mo.md(r"""
+    **Blinded presentation packet** {packet}
+
+    **Audience readings** — choose at least two JSON files {readings}
+    """).batch(
+        packet=mo.ui.file(filetypes=[".json"], multiple=False, kind="area"),
+        readings=mo.ui.file(filetypes=[".json"], multiple=True, kind="area"),
+    ).form(
+        submit_button_label="Validate and reveal three readings",
+        validate=_validate_audience_import,
+        bordered=True,
+    )
+    audience_import_form
+    return (audience_import_form,)
+
+
+@app.cell(hide_code=True)
+def _(
+    AudiencePacket,
+    AudienceReading,
+    audience_import_form,
+    json,
+    mo,
+    set_audience_exchange,
+    validate_audience_exchange,
+):
+    _audience_value = audience_import_form.value
+    if _audience_value is None:
+        _audience_import_card = mo.callout(
+            mo.md("Creator and model readings remain hidden until two blinded readings validate."),
+            kind="info",
+        )
+    else:
+        try:
+            _packet_payload = json.loads(
+                _audience_value["packet"][0].contents.decode("utf-8")
+            )
+            _packet = AudiencePacket.from_mapping(_packet_payload)
+            _readings = tuple(
+                AudienceReading.from_mapping(
+                    json.loads(_file.contents.decode("utf-8")), packet=_packet
+                )
+                for _file in _audience_value["readings"]
+            )
+            _report = validate_audience_exchange(_packet, _readings)
+            if not _report.is_complete:
+                _messages = "; ".join(_issue.message for _issue in _report.issues)
+                raise ValueError(_messages or "audience exchange is incomplete")
+        except Exception as _error:  # noqa: BLE001 — unsafe imports belong in the UI
+            _audience_import_card = mo.callout(
+                mo.md(f"**Audience import rejected** — `{type(_error).__name__}: {_error}`"),
+                kind="danger",
+            )
+        else:
+            _revealed_packet = _packet.reveal(
+                protocol_deviation="creator/model readings revealed after valid classroom import"
+            )
+            set_audience_exchange((_revealed_packet, _readings))
+            _audience_import_card = mo.callout(
+                mo.md(
+                    f"**Audience import complete** · {len(_readings)} distinct blinded readings  \n"
+                    "Creator and model readings are now available for comparison."
+                ),
+                kind="success",
+            )
+    _audience_import_card
+    return
+
+
+@app.cell(hide_code=True)
+def _(get_artifact_versions, get_audience_exchange, knockout_text, mo):
+    _packet, _readings = get_audience_exchange()
+    if _packet is None or len(_readings) < 2:
+        _triadic_view = mo.callout(
+            mo.md("Three-reading comparison is locked until the blinded import is complete."),
+            kind="neutral",
+        )
+    else:
+        _artifacts = get_artifact_versions()
+        _v1 = next(
+            (_artifact for _artifact in _artifacts if _artifact.version_label == "V1"),
+            None,
+        )
+        _creator_reading = (
+            _v1.creator_intention if _v1 is not None else "Practice creator statement not registered"
+        )
+        _rows = [
+            {"reading": "Creator", "interpretation": _creator_reading},
+            *[
+                {
+                    "reading": f"Audience {index + 1}",
+                    "interpretation": _reading.open_interpretation,
+                }
+                for index, _reading in enumerate(_readings)
+            ],
+            {"reading": "Model", "interpretation": knockout_text},
+        ]
+        _triadic_view = mo.vstack(
+            [
+                mo.md(
+                    "**Revealed comparison.** Describe agreement, divergence, and "
+                    "unrepresented readings without treating any reader as automatic ground truth."
+                ),
+                mo.ui.table(_rows, selection=None),
+            ]
+        )
+    _triadic_view
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    #### Choice measurement · Teacher-forced edge sensitivity
 
     The diversity scoreboard above runs one forward pass over the **prompt**, so —
     exactly like `generated` — an **`answer`** source is inert there (there are no
