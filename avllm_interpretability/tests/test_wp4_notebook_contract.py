@@ -124,7 +124,7 @@ def test_interventions_and_epistemic_labels_stay_distinct() -> None:
     assert "silence or a black frame is never a substitute" in source
     assert "raw probe score dispersion" in lowered
     assert "teacher-forced answer-distribution dispersion" in lowered
-    assert "token-layout fingerprints match" in source
+    assert re.search(r"token-layout\s+fingerprints match", source)
     assert "not calibrated confidence" in source
     assert "causal localization" in source
 
