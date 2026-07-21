@@ -843,20 +843,23 @@ def _(attention_model):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## 2. Guided demo
+    ## 2. Guided demonstration
 
-    ### 2.1 Probe intermediate audio-position states
+    ### 2.1 Observe — Shared reference
+
+    **Required · about 15 minutes.** Replay the fixed reference before changing any
+    setting. Read the provenance badge, inspect the three measures below, and write
+    one observation and one limitation after each.
+
+    #### Measure A · Raw probe score dispersion
 
     A multimodal forward pass; the CSV analysis focuses on `audio` token positions.
 
-    **Measurement caveat.** This classroom lens takes each decoder layer's **raw
-    residual-stream output** and applies `lm_head` directly. It does **not** apply
-    the thinker's final RMSNorm first. Moreover, audio positions are multimodal
-    placeholder/feature positions, not positions with a calibrated next-token
-    language-model objective. The decoded token is therefore a diagnostic probe,
-    **not** the model's literal next-token prediction at that audio position. Treat
-    diversity as a pattern to explain and falsify with controls—not as a direct
-    measure of uncertainty, semantic quality, or fusion.
+    **What this can / cannot show.** Intermediate entropy is **raw probe score
+    dispersion** from an unnormalized probe; probability margin is a descriptive
+    score gap. Audio positions are multimodal feature positions, not positions with
+    a calibrated next-token objective. These summaries are not calibrated
+    confidence, free-generation uncertainty, or causal localization.
     """)
     return
 
@@ -990,7 +993,7 @@ def _(Counter, USE_PRECOMPUTED, csv, logit_csv_written, mo, np, plt):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ### 2.2 Intervene on direct attention edges
+    #### Measure B · Direct attention-edge knockout
 
     `KNOCKOUT_RULES` are `(source_type, target_type, start_layer, end_layer)` tuples.
     The default blocks generated tokens from attending to video tokens in layers 0–35.
@@ -1291,7 +1294,7 @@ def _(baseline_attention_summary, knockout_attention_summary, mo, np, plt):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ### 2.3 Quantify edge sensitivity with teacher forcing
+    #### Measure C · Teacher-forced answer-distribution change
 
     The string diff above is **visceral but binary** — you can't see a *small*
     effect, and it depends on how generation happens to continue. This cell asks
@@ -1301,11 +1304,12 @@ def _(mo):
     `KNOCKOUT_RULES` (same clip, same prompt, same layers — only the source becomes
     `answer`, because the caption is now *input*, not generation).
 
-    **Δ = knockout − baseline** per caption token; *negative = believed less = hot
-    color*. We show both the additive total and the length-normalized mean. Use the
+    **Δ = knockout − baseline** per caption token; a negative value means the fixed
+    answer token received lower log probability. Entropy and margin here describe
+    **teacher-forced answer-distribution dispersion (uncalibrated proxy)**. Use the
     mean for cross-clip comparisons, while remembering that different clips may
-    generate semantically different captions. The 🎯 playground below runs the
-    same measurement on your own clip, prompt, and layer band.
+    generate semantically different captions. This is not calibrated confidence,
+    free-generation uncertainty, or proof of a localized causal mechanism.
     """)
     return
 
@@ -1326,8 +1330,8 @@ def _(
         _fixed_out = mo.callout(
             mo.md(
                 "**Teacher forcing needs the live model.** This measurement is not "
-                "included in saved-result replay; attach a GPU and set "
-                "`USE_PRECOMPUTED=False` to run it."
+                "included in the saved pack. Use the execution-route form above "
+                "only when your instructor has prepared a GPU runtime."
             ),
             kind="warn",
         )
