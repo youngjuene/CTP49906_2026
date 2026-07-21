@@ -504,9 +504,16 @@ def _():
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ### 1.3 Inspect the course reference clip
+    ### 1.3 Register — First cut (V1)
 
-    Qwen receives sampled frames together with the clip's embedded audio.
+    **Required.** Register an immutable first cut from the saved course clip for
+    practice or from your own upload. The record keeps a content hash, a private
+    filename alias, media facts, your committed planning card, and the common edit
+    manifest. Registering a later V2 will link to this V1 instead of overwriting it.
+
+    A browser upload crosses into the hosted Molab session/container for processing.
+    It is not automatically transmitted to an instructor, model endpoint, or other
+    destination. The private portfolio download near the end is user initiated.
     """)
     return
 
@@ -519,40 +526,218 @@ def _(VIDEO_PATH, mo):
 
 @app.cell(hide_code=True)
 def _(mo):
-    mo.md(r"""
-    ### 1.4 Load the model and prepare inputs
-    """)
+    def _validate_v1_registration(_value):
+        if not _value or not _value["registration_key"].strip():
+            return "Give this registration a stable key."
+        if not _value["change_rationale"].strip():
+            return "State what makes this your first committed cut."
+        if _value["clip_source"] == "Upload":
+            _files = _value["video"]
+            if not _files or not _files[0].contents:
+                return "Choose an upload or use the saved course clip for practice."
+        return None
+
+    v1_registration_form = mo.md(r"""
+    **Clip source** {clip_source}
+
+    **Optional upload** — MP4/MOV/MKV/WEBM/AVI, up to 250 MB {video}
+
+    **Stable registration key** {registration_key}
+
+    **First-cut rationale** {change_rationale}
+    """).batch(
+        clip_source=mo.ui.dropdown(
+            ["Saved course clip", "Upload"], value="Saved course clip"
+        ),
+        video=mo.ui.file(
+            filetypes=[".mp4", ".mov", ".mkv", ".webm", ".avi"],
+            multiple=False,
+            kind="area",
+            max_size=250_000_000,
+        ),
+        registration_key=mo.ui.text(value="first-cut-v1", full_width=True),
+        change_rationale=mo.ui.text_area(rows=2, full_width=True),
+    ).form(
+        submit_button_label="Register immutable V1",
+        validate=_validate_v1_registration,
+        bordered=True,
+    )
+    v1_registration_form
+    return (v1_registration_form,)
+
+
+@app.cell(hide_code=True)
+def _(
+    EditDecisionManifest,
+    PRIVATE_UPLOAD_DIR,
+    SILENT_VIDEO_PATH,
+    VIDEO_PATH,
+    get_artifact_versions,
+    mo,
+    planning_form,
+    register_artifact_version,
+    set_artifact_versions,
+    v1_registration_form,
+):
+    from datetime import datetime, timezone
+
+    _registration = v1_registration_form.value
+    _plan = planning_form.value
+    _current = get_artifact_versions()
+    _existing = next(
+        (_artifact for _artifact in _current if _artifact.version_label == "V1"),
+        None,
+    )
+    if _existing is not None:
+        _v1_card = mo.callout(
+            mo.md(
+                f"**V1 committed** · `{_existing.artifact_id}`  \n"
+                f"The original record remains immutable; continue to Observe."
+            ),
+            kind="success",
+        )
+    elif _registration is None or _plan is None:
+        _v1_card = mo.callout(
+            mo.md("Commit the planning card and registration form to create V1."),
+            kind="info",
+        )
+    else:
+        _source_path = VIDEO_PATH
+        if _registration["clip_source"] == "Upload":
+            from src.playground_clips import resolve_clip_selection
+
+            _upload = _registration["video"][0]
+            _resolved = resolve_clip_selection(
+                "Upload",
+                default_path=VIDEO_PATH,
+                silent_path=SILENT_VIDEO_PATH,
+                upload_dir=PRIVATE_UPLOAD_DIR,
+                upload_name=_upload.name,
+                upload_contents=_upload.contents,
+            )
+            _source_path = _resolved.path
+        _tags = tuple(
+            _tag.strip() for _tag in _plan["concept_tags"].split(",") if _tag.strip()
+        )
+        _ordering = tuple(
+            _item.strip() for _item in _plan["edit_order"].split(",") if _item.strip()
+        ) or ("recorded in planning card",)
+        _edit_manifest = EditDecisionManifest(
+            editor_name_version=_plan["editor_name_version"].strip(),
+            source_assets=({"source_note": _plan["source_assets"].strip()},),
+            ordering=_ordering,
+            trims=(),
+            mix_levels=({"decision": _plan["mix_levels"].strip()},),
+            accessibility_work={"plan": _plan["accessibility_plan"].strip()},
+            assistance_disclosure={"disclosure": _plan["assistance"].strip()},
+            export_preset_version="common-classroom-export/1.0.0",
+        )
+        try:
+            _artifact = register_artifact_version(
+                _source_path,
+                edit_manifest=_edit_manifest,
+                version_label="V1",
+                parent_artifact_id=None,
+                local_registered_at_utc=datetime.now(timezone.utc).isoformat(),
+                event_index=len(_current),
+                elapsed_ms=0,
+                creator_intention=_plan["creator_intention"].strip(),
+                intended_audience=_plan["intended_audience"].strip(),
+                sound_image_relation=_plan["sound_image_relation"].strip(),
+                concept_tags=_tags or ("unclassified",),
+                cultural_aesthetic_context=_plan["cultural_context"].strip(),
+                source_license_provenance={"notes": _plan["source_license"].strip()},
+                change_rationale=_registration["change_rationale"].strip(),
+                processing_boundary=(
+                    "hosted Molab session/container; no automatic student-data egress"
+                ),
+            )
+        except Exception as _error:  # noqa: BLE001 — registration errors belong in the UI
+            _v1_card = mo.callout(
+                mo.md(f"**V1 registration needs attention** — `{type(_error).__name__}: {_error}`"),
+                kind="danger",
+            )
+        else:
+            set_artifact_versions(_current + (_artifact,))
+            _v1_card = mo.callout(
+                mo.md(
+                    f"**V1 committed** · `{_artifact.artifact_id}`  \n"
+                    "The planning snapshot, media facts, and first-cut rationale are now immutable."
+                ),
+                kind="success",
+            )
+    _v1_card
     return
 
 
 @app.cell(hide_code=True)
-def _(DEVICE, MODEL_PATH, MODEL_REVISION, PROJECT_DIR):
+def _(get_artifact_versions, mo):
+    _ready = any(
+        _artifact.version_label == "V1" for _artifact in get_artifact_versions()
+    )
+    _status = "Complete" if _ready else "Waiting for V1"
+    mo.callout(
+        mo.md(
+            f"**Checkpoint · Prepare your project — {_status}**  \n"
+            "Next: replay the shared reference and write one interpretation checkpoint after each measure."
+        ),
+        kind="success" if _ready else "info",
+    )
+    return
+
+
+@app.cell(hide_code=True)
+def _(USE_PRECOMPUTED, mo):
+    _engine = "saved replay ready" if USE_PRECOMPUTED else "live model requested"
+    mo.md(f"**Reference engine:** {_engine}.")
+    return
+
+
+@app.cell(hide_code=True)
+def _(DEVICE, MODEL_PATH, MODEL_REVISION, PROJECT_DIR, USE_PRECOMPUTED):
     import csv
     from collections import Counter
 
     import matplotlib.pyplot as plt
     import numpy as np
-    from qwen_omni_utils import process_mm_info
-    from transformers import Qwen2_5OmniForConditionalGeneration, Qwen2_5OmniProcessor
-
     _ = PROJECT_DIR  # ensure the clone / sys.path cell ran first
-    from src.attention_knockout_experiment import block_attention
-    from src.attention_knockout_experiment import (
-        create_token_type_mapping as create_attention_token_mapping,
-    )
-    from src.logitlens_experiment import (
-        analyze_and_save_audio_logits_to_csv,
-        clear_logit_lens_hooks,
-        create_token_type_mapping,
-        register_logit_lens_hooks,
-    )
     from src.playground_clips import (
         CLIP_CHOICES,
         inspect_classroom_clip,
         resolve_clip_selection,
     )
 
+    if USE_PRECOMPUTED:
+        Qwen2_5OmniForConditionalGeneration = None
+        Qwen2_5OmniProcessor = None
+        analyze_and_save_audio_logits_to_csv = None
+        block_attention = None
+        clear_logit_lens_hooks = None
+        create_attention_token_mapping = None
+        create_token_type_mapping = None
+        process_mm_info = None
+        register_logit_lens_hooks = None
+    else:
+        from qwen_omni_utils import process_mm_info
+        from transformers import (
+            Qwen2_5OmniForConditionalGeneration,
+            Qwen2_5OmniProcessor,
+        )
+
+        from src.attention_knockout_experiment import block_attention
+        from src.attention_knockout_experiment import (
+            create_token_type_mapping as create_attention_token_mapping,
+        )
+        from src.logitlens_experiment import (
+            analyze_and_save_audio_logits_to_csv,
+            clear_logit_lens_hooks,
+            create_token_type_mapping,
+            register_logit_lens_hooks,
+        )
+
     def load_model_and_processor(attn_implementation):
+        if USE_PRECOMPUTED:
+            raise RuntimeError("Live model loading is disabled in saved replay mode")
         _model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
             MODEL_PATH,
             revision=MODEL_REVISION,
@@ -572,6 +757,8 @@ def _(DEVICE, MODEL_PATH, MODEL_REVISION, PROJECT_DIR):
     # video_path/nframes are arguments, not closures: this cell must depend only
     # on the model constants, or a knob tweak would cascade into the loaders.
     def prepare_video_inputs(model, processor, prompt, token_mapping_fn, video_path, nframes):
+        if USE_PRECOMPUTED:
+            raise RuntimeError("Live input preparation is disabled in saved replay mode")
         _conv = [{"role": "user", "content": [
             {"type": "text", "text": prompt},
             {"type": "video", "video": str(video_path), "nframes": nframes},
