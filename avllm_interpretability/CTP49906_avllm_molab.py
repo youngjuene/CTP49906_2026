@@ -252,6 +252,109 @@ def _(PROJECT_DIR, USE_PRECOMPUTED):
     return (PRECOMPUTED_DIR,)
 
 
+@app.cell
+def _(PROJECT_DIR, mo):
+    from hashlib import sha256
+    import json
+    from uuid import uuid4
+
+    from curriculum_common.audience_packets import (
+        AudiencePacket,
+        AudienceReading,
+        validate_audience_exchange,
+    )
+    from curriculum_common.portfolio_export import (
+        build_private_portfolio,
+        serialize_private_portfolio,
+    )
+    from curriculum_common.production_manifest import (
+        ArtifactVersion,
+        EditDecisionManifest,
+    )
+    from curriculum_common.session_records import (
+        load_jsonl,
+        new_session,
+        reduce_command,
+        teaching_mode,
+        validate_process_log,
+    )
+    from src.playground_clips import register_artifact_version
+
+    COURSE_RELEASE_ID = "counterpoint-lens-wp4-candidate-2026-07-22"
+    classroom_mode = teaching_mode(
+        "Teaching is the default; no approved Research configuration is loaded"
+    )
+    _session_pseudonym = f"studio-{uuid4().hex[:12]}"
+    _initial_log = new_session(
+        _session_pseudonym,
+        decision=classroom_mode,
+        course_release_id=COURSE_RELEASE_ID,
+    )
+    get_classroom_log, set_classroom_log = mo.state(_initial_log)
+    get_artifact_versions, set_artifact_versions = mo.state(tuple())
+    get_audience_exchange, set_audience_exchange = mo.state((None, tuple()))
+
+    PRIVATE_UPLOAD_DIR = PROJECT_DIR / "notebook_results" / "uploads"
+    PRIVATE_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    return (
+        ArtifactVersion,
+        AudiencePacket,
+        AudienceReading,
+        COURSE_RELEASE_ID,
+        EditDecisionManifest,
+        PRIVATE_UPLOAD_DIR,
+        build_private_portfolio,
+        classroom_mode,
+        get_artifact_versions,
+        get_audience_exchange,
+        get_classroom_log,
+        json,
+        load_jsonl,
+        new_session,
+        reduce_command,
+        register_artifact_version,
+        serialize_private_portfolio,
+        set_artifact_versions,
+        set_audience_exchange,
+        set_classroom_log,
+        sha256,
+        teaching_mode,
+        uuid4,
+        validate_audience_exchange,
+        validate_process_log,
+    )
+
+
+@app.cell(hide_code=True)
+def _(USE_PRECOMPUTED, classroom_mode, mo):
+    _route = "Saved course replay" if USE_PRECOMPUTED else "Live model"
+    mo.hstack(
+        [
+            mo.stat(
+                value=classroom_mode.mode.value,
+                label="Operating mode",
+                caption="no research destination or collection action",
+                bordered=True,
+            ),
+            mo.stat(
+                value=_route,
+                label="Result provenance",
+                caption="replay and live results are always labeled",
+                bordered=True,
+            ),
+            mo.stat(
+                value="Manual only",
+                label="Student-data egress",
+                caption="private download or permission-authorized exchange",
+                bordered=True,
+            ),
+        ],
+        widths="equal",
+        gap=1,
+    )
+    return
+
+
 @app.cell(hide_code=True)
 def _(USE_PRECOMPUTED):
     if USE_PRECOMPUTED:
@@ -274,17 +377,85 @@ def _(USE_PRECOMPUTED):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ### 1.2 Set the guided-demo reference
+    ### 1.2 Compose — Plan your first cut
 
-    **Leave these values unchanged on the first pass** so everyone interprets the
-    same clip, prompts, and intervention. After the guided-demo checkpoint, use the
-    forms to change one variable at a time. Direct edits here are the advanced route
-    for changing the shared reference run itself.
+    **Required.** Complete the planning card before registering V1. Name the
+    audience and artistic intention, the sound–image relationship you want to try,
+    relevant cultural or aesthetic references, source and license provenance, and
+    accessibility work. Record the common editor/export route and any human or AI
+    assistance so your later revision has a trustworthy starting point.
 
-    The cells stay separate by re-run cost: changing the model reloads its weights;
-    changing the clip, prompts, rules, or frame count reuses the loaded model.
+    The saved course clip remains the shared reference for the guided demonstration;
+    your planning card belongs to your own project and is not sent anywhere.
     """)
     return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    def _validate_planning_card(_value):
+        if not _value:
+            return "Complete the planning card."
+        _required = (
+            "creator_intention",
+            "intended_audience",
+            "sound_image_relation",
+            "cultural_context",
+            "concept_tags",
+            "source_license",
+            "accessibility_plan",
+            "editor_name_version",
+            "source_assets",
+            "edit_order",
+            "mix_levels",
+            "assistance",
+        )
+        if any(not str(_value[_field]).strip() for _field in _required):
+            return "Every required planning field needs a short response."
+        return None
+
+    planning_form = mo.md(r"""
+    **Artistic intention** {creator_intention}
+
+    **Intended audience** {intended_audience}
+
+    **Planned sound–image relationship** {sound_image_relation}
+
+    **Cultural or aesthetic context** {cultural_context}
+
+    **Concept tags** — comma separated {concept_tags}
+
+    **Sources and licenses** {source_license}
+
+    **Accessibility plan** — captions/transcript and visual-context support {accessibility_plan}
+
+    **Editor and version** {editor_name_version}
+
+    **Source assets and order** {source_assets} {edit_order}
+
+    **Mix/level decisions** {mix_levels}
+
+    **Human/AI assistance disclosure** {assistance}
+    """).batch(
+        creator_intention=mo.ui.text_area(rows=2, full_width=True),
+        intended_audience=mo.ui.text(full_width=True),
+        sound_image_relation=mo.ui.text_area(rows=2, full_width=True),
+        cultural_context=mo.ui.text_area(rows=2, full_width=True),
+        concept_tags=mo.ui.text(full_width=True),
+        source_license=mo.ui.text_area(rows=2, full_width=True),
+        accessibility_plan=mo.ui.text_area(rows=2, full_width=True),
+        editor_name_version=mo.ui.text(value="Common no-cost editor route", full_width=True),
+        source_assets=mo.ui.text_area(rows=2, full_width=True),
+        edit_order=mo.ui.text_area(rows=2, full_width=True),
+        mix_levels=mo.ui.text_area(rows=2, full_width=True),
+        assistance=mo.ui.text_area(rows=2, full_width=True),
+    ).form(
+        submit_button_label="Commit planning card",
+        validate=_validate_planning_card,
+        bordered=True,
+    )
+    planning_form
+    return (planning_form,)
 
 
 @app.cell
