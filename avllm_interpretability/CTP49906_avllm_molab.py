@@ -2502,7 +2502,7 @@ def _(
             mo.stat(
                 value=f"{_tf_total:+.2f}",
                 label="Σ Δ log-lik (nats)",
-                caption="knockout − baseline · negative = believed less",
+                caption="knockout − baseline · negative = lower log probability",
                 direction="decrease" if _tf_total < 0 else "increase",
                 bordered=True,
             ),
@@ -2544,6 +2544,262 @@ def _(
             mo.ui.table(_tf_rows, selection=None, pagination=True, page_size=16),
         ])
     _tf_out
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### 3.3 Revise — Explanation and second cut (V2)
+
+    **Required.** Choose the evidence trigger that changed—or strengthened—your
+    account. Commit the observed result, limitation, rival explanation, revised
+    explanation, and next control to the selected run. Then register a linked V2
+    and name the creative decisions made between V1 and V2. Neither action mutates
+    the first-cut record or the initial explanation.
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    def _validate_revision(_value):
+        if not _value:
+            return "Complete the revision record."
+        _required = (
+            "reflection_key",
+            "observed_evidence",
+            "verdict",
+            "evidence_trigger",
+            "limitation",
+            "rival_explanation",
+            "revised_explanation",
+            "next_control",
+            "creative_decisions",
+            "v2_rationale",
+        )
+        if any(not str(_value[_field]).strip() for _field in _required):
+            return "Every revision field needs a short response."
+        if _value["v2_source"] == "Upload":
+            _files = _value["video"]
+            if not _files or not _files[0].contents:
+                return "Choose a V2 upload or use the saved course clip for practice."
+        return None
+
+    revision_form = mo.md(r"""
+    **Stable reflection key** {reflection_key}
+
+    **Observed evidence** {observed_evidence}
+
+    **Verdict** — supported, refuted, or not tested {verdict}
+
+    **Evidence trigger** {evidence_trigger}
+
+    **Limitation** {limitation}
+
+    **Rival explanation** {rival_explanation}
+
+    **Revised explanation** {revised_explanation}
+
+    **Next control** {next_control}
+
+    **V1 → V2 creative decisions** {creative_decisions}
+
+    **V2 source** {v2_source}
+
+    **Optional V2 upload** {video}
+
+    **V2 change rationale** {v2_rationale}
+    """).batch(
+        reflection_key=mo.ui.text(value="paired-run-1-reflection", full_width=True),
+        observed_evidence=mo.ui.text_area(rows=2, full_width=True),
+        verdict=mo.ui.dropdown(["supported", "refuted", "not tested"], value="not tested"),
+        evidence_trigger=mo.ui.text_area(rows=2, full_width=True),
+        limitation=mo.ui.text_area(rows=2, full_width=True),
+        rival_explanation=mo.ui.text_area(rows=2, full_width=True),
+        revised_explanation=mo.ui.text_area(rows=2, full_width=True),
+        next_control=mo.ui.text_area(rows=2, full_width=True),
+        creative_decisions=mo.ui.text_area(rows=2, full_width=True),
+        v2_source=mo.ui.dropdown(["Saved course clip", "Upload"], value="Saved course clip"),
+        video=mo.ui.file(
+            filetypes=[".mp4", ".mov", ".mkv", ".webm", ".avi"],
+            multiple=False,
+            kind="area",
+            max_size=250_000_000,
+        ),
+        v2_rationale=mo.ui.text_area(rows=2, full_width=True),
+    ).form(
+        submit_button_label="Commit reflection and linked V2",
+        validate=_validate_revision,
+        bordered=True,
+    )
+    revision_form
+    return (revision_form,)
+
+
+@app.cell(hide_code=True)
+def _(
+    EditDecisionManifest,
+    PRIVATE_UPLOAD_DIR,
+    SILENT_VIDEO_PATH,
+    VIDEO_PATH,
+    get_artifact_versions,
+    get_classroom_log,
+    mo,
+    reduce_command,
+    register_artifact_version,
+    revision_form,
+    set_artifact_versions,
+    set_classroom_log,
+    sha256,
+):
+    from datetime import datetime, timezone
+
+    _revision = revision_form.value
+    _artifacts = get_artifact_versions()
+    _v1 = next(
+        (_artifact for _artifact in _artifacts if _artifact.version_label == "V1"),
+        None,
+    )
+    _v2 = next(
+        (_artifact for _artifact in _artifacts if _artifact.version_label == "V2"),
+        None,
+    )
+    _log = get_classroom_log()
+    _runs = _log.records_of_type("run")
+    if _v2 is not None:
+        _revision_card = mo.callout(
+            mo.md(
+                f"**V2 committed** · `{_v2.artifact_id}`  \n"
+                f"Parent V1 remains `{_v2.parent_artifact_id}`."
+            ),
+            kind="success",
+        )
+    elif _revision is None:
+        _revision_card = mo.callout(
+            mo.md("Complete the revision form after one committed run."), kind="info"
+        )
+    elif _v1 is None or not _runs:
+        _revision_card = mo.callout(
+            mo.md("Register V1 and commit one run snapshot before creating V2."),
+            kind="danger",
+        )
+    else:
+        _run_id = _runs[-1].record_id
+        _key_digest = sha256(_revision["reflection_key"].strip().encode("utf-8")).hexdigest()
+        _result_command = {
+            "kind": "attach_result",
+            "command_nonce": f"result:{_key_digest}",
+            "run_id": _run_id,
+            "result_digest": sha256(
+                _revision["observed_evidence"].strip().encode("utf-8")
+            ).hexdigest(),
+            "metrics": {
+                "student_observation": _revision["observed_evidence"].strip(),
+                "verdict": _revision["verdict"],
+            },
+            "metric_versions": {
+                "student_evidence_summary": "classroom-reflection/1.0.0"
+            },
+            "status": "completed",
+        }
+        _reflection_command = {
+            "kind": "commit_reflection",
+            "command_nonce": f"reflection:{_key_digest}",
+            "run_id": _run_id,
+            "reflection": {
+                "evidence_trigger": _revision["evidence_trigger"].strip(),
+                "limitation": _revision["limitation"].strip(),
+                "rival_explanation": _revision["rival_explanation"].strip(),
+                "revised_explanation": _revision["revised_explanation"].strip(),
+                "next_control": _revision["next_control"].strip(),
+                "creative_decisions": _revision["creative_decisions"].strip(),
+            },
+            "tags": ["V1-to-V2", _revision["verdict"]],
+        }
+        try:
+            _with_result = reduce_command(_log, _result_command)
+            _with_reflection = reduce_command(
+                _with_result.log, _reflection_command
+            )
+            _source_path = VIDEO_PATH
+            if _revision["v2_source"] == "Upload":
+                from src.playground_clips import resolve_clip_selection as _resolve_v2_clip
+
+                _upload = _revision["video"][0]
+                _resolved = _resolve_v2_clip(
+                    "Upload",
+                    default_path=VIDEO_PATH,
+                    silent_path=SILENT_VIDEO_PATH,
+                    upload_dir=PRIVATE_UPLOAD_DIR,
+                    upload_name=_upload.name,
+                    upload_contents=_upload.contents,
+                )
+                _source_path = _resolved.path
+            _edit_manifest = EditDecisionManifest(
+                editor_name_version=_v1.editor_name_version,
+                source_assets=_v1.source_assets,
+                ordering=tuple(_v1.edit_decisions.get("ordering", ())),
+                trims=tuple(_v1.edit_decisions.get("trims", ())),
+                mix_levels=tuple(_v1.edit_decisions.get("mix_levels", ())),
+                accessibility_work=_v1.accessibility,
+                assistance_disclosure=_v1.assistance_disclosure,
+                export_preset_version=_v1.export_preset_version,
+            )
+            _new_v2 = register_artifact_version(
+                _source_path,
+                edit_manifest=_edit_manifest,
+                version_label="V2",
+                parent_artifact_id=_v1.artifact_id,
+                local_registered_at_utc=datetime.now(timezone.utc).isoformat(),
+                event_index=len(_artifacts),
+                elapsed_ms=0,
+                creator_intention=_v1.creator_intention,
+                intended_audience=_v1.intended_audience,
+                sound_image_relation=_v1.sound_image_relation,
+                concept_tags=_v1.concept_tags,
+                cultural_aesthetic_context=_v1.cultural_aesthetic_context,
+                source_license_provenance=_v1.source_license_provenance,
+                change_rationale=(
+                    _revision["v2_rationale"].strip()
+                    + " | creative decisions: "
+                    + _revision["creative_decisions"].strip()
+                ),
+                processing_boundary=_v1.processing_boundary,
+            )
+        except Exception as _error:  # noqa: BLE001 — revision errors belong in the UI
+            _revision_card = mo.callout(
+                mo.md(f"**Revision needs attention** — `{type(_error).__name__}: {_error}`"),
+                kind="danger",
+            )
+        else:
+            set_classroom_log(_with_reflection.log)
+            set_artifact_versions(_artifacts + (_new_v2,))
+            _revision_card = mo.callout(
+                mo.md(
+                    f"**Reflection and V2 committed** · `{_new_v2.artifact_id}`  \n"
+                    f"V1 preserved: `{_new_v2.parent_artifact_id}` · run: `{_run_id}`"
+                ),
+                kind="success",
+            )
+    _revision_card
+    return
+
+
+@app.cell(hide_code=True)
+def _(get_artifact_versions, get_audience_exchange, get_classroom_log, mo):
+    _versions = {artifact.version_label for artifact in get_artifact_versions()}
+    _packet, _readings = get_audience_exchange()
+    _has_reflection = bool(get_classroom_log().records_of_type("reflection"))
+    _complete = {"V1", "V2"}.issubset(_versions) and len(_readings) >= 2 and _has_reflection
+    _status = "Complete" if _complete else "Waiting for comparison, reflection, and V2"
+    mo.callout(
+        mo.md(
+            f"**Checkpoint · Exploratory playground — {_status}**  \n"
+            "Next: export the private portfolio and make one bounded architecture proposal."
+        ),
+        kind="success" if _complete else "info",
+    )
     return
 
 
