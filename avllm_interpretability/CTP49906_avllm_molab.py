@@ -280,7 +280,7 @@ def _(PROJECT_DIR, mo):
     )
     from src.playground_clips import register_artifact_version
 
-    COURSE_RELEASE_ID = "counterpoint-lens-wp4-candidate-2026-07-22"
+    COURSE_RELEASE_ID = "counterpoint-lens-classroom-2026-07-22"
     classroom_mode = teaching_mode(
         "Teaching is the default; no approved Research configuration is loaded"
     )
