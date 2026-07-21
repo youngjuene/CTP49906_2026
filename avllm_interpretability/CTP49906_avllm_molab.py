@@ -1374,7 +1374,7 @@ def _(
                     mo.stat(
                         value=f"{_fixed_total:+.2f}",
                         label="Σ Δ log-lik (nats)",
-                        caption="knockout − baseline · negative = believed less",
+                        caption="knockout − baseline · negative = lower log probability",
                         direction="decrease" if _fixed_total < 0 else "increase",
                         bordered=True,
                     ),
@@ -1405,11 +1405,65 @@ def _(
 
 @app.cell(hide_code=True)
 def _(mo):
-    mo.md(r"""
-    ## 3. Research playground
+    def _validate_observe_reflection(_value):
+        if not _value:
+            return "Record the guided interpretation checkpoints."
+        if any(not str(_value[_field]).strip() for _field in _value):
+            return "Write one observation and one limitation for each measure."
+        return None
 
-    The guided demo used one shared reference so the class could interpret the
-    same evidence. Now work in short experimental cycles:
+    observe_reflection_form = mo.md(r"""
+    **Measure A observation** {probe_observation}
+
+    **Measure A limitation** {probe_limit}
+
+    **Measure B observation** {edge_observation}
+
+    **Measure B limitation** {edge_limit}
+
+    **Measure C observation or “not measured”** {answer_observation}
+
+    **Measure C limitation** {answer_limit}
+    """).batch(
+        probe_observation=mo.ui.text_area(rows=2, full_width=True),
+        probe_limit=mo.ui.text_area(rows=2, full_width=True),
+        edge_observation=mo.ui.text_area(rows=2, full_width=True),
+        edge_limit=mo.ui.text_area(rows=2, full_width=True),
+        answer_observation=mo.ui.text_area(rows=2, full_width=True),
+        answer_limit=mo.ui.text_area(rows=2, full_width=True),
+    ).form(
+        submit_button_label="Commit guided checkpoints",
+        validate=_validate_observe_reflection,
+        bordered=True,
+    )
+    observe_reflection_form
+    return (observe_reflection_form,)
+
+
+@app.cell(hide_code=True)
+def _(mo, observe_reflection_form):
+    _complete = observe_reflection_form.value is not None
+    _status = "Complete" if _complete else "Waiting for three checkpoints"
+    mo.callout(
+        mo.md(
+            f"**Checkpoint · Guided demonstration — {_status}**  \n"
+            "Next: choose one controlled comparison, commit a prediction, then run only after the snapshot is visible."
+        ),
+        kind="success" if _complete else "info",
+    )
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## 3. Exploratory playground
+
+    ### 3.1 Experiment — Change one thing at a time
+
+    **Required · one paired investigation.** The guided demonstration used one
+    shared reference. Now choose one coded operation, keep the other settings fixed,
+    and work in a short Prepare → Run → Reflect cycle:
 
     1. **Prediction before ▶** — state a directional result that could be wrong.
     2. **Intervention** — change one variable and keep the rest fixed.
@@ -1417,8 +1471,140 @@ def _(mo):
     4. **Verdict** — supported, refuted, or not tested?
     5. **Next control** — name a rival explanation and a result that separates it.
 
-    Record each cycle in `avllm_interpretability/WORKSHEET.md`.
+    Your command key, prediction, initial explanation, and settings are committed
+    through an append-only reducer before any live computation. Replaying the same
+    command after a reactive rerun or event-log reload is idempotent; reusing its key
+    with different content is rejected.
     """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    _operation_labels = {
+        "Original reference": "original_reference",
+        "Duration-matched audio swap": "audio_swap_duration_matched",
+        "Signed temporal offset with zero-fill": "temporal_offset",
+        "Audio silence signal control": "audio_silence_control",
+        "Neutral video signal control": "video_neutral_control",
+        "True audio modality omission": "audio_omitted_model_input",
+        "True video modality omission": "video_omitted_model_input",
+        "Direct attention-edge knockout": "direct_attention_edge_knockout",
+    }
+
+    def _validate_experiment_plan(_value):
+        if not _value:
+            return "Prepare a run before continuing."
+        for _field in ("command_key", "prediction", "initial_explanation", "prompt"):
+            if not str(_value[_field]).strip():
+                return "Command key, prediction, initial explanation, and prompt are required."
+        if _value["operation"] == "temporal_offset" and _value["offset_ms"] == 0:
+            return "Choose a non-zero signed offset for the temporal-offset condition."
+        return None
+
+    experiment_plan_form = mo.md(r"""
+    **Stable command key** — reuse only to replay the identical snapshot {command_key}
+
+    **Prediction before run** {prediction}
+
+    **Initial explanation** {initial_explanation}
+
+    **Operation** {operation}
+
+    **Signed offset in milliseconds** — negative leads; positive delays {offset_ms}
+
+    **Prompt** {prompt}
+    """).batch(
+        command_key=mo.ui.text(value="paired-run-1", full_width=True),
+        prediction=mo.ui.text_area(rows=2, full_width=True),
+        initial_explanation=mo.ui.text_area(rows=2, full_width=True),
+        operation=mo.ui.dropdown(_operation_labels, value="original_reference"),
+        offset_ms=mo.ui.slider(-2000, 2000, step=100, value=500, show_value=True),
+        prompt=mo.ui.text(value="Describe what you see and hear in the video", full_width=True),
+    ).form(
+        submit_button_label="Commit immutable run snapshot",
+        validate=_validate_experiment_plan,
+        bordered=True,
+    )
+    experiment_plan_form
+    return (experiment_plan_form,)
+
+
+@app.cell(hide_code=True)
+def _(
+    MODEL_PATH,
+    MODEL_REVISION,
+    experiment_plan_form,
+    get_artifact_versions,
+    get_classroom_log,
+    mo,
+    reduce_command,
+    set_classroom_log,
+    sha256,
+):
+    _prepared = experiment_plan_form.value
+    if _prepared is None:
+        _run_snapshot_card = mo.callout(
+            mo.md("Commit a prediction and initial explanation before running."),
+            kind="info",
+        )
+    else:
+        _artifacts = get_artifact_versions()
+        _v1 = next(
+            (_artifact for _artifact in _artifacts if _artifact.version_label == "V1"),
+            None,
+        )
+        _artifact_id = _v1.artifact_id if _v1 is not None else "practice-course-reference"
+        _condition = _prepared["operation"]
+        _command = {
+            "kind": "commit_run",
+            "command_nonce": "run:" + sha256(
+                _prepared["command_key"].strip().encode("utf-8")
+            ).hexdigest(),
+            "artifact_id": _artifact_id,
+            "stimulus_id": f"condition:{_condition}",
+            "condition_code": _condition,
+            "model_id": MODEL_PATH,
+            "model_revision": MODEL_REVISION,
+            "prompt": _prepared["prompt"].strip(),
+            "parameters": {
+                "technical_operation": _condition,
+                "signed_offset_ms": int(_prepared["offset_ms"]),
+                "signal_control": _condition in {
+                    "audio_silence_control",
+                    "video_neutral_control",
+                },
+                "true_modality_omission": _condition in {
+                    "audio_omitted_model_input",
+                    "video_omitted_model_input",
+                },
+                "model_intervention": _condition == "direct_attention_edge_knockout",
+            },
+            "prediction": _prepared["prediction"].strip(),
+            "initial_explanation": _prepared["initial_explanation"].strip(),
+            "metric_versions": {
+                "probe": "probe-metric/1.0.0",
+                "teacher_forced": "compact-distribution/1.0.0",
+            },
+        }
+        try:
+            _reduction = reduce_command(get_classroom_log(), _command)
+        except Exception as _error:  # noqa: BLE001 — reducer rejection belongs in the UI
+            _run_snapshot_card = mo.callout(
+                mo.md(f"**Run snapshot rejected** — `{type(_error).__name__}: {_error}`"),
+                kind="danger",
+            )
+        else:
+            set_classroom_log(_reduction.log)
+            _run_id = _reduction.record_ids[0]
+            _run_snapshot_card = mo.callout(
+                mo.md(
+                    f"**Run snapshot committed** · `{_run_id}`  \n"
+                    f"Operation: `{_condition}` · replayed: `{_reduction.replayed}`"
+                ),
+                kind="success",
+            )
+    _run_snapshot_card
     return
 
 
@@ -1436,13 +1622,37 @@ def _(USE_PRECOMPUTED, knockout_text, logit_csv_written, mo):
         f"**Guided demo complete — now test your own hypotheses.**\n\n"
         f"- Logit-lens result available: **{_ok}** — `{logit_csv_written}`\n"
         f"{_teacher_forcing_status}"
-        "Two interactive sections follow, each with investigation routes in its intro:\n\n"
-        "- **🎛️ Diversity scoreboard** — how do the *audio positions* respond to your "
+        "Two Choice measurements follow:\n\n"
+        "- **Diversity scoreboard** — how do the *audio positions* respond to your "
         "prompt, clip, and knockout choices?\n"
-        "- **🎯 Teacher forcing** — how does caption log-likelihood change when you "
+        "- **Teacher forcing** — how does caption log-likelihood change when you "
         "block a direct edge set—and on **your** clip, which tokens move most?\n\n"
-        "Form the hypothesis first, then press ▶. To redesign the shared reference "
-        "experiment itself, edit `KNOCKOUT_RULES`, `NFRAMES`, or `VIDEO_PATH` above."
+        "Form the hypothesis first, then press ▶. Saved replay keeps personalized "
+        "live controls unavailable rather than showing stale live output as replay."
+    )
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.accordion(
+        {
+            "Advanced — layer bands, attention heads, and processor-path checks": mo.md(r"""
+            These optional controls are not required for any checkpoint. Use them
+            only after one complete paired cycle.
+
+            - Customize layer bands or direct attention-edge rules.
+            - Inspect feature/token interventions separately from media operations.
+            - A **stimulus-signal control** supplies silence or a neutral visual.
+            - **True modality omission** supplies no audio or no video through a
+              distinct processor path; silence or a black frame is never a substitute.
+            - Position-wise trajectories may be aligned only when token-layout
+              fingerprints match. Otherwise compare preregistered aggregates or
+              normalized bins and display the alignment warning.
+            """)
+        },
+        multiple=False,
+        lazy=True,
     )
     return
 
@@ -1450,7 +1660,7 @@ def _(USE_PRECOMPUTED, knockout_text, logit_csv_written, mo):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ### 3.1 Audio-position probe diversity
+    #### Choice measurement · Audio-position probe diversity
 
     Turn the **logit-lens diversity** measurement into a live experiment: pick a clip, the
     number of frames, the prompt, and (optionally) an attention knockout to apply
@@ -1491,7 +1701,15 @@ def _(mo):
 
 
 @app.cell(hide_code=True)
-def _(CLIP_CHOICES, KNOCKOUT_RULES, LOGIT_PROMPT, NFRAMES, attention_model, mo):
+def _(
+    CLIP_CHOICES,
+    KNOCKOUT_RULES,
+    LOGIT_PROMPT,
+    NFRAMES,
+    USE_PRECOMPUTED,
+    attention_model,
+    mo,
+):
     _n_layers = len(attention_model.thinker.model.layers)
     _modalities = ["audio", "video", "query_text", "image", "generated"]
     # Scoreboard-appropriate defaults: the source must be a modality that is
@@ -1568,6 +1786,7 @@ def _(CLIP_CHOICES, KNOCKOUT_RULES, LOGIT_PROMPT, NFRAMES, attention_model, mo):
         compare=mo.ui.checkbox(value=True),
     ).form(
         submit_button_label="▶ Run logit-lens diversity",
+        submit_button_disabled=USE_PRECOMPUTED,
         bordered=True,
         validate=_validate,
     )
@@ -1950,6 +2169,7 @@ def _(
     CLIP_CHOICES,
     KNOCKOUT_RULES,
     NFRAMES,
+    USE_PRECOMPUTED,
     attention_model,
     mo,
 ):
@@ -2009,6 +2229,7 @@ def _(
         ),
     ).form(
         submit_button_label="▶ Run teacher-forced Δ log-lik",
+        submit_button_disabled=USE_PRECOMPUTED,
         bordered=True,
         validate=_validate,
     )
