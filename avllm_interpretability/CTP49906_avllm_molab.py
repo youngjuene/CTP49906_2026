@@ -579,7 +579,8 @@ def _(
     set_artifact_versions,
     v1_registration_form,
 ):
-    from datetime import datetime, timezone
+    from datetime import datetime as _datetime
+    from datetime import timezone as _timezone
 
     _registration = v1_registration_form.value
     _plan = planning_form.value
@@ -604,10 +605,10 @@ def _(
     else:
         _source_path = VIDEO_PATH
         if _registration["clip_source"] == "Upload":
-            from src.playground_clips import resolve_clip_selection
+            from src.playground_clips import resolve_clip_selection as _resolve_v1_clip
 
             _upload = _registration["video"][0]
-            _resolved = resolve_clip_selection(
+            _resolved = _resolve_v1_clip(
                 "Upload",
                 default_path=VIDEO_PATH,
                 silent_path=SILENT_VIDEO_PATH,
@@ -638,7 +639,7 @@ def _(
                 edit_manifest=_edit_manifest,
                 version_label="V1",
                 parent_artifact_id=None,
-                local_registered_at_utc=datetime.now(timezone.utc).isoformat(),
+                local_registered_at_utc=_datetime.now(_timezone.utc).isoformat(),
                 event_index=len(_current),
                 elapsed_ms=0,
                 creator_intention=_plan["creator_intention"].strip(),
@@ -2653,7 +2654,8 @@ def _(
     set_classroom_log,
     sha256,
 ):
-    from datetime import datetime, timezone
+    from datetime import datetime as _datetime
+    from datetime import timezone as _timezone
 
     _revision = revision_form.value
     _artifacts = get_artifact_versions()
@@ -2751,7 +2753,7 @@ def _(
                 edit_manifest=_edit_manifest,
                 version_label="V2",
                 parent_artifact_id=_v1.artifact_id,
-                local_registered_at_utc=datetime.now(timezone.utc).isoformat(),
+                local_registered_at_utc=_datetime.now(_timezone.utc).isoformat(),
                 event_index=len(_artifacts),
                 elapsed_ms=0,
                 creator_intention=_v1.creator_intention,
@@ -2808,31 +2810,248 @@ def _(mo):
     mo.md(r"""
     ## 4. Synthesis and architecture challenge
 
-    ### 4.1 Audit the evidence
+    ### 4.1 Synthesize — Portfolio and architecture challenge
 
-    Use one playground run from each measurement to answer:
+    **Required.** Use one committed run and reflection to make a bounded proposal.
+    Distinguish the evidence you observed from your interpretation, then name the
+    measurement limits, a viable alternative, and the next test.
 
-    1. What changed in **probe-token diversity** and in **mean Δ/token**? What did
-       not change?
-    2. State the narrowest mechanism claim supported by both results. Then name a
-       stronger claim—such as “the model ignored audio” or “this is the fusion
-       layer”—that the interventions do **not** establish.
-    3. Give one rival explanation (mask renormalization, an indirect route, prompt
-       sensitivity, or probe miscalibration) and one control that distinguishes it.
-       Explain what both a positive and a negative control result would teach you.
+    Your proposal may change modality routing or fusion—for example, a learned gate,
+    bottleneck token set, late fusion, or sparse cross-modal router. Predict one
+    distinctive signature and one result that would make you reject the proposal.
 
-    ### 4.2 Design a different multimodal architecture
-
-    Propose one change to modality routing or fusion: for example, a learned gate,
-    a bottleneck token set, late fusion, or a sparse cross-modal router. Sketch the
-    information path, then predict its distinctive signature in **both** playgrounds
-    across early/middle/late layer bands and the silent control. End with the result
-    that would make you reject your design hypothesis and one performance or
-    interpretability trade-off your design introduces.
-
-    **Exit ticket:** write one sentence that clearly separates your observation,
-    your interpretation, and the evidence still needed.
+    **Measurement boundary.** Raw-probe entropy and probability margin are
+    uncalibrated descriptive summaries. Teacher-forced entropy/margin condition on a
+    fixed answer. Position-wise trajectories are comparable only when token-layout
+    fingerprints match; otherwise use declared aggregate or normalized-bin
+    comparisons. None of these measures alone establishes calibrated confidence,
+    free-generation uncertainty, or causal localization.
     """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    def _validate_synthesis(_value):
+        if not _value:
+            return "Complete the synthesis card."
+        if any(not str(_value[_field]).strip() for _field in _value):
+            return "Every synthesis field needs a short response."
+        return None
+
+    synthesis_form = mo.md(r"""
+    **Observed evidence** {evidence}
+
+    **Bounded interpretation** {interpretation}
+
+    **Architecture proposal and information path** {proposal}
+
+    **Predicted signature** {signature}
+
+    **Distribution/alignment limitation** {measurement_limit}
+
+    **Alternative or rival account** {alternative}
+
+    **Next test and rejection condition** {next_test}
+
+    **Performance or interpretability trade-off** {tradeoff}
+
+    **Exit ticket** — one sentence separating observation, interpretation, and needed evidence {exit_ticket}
+    """).batch(
+        evidence=mo.ui.text_area(rows=2, full_width=True),
+        interpretation=mo.ui.text_area(rows=2, full_width=True),
+        proposal=mo.ui.text_area(rows=3, full_width=True),
+        signature=mo.ui.text_area(rows=2, full_width=True),
+        measurement_limit=mo.ui.text_area(rows=2, full_width=True),
+        alternative=mo.ui.text_area(rows=2, full_width=True),
+        next_test=mo.ui.text_area(rows=2, full_width=True),
+        tradeoff=mo.ui.text_area(rows=2, full_width=True),
+        exit_ticket=mo.ui.text_area(rows=2, full_width=True),
+    ).form(
+        submit_button_label="Commit synthesis card",
+        validate=_validate_synthesis,
+        bordered=True,
+    )
+    synthesis_form
+    return (synthesis_form,)
+
+
+@app.cell(hide_code=True)
+def _(
+    build_private_portfolio,
+    get_artifact_versions,
+    get_classroom_log,
+    mo,
+    serialize_private_portfolio,
+    validate_process_log,
+):
+    _log = get_classroom_log()
+    _artifacts = tuple(
+        _artifact.to_dict() for _artifact in get_artifact_versions()
+    )
+    _portfolio = build_private_portfolio(
+        _log,
+        artifact_versions=_artifacts,
+        boundary_disclosure=(
+            "Session state is processed inside the hosted Molab session/container "
+            "boundary, not solely on the student's device. This private download "
+            "is user-initiated and is not research data."
+        ),
+    )
+    _issues = validate_process_log(_log)
+    _portfolio_bytes = serialize_private_portfolio(_portfolio)
+    mo.vstack(
+        [
+            mo.hstack(
+                [
+                    mo.stat(value=str(len(_artifacts)), label="Artifact versions", bordered=True),
+                    mo.stat(value=str(len(_log.records)), label="Process records", bordered=True),
+                    mo.stat(
+                        value="Valid" if not _issues else "Needs attention",
+                        label="Record links",
+                        bordered=True,
+                    ),
+                ],
+                widths="equal",
+                gap=1,
+            ),
+            mo.download(
+                data=_portfolio_bytes,
+                filename="counterpoint-lens-private-portfolio.json",
+                label="Download private learning portfolio",
+            ),
+            mo.callout(
+                mo.md(
+                    "This button downloads to your device. It does not create a "
+                    "research submission or send the portfolio to an instructor."
+                ),
+                kind="neutral",
+            ),
+        ]
+    )
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    portfolio_import_form = mo.ui.file(
+        filetypes=[".json"], multiple=False, kind="area"
+    ).form(
+        label="Restore a private portfolio after a kernel restart",
+        submit_button_label="Validate and restore private portfolio",
+        bordered=True,
+    )
+    reset_session_button = mo.ui.run_button(
+        label="Delete session state and temporary uploads",
+        kind="danger",
+    )
+    mo.accordion(
+        {
+            "Choice — restore or reset this teaching session": mo.vstack(
+                [portfolio_import_form, reset_session_button]
+            )
+        },
+        multiple=False,
+    )
+    return portfolio_import_form, reset_session_button
+
+
+@app.cell(hide_code=True)
+def _(
+    ArtifactVersion,
+    COURSE_RELEASE_ID,
+    PRIVATE_UPLOAD_DIR,
+    classroom_mode,
+    json,
+    load_jsonl,
+    mo,
+    new_session,
+    portfolio_import_form,
+    reset_session_button,
+    set_artifact_versions,
+    set_audience_exchange,
+    set_classroom_log,
+    uuid4,
+):
+    _restore_card = None
+    if portfolio_import_form.value:
+        try:
+            _upload = portfolio_import_form.value[0]
+            _payload = json.loads(_upload.contents.decode("utf-8"))
+            _record_lines = [
+                json.dumps(
+                    _record,
+                    ensure_ascii=False,
+                    allow_nan=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+                for _record in _payload.get("records", [])
+            ]
+            _restored_log = load_jsonl(("\n".join(_record_lines) + "\n").encode("utf-8"))
+            _restored_artifacts = tuple(
+                ArtifactVersion.from_dict(_artifact)
+                for _artifact in _payload.get("artifacts", [])
+            )
+        except Exception as _error:  # noqa: BLE001 — unsafe restore belongs in the UI
+            _restore_card = mo.callout(
+                mo.md(f"**Portfolio restore rejected** — `{type(_error).__name__}: {_error}`"),
+                kind="danger",
+            )
+        else:
+            set_classroom_log(_restored_log)
+            set_artifact_versions(_restored_artifacts)
+            set_audience_exchange((None, tuple()))
+            _restore_card = mo.callout(
+                mo.md(
+                    f"**Portfolio restored** · {len(_restored_log.records)} records · "
+                    f"{len(_restored_artifacts)} artifact versions"
+                ),
+                kind="success",
+            )
+    if reset_session_button.value:
+        _fresh_log = new_session(
+            f"studio-{uuid4().hex[:12]}",
+            decision=classroom_mode,
+            course_release_id=COURSE_RELEASE_ID,
+        )
+        set_classroom_log(_fresh_log)
+        set_artifact_versions(tuple())
+        set_audience_exchange((None, tuple()))
+        for _path in PRIVATE_UPLOAD_DIR.glob("*"):
+            if _path.is_file() or _path.is_symlink():
+                _path.unlink()
+        _restore_card = mo.callout(
+            mo.md("**Session reset complete.** In-memory records and temporary uploads were deleted."),
+            kind="success",
+        )
+    _restore_card
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo, synthesis_form):
+    _complete = synthesis_form.value is not None
+    _status = "Complete" if _complete else "Waiting for synthesis"
+    mo.vstack(
+        [
+            mo.callout(
+                mo.md(
+                    f"**Checkpoint · Synthesis and architecture challenge — {_status}**  \n"
+                    "Stop after your private portfolio and exit ticket are saved."
+                ),
+                kind="success" if _complete else "info",
+            ),
+            mo.callout(
+                mo.md(
+                    "This classroom activity is not a research-readiness claim. "
+                    "Institutional governance, licensed release stimuli, live "
+                    "Molab GPU/VRAM rehearsal, and human accessibility review remain external gates."
+                ),
+                kind="warn",
+            ),
+        ]
+    )
     return
 
 
