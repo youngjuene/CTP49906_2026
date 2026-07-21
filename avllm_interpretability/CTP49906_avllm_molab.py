@@ -28,26 +28,22 @@ def _():
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    # AVLLM interpretability lab
+    # Counterpoint Lens studio
 
-    **The question:** when Qwen2.5-Omni-3B captions a video, is it really using what it
-    *sees* and what it *hears* — or narrating from language priors? A caption like
-    *"a person is playing the piano"* looks equally correct either way, so the output
-    alone can't tell you. This notebook opens the model up with two tools:
+    **Studio question:** when a multimodal model captions a video, what evidence
+    suggests that sound, image, prompt, or learned language patterns shaped its
+    answer? A plausible caption alone cannot settle that question.
 
-    1. **Logit Lens** — apply the language head as a probe to raw intermediate
-       residual states at audio-token positions and compare patterns across thinker
-       layers (with important calibration caveats stated below).
-    2. **Attention Knockout** — surgically cut one information pathway
-       (source→target attention) and re-run. This removes selected **direct
-       attention edges** in selected layers; it does *not* remove a modality,
-       erase its residual-stream representation, or block indirect routes.
+    You will make and register a first audiovisual cut, observe a short saved
+    reference replay, change one condition at a time, compare three readings,
+    revise your explanation and artifact, and finish with a bounded architecture
+    proposal.
 
-    **Learning route:** prepare one shared reference run, work through three guided
-    measurements, test your own claim in two research playgrounds, and finish by
-    designing a sharper experiment. Before every ▶, write a falsifiable prediction —
-    *"if I block X, the result should change like Y"* — then separate what you
-    observed from what the intervention actually warrants.
+    **Required** activities form the shortest complete route. **Choice** activities
+    let you follow one evidence question. **Advanced** controls stay collapsed and
+    are never prerequisites. Before every run, commit a prediction that could be
+    wrong; after every run, separate observation, interpretation, limitation, and
+    next test.
     """)
     return
 
@@ -55,25 +51,58 @@ def _(mo):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## 1. Prepare the experiment
+    ## 1. Prepare your project
 
-    ### 1.1 Before you run
+    ### 1.1 Orient — Make, test, revise
 
-    - **GPU:** attach one via the notebook-specs button in the header; this notebook
-      uses `cuda:0`. One eager 3B thinker is shared by both probes and was validated
-      on a 24 GB RTX 3090.
-    - **Dependencies:** the setup cell pip-installs them into the kernel (molab does
-      not honor the `# /// script` block automatically) and restores
-      `torchvision.io.read_video` with a small PyAV shim, since molab's bundled
-      torchvision no longer ships a video decoder.
-    - The experiment code (`src/`) and the sample clip are cloned from
-      `youngjuene/CTP49906_2026` by the setup cell below.
+    **Required · about 10 minutes.** Follow the eight stages in order. Begin with
+    the saved course replay; it is deterministic, uses the checked-in reference
+    results, and does not allocate a GPU or download model weights. Choose the live
+    model only when your instructor has prepared the runtime.
+
+    **Evidence legend**
+
+    - **Observed:** a displayed value, text difference, or validated record.
+    - **Inferred:** a bounded interpretation that may still have rival explanations.
+    - **Not measured:** a question this activity cannot answer.
+
+    **Data boundary.** Teaching mode is the default and fail-safe mode. Uploads and
+    session records are processed inside the hosted Molab session/container, not
+    only on your device. Nothing in this notebook automatically sends student media,
+    process records, or audience readings to an instructor or outside service.
+    Private downloads happen only when you press a download control.
     """)
     return
 
 
 @app.cell(hide_code=True)
 def _(mo):
+    def _validate_execution_mode(_value):
+        if not _value:
+            return "Choose a replay or live route."
+        return None
+
+    execution_mode_form = mo.ui.dropdown(
+        ["Saved course replay", "Live model"],
+        value="Saved course replay",
+        label="Execution route",
+    ).form(
+        submit_button_label="Apply execution route",
+        validate=_validate_execution_mode,
+        bordered=True,
+    )
+    execution_mode_form
+    return (execution_mode_form,)
+
+
+@app.cell
+def _(execution_mode_form):
+    USE_PRECOMPUTED = execution_mode_form.value != "Live model"
+    return (USE_PRECOMPUTED,)
+
+
+@app.cell(hide_code=True)
+def _(USE_PRECOMPUTED, mo):
     import importlib.metadata
     import importlib.util
     import subprocess
@@ -103,12 +132,13 @@ def _(mo):
                     [sys.executable, "-m", "pip", "install", *to_install], check=True
                 )
 
-    _ensure_packages([
-        ("transformers", "transformers", "4.52.0", "transformers==4.52.0"),
-        ("accelerate", "accelerate", "1.14.0", "accelerate==1.14.0"),
-        ("qwen_omni_utils", "qwen-omni-utils", "0.0.9", "qwen-omni-utils==0.0.9"),
-        ("av", "av", None, "av"),  # PyAV — backs the video-decode shim below
-    ])
+    if not USE_PRECOMPUTED:
+        _ensure_packages([
+            ("transformers", "transformers", "4.52.0", "transformers==4.52.0"),
+            ("accelerate", "accelerate", "1.14.0", "accelerate==1.14.0"),
+            ("qwen_omni_utils", "qwen-omni-utils", "0.0.9", "qwen-omni-utils==0.0.9"),
+            ("av", "av", None, "av"),
+        ])
 
     def _ensure_video_reader():
         # molab ships its own recent torch/torchvision and ignores the
@@ -165,7 +195,8 @@ def _(mo):
         torchvision.io.read_video = _read_video_pyav
         print("patched torchvision.io.read_video (PyAV shim) for molab compatibility")
 
-    _ensure_video_reader()
+    if not USE_PRECOMPUTED:
+        _ensure_video_reader()
 
     # The experiment code (src/) and sample video live under the
     # `avllm_interpretability/` subdirectory of this repo. If the clone already
@@ -175,7 +206,7 @@ def _(mo):
     # REPO_REF selects the source version. Use "main" while iterating; distribute
     # an immutable course tag so later repository changes cannot alter the class
     # run. Fetching through FETCH_HEAD supports both branches and tags.
-    REPO_REF = "main"
+    REPO_REF = "bb12df8686c0179bf95f0cc90b90f2319ad4040c"
     _local_project = Path(__file__).resolve().parent
     if (_local_project / "src").is_dir() and (_local_project / "assets").is_dir():
         # Local development / a notebook opened from a checked-out release:
@@ -206,37 +237,33 @@ def _(mo):
             )
         PROJECT_DIR = REPO_DIR / "avllm_interpretability"
     assert PROJECT_DIR.is_dir(), f"expected code dir not found: {PROJECT_DIR}"
-    if str(PROJECT_DIR) not in sys.path:
-        sys.path.insert(0, str(PROJECT_DIR))
+    for _source_root in (PROJECT_DIR, PROJECT_DIR.parent):
+        if str(_source_root) not in sys.path:
+            sys.path.insert(0, str(_source_root))
     print("project dir:", PROJECT_DIR)
     return (PROJECT_DIR,)
 
 
 @app.cell
-def _(PROJECT_DIR):
-    # GPU-free replay of the guided demo. Flip to True to render the saved course
-    # results without a GPU or model download. The research playgrounds still
-    # need a live model and fail clearly if submitted in this mode. Refresh the
-    # saved results on a GPU with:
-    #   python avllm_interpretability/scripts/generate_precompute.py
-    USE_PRECOMPUTED = False
+def _(PROJECT_DIR, USE_PRECOMPUTED):
     PRECOMPUTED_DIR = PROJECT_DIR / "precomputed"
     if USE_PRECOMPUTED:
         print(f"USE_PRECOMPUTED=True — replaying saved course results from {PRECOMPUTED_DIR} (no GPU)")
-    return PRECOMPUTED_DIR, USE_PRECOMPUTED
+    return (PRECOMPUTED_DIR,)
 
 
 @app.cell(hide_code=True)
 def _(USE_PRECOMPUTED):
-    import torch
-
     if USE_PRECOMPUTED:
-        DEVICE = torch.device("cpu")
-        print(f"torch={torch.__version__}, USE_PRECOMPUTED=True → CPU (no GPU required)")
+        DEVICE = "cpu"
+        torch = None
+        print("Saved course replay → CPU (no GPU allocation or model download)")
     else:
+        import torch
+
         assert torch.cuda.is_available(), (
             "No GPU visible. In molab, attach a GPU via the notebook-specs button in the header. "
-            "(Or set USE_PRECOMPUTED=True above to replay the saved course results.)"
+            "Choose Saved course replay to continue without a GPU."
         )
         DEVICE = torch.device("cuda:0")
         _free, _total = torch.cuda.mem_get_info(0)
