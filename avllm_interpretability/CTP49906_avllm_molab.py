@@ -1519,7 +1519,7 @@ def _(mo):
         command_key=mo.ui.text(value="paired-run-1", full_width=True),
         prediction=mo.ui.text_area(rows=2, full_width=True),
         initial_explanation=mo.ui.text_area(rows=2, full_width=True),
-        operation=mo.ui.dropdown(_operation_labels, value="original_reference"),
+        operation=mo.ui.dropdown(_operation_labels, value="Original reference"),
         offset_ms=mo.ui.slider(-2000, 2000, step=100, value=500, show_value=True),
         prompt=mo.ui.text(value="Describe what you see and hear in the video", full_width=True),
     ).form(
@@ -1822,8 +1822,6 @@ def _(
 ):
     from contextlib import nullcontext as _nullcontext
 
-    from qwen_omni_utils import process_mm_info as _process_mm_info
-
     _p = scoreboard_controls.value
     mo.stop(
         _p is None,
@@ -1832,6 +1830,8 @@ def _(
             kind="info",
         ),
     )
+
+    from qwen_omni_utils import process_mm_info as _process_mm_info
 
     _results_dir = LOGIT_CSV_PATH.parent
 
@@ -2396,11 +2396,6 @@ def _(
     resolve_clip_selection,
     teacher_forcing_controls,
 ):
-    from qwen_omni_utils import process_mm_info as _tf_mm_info
-
-    from src.teacher_forcing import render_delta_strip as _render_strip
-    from src.teacher_forcing import teacher_forced_delta as _tfd
-
     _tp = teacher_forcing_controls.value
     mo.stop(
         _tp is None,
@@ -2409,6 +2404,11 @@ def _(
             kind="info",
         ),
     )
+
+    from qwen_omni_utils import process_mm_info as _tf_mm_info
+
+    from src.teacher_forcing import render_delta_strip as _render_strip
+    from src.teacher_forcing import teacher_forced_delta as _tfd
 
     # Resolve the explicit choice with the same safe content-addressed helper
     # used by 🎛️, so the two playgrounds also share cache identities.
