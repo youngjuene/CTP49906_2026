@@ -240,3 +240,12 @@ graded on.
       url={https://arxiv.org/abs/2604.02605},
 }
 ```
+
+## WP-6 classroom release notes
+
+Use the bilingual [`study_materials/wp6/`](../study_materials/wp6/) runbook and
+student quick-start alongside this notebook. The replay manifest pins the model
+revision and artifact checksums; the audience response surface is
+[`../audience/CTP49906_audience_response_molab.py`](../audience/CTP49906_audience_response_molab.py).
+This is a teaching-only candidate release until the listed human accessibility,
+localization, licensing, and governance gates are reviewed.

@@ -1,0 +1,55 @@
+{
+  "schema_version": "visual-alternatives/1.0.0",
+  "content_version": "classroom-guidance/1.0.0",
+  "status": "candidate_pending_human_accessibility_review",
+  "visuals": [
+    {
+      "visual_id": "guided.probe_distribution",
+      "text_alternative": {
+        "en": "Layer-by-layer probe score table for selected audio positions; raw diagnostic scores, not calibrated uncertainty.",
+        "ko": "선택한 오디오 위치의 레이어별 프로브 점수 표입니다. 보정된 불확실성이 아닌 원시 진단 점수입니다."
+      },
+      "download": {
+        "path": "avllm_interpretability/precomputed/logit_lens_audio_token_analysis.csv",
+        "sha256": "a3f4dc0ececd7893bcd8a02b296019bb6788a70a345622eefb068c8f42954d7f",
+        "bytes": 64175
+      }
+    },
+    {
+      "visual_id": "guided.attention_summary",
+      "text_alternative": {
+        "en": "Reduced attention-mass values by captured layer and token type for the saved baseline and intervention; attention mass is descriptive, not causal importance.",
+        "ko": "저장된 기준선과 개입에 대해 캡처 레이어·토큰 유형별로 축약한 어텐션 질량입니다. 인과적 중요도가 아닌 서술 값입니다."
+      },
+      "download": {
+        "path": "avllm_interpretability/precomputed/attention_summary.json",
+        "sha256": "8d1de50b36e64c357b036c24c9ab09d36bdcc1028f02154548c4b0562beb12a3",
+        "bytes": 20695
+      }
+    },
+    {
+      "visual_id": "guided.caption_comparison",
+      "text_alternative": {
+        "en": "Saved baseline and direct-edge-intervention captions shown side by side; a text difference shows sensitivity to the intervention, not proof of modality use.",
+        "ko": "저장된 기준 캡션과 직접 엣지 개입 캡션의 나란한 비교입니다. 텍스트 차이는 개입 민감도를 보이지만 모달리티 사용을 증명하지 않습니다."
+      },
+      "download": {
+        "path": "avllm_interpretability/precomputed/captions.json",
+        "sha256": "09d30b17693280ff6550eac3cb46701e245684006e399195d5390de7005ed2f4",
+        "bytes": 540
+      }
+    },
+    {
+      "visual_id": "audience.reading_matrix",
+      "text_alternative": {
+        "en": "Synthetic post-reveal table marking which descriptive labels appear in creator, two independent audience, and machine readings; presence is not correctness.",
+        "ko": "창작자, 독립 청중 두 명, 기계 읽기에 어떤 묘사 라벨이 나타나는지 표시한 합성 공개 후 표입니다. 출현 여부는 정답 여부가 아닙니다."
+      },
+      "download": {
+        "path": "study_materials/wp6/audience_reading_matrix_example.csv",
+        "sha256": "49074ff2085f277b125e8bfce84da4cd173d834a73982cc8b2749260106f3551",
+        "bytes": 233
+      }
+    }
+  ]
+}

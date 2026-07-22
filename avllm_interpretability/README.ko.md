@@ -237,3 +237,12 @@ Knockout 셀**에 속하고(생성 중에 작동), 마지막 두 개는 **오디
       url={https://arxiv.org/abs/2604.02605},
 }
 ```
+
+## WP-6 수업 배포 안내
+
+이 노트북과 함께 이중 언어 [`study_materials/wp6/`](../study_materials/wp6/)
+교사용 실행 안내와 학생 빠른 시작을 사용하세요. 재생 매니페스트는 모델 revision과
+산출물 체크섬을 고정합니다. 청중 응답 표면은
+[`../audience/CTP49906_audience_response_molab.py`](../audience/CTP49906_audience_response_molab.py)입니다.
+사람의 접근성·현지화·라이선스·거버넌스 검토가 끝나기 전까지는 수업 전용 후보
+배포이며 연구 준비 완료를 주장하지 않습니다.

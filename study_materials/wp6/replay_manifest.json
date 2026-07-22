@@ -1,0 +1,40 @@
+{
+  "schema_version": "classroom-replay-manifest/1.0.0",
+  "release_claim": "candidate_only",
+  "teaching_label": "saved course replay — no GPU; teaching-only example",
+  "generation_status": "existing committed pack verified by checksum; GPU regeneration not performed in this CPU-only task",
+  "generator_revision": "bb12df8686c0179bf95f0cc90b90f2319ad4040c",
+  "stimulus_revision": "a67bf6cd3420b75a608a0acc65b75d51acbd3c5f",
+  "stimulus_code": "original_reference",
+  "model": "Qwen/Qwen2.5-Omni-3B",
+  "model_revision": "f75b40e3da2003cdd6e1829b1f420ca70797c34e",
+  "generated_at_utc": "2026-07-20T16:28:35Z",
+  "generation_command": "python avllm_interpretability/scripts/generate_precompute.py --model_path Qwen/Qwen2.5-Omni-3B --model_revision f75b40e3da2003cdd6e1829b1f420ca70797c34e --video_path avllm_interpretability/assets/02321.mp4 --out_dir avllm_interpretability/precomputed --nframes 8 --logit_prompt 'Describe what you hear in the video' --attention_prompt 'Describe what you see and hear in the video' --max_new_tokens 32 --generated_at 2026-07-20T16:28:35Z",
+  "files": {
+    "avllm_interpretability/assets/02321.mp4": {
+      "sha256": "9dcf1572e593777267eab01351022fcaf7b00f9a564da6059eb97f422266ddec",
+      "bytes": 1056059
+    },
+    "avllm_interpretability/precomputed/attention_summary.json": {
+      "sha256": "8d1de50b36e64c357b036c24c9ab09d36bdcc1028f02154548c4b0562beb12a3",
+      "bytes": 20695
+    },
+    "avllm_interpretability/precomputed/captions.json": {
+      "sha256": "09d30b17693280ff6550eac3cb46701e245684006e399195d5390de7005ed2f4",
+      "bytes": 540
+    },
+    "avllm_interpretability/precomputed/logit_lens_audio_token_analysis.csv": {
+      "sha256": "a3f4dc0ececd7893bcd8a02b296019bb6788a70a345622eefb068c8f42954d7f",
+      "bytes": 64175
+    },
+    "avllm_interpretability/precomputed/meta.json": {
+      "sha256": "86fb2a46c274c8f5c3a3c8a68c153e5c1269023230707885a4a4be805517ee04",
+      "bytes": 491
+    }
+  },
+  "manual_gates": {
+    "licensed_stimulus_release": "UNRESOLVED",
+    "immutable_course_tag": "UNRESOLVED",
+    "accessibility_localization_signoff": "UNRESOLVED"
+  }
+}

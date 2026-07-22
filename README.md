@@ -27,3 +27,13 @@ python src/attention_knockout_experiment.py --model_path Qwen/Qwen2.5-Omni-3B --
 Or run both from the classroom marimo notebook [`CTP49906_avllm_molab.py`](avllm_interpretability/CTP49906_avllm_molab.py) — open it in [molab](https://marimo.io/molab) with a GPU attached, or locally with `uvx marimo edit`. Its guidebook (cell tour, knockout catalog, suggested experiments) is in [`avllm_interpretability/README.md`](avllm_interpretability/README.md).
 
 The companion [`CTP49906_jlens_molab.py`](jacobian-lens/CTP49906_jlens_molab.py) first compares the course reference Qwen3.5-4B Jacobian lens with the vanilla logit lens, then exposes prompt offset, layers, top-k, slice, filtering, and lens-estimator choices in a submit-gated research playground before an architecture-transfer synthesis. See the [`jacobian-lens` classroom guide](jacobian-lens/README.md#classroom-marimo-demo).
+
+## Classroom release guidance
+
+The WP-6 bilingual instructor, student, privacy, troubleshooting, and worksheet
+migration materials are in [`study_materials/wp6/`](study_materials/wp6/). The
+blinded audience response surface is [`audience/CTP49906_audience_response_molab.py`](audience/CTP49906_audience_response_molab.py);
+its saved replay and accessibility alternatives are checksum-bound in the WP-6
+release manifest. These materials describe a teaching-only candidate release;
+human accessibility, localization, licensing, and research-governance review
+remain open.

@@ -1,0 +1,7 @@
+label,creator,audience_1,audience_2,model
+anticipation,true,true,false,false
+music,false,false,false,true
+motion,false,false,false,true
+patient,false,true,false,false
+repetition,false,true,true,false
+unsettled,false,false,true,false
