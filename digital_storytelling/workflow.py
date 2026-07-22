@@ -32,6 +32,12 @@ from curriculum_common.outcome_records import (
     build_outcome_bundle,
     validate_outcome_bundle,
 )
+from curriculum_common.pilot_profile import (
+    ExchangeRouteDecision,
+    PRIVATE_EQUIVALENT_ROUTE,
+    load_pilot_profile,
+    resolve_exchange_route,
+)
 from curriculum_common.portfolio_export import (
     build_private_portfolio,
     serialize_private_portfolio,
@@ -45,7 +51,8 @@ from curriculum_common.production_manifest import (
 from curriculum_common.session_records import new_session, teaching_mode
 
 
-COMPARISON_ROUTE_ID = "matched-comparison/1.0.0"
+PILOT_PROFILE = load_pilot_profile()
+COMPARISON_ROUTE_ID = PILOT_PROFILE.comparison_route_id
 PRIVATE_BUNDLE_SCHEMA = "storytelling-private-bundle/1.0.0"
 ARTIFACT_RUBRIC_ID = "audiovisual-intentionality-rubric/0.1.0-pilot"
 FLEXIBILITY_RUBRIC_ID = "creative-flexibility-rubric/0.1.0-pilot"
@@ -74,10 +81,9 @@ MATCHED_DIMENSIONS = (
 ROUTE_STAGES = (
     "orient",
     "common_pre_task",
-    "plan_first_cut",
-    "register_v1",
+    "plan_and_register_v1",
     "story_structure_activity",
-    "audience_exchange",
+    "audience_or_private_exchange",
     "revise_v2",
     "common_post_task",
     "private_export",
@@ -156,8 +162,17 @@ CONTENT: Mapping[str, Mapping[str, str]] = {
         "sound_role": "Role of sound in the story",
         "expected_reading": "Expected change in a viewer's reading",
         "structure_submit": "Commit story-structure note",
-        "stage_audience": "3.2 Exchange — Independent audience readings",
-        "audience_body": "Create a permission-authorized blinded packet, then import at least two distinct independent readings. Two readings are the classroom minimum, never a research sampling justification.",
+        "stage_audience": "3.2 Compare — Choose peer or private evidence",
+        "audience_body": "Peer exchange is optional and requires permission. You may instead use the equivalent private synthetic or instructor example with no penalty; both routes use the same comparison checkpoint and remain teaching-only.",
+        "exchange_route": "Comparison evidence route",
+        "peer_route": "Optional permission-authorized peer exchange",
+        "private_route": "Equivalent private route — no penalty",
+        "private_source": "Private example source",
+        "private_evidence_label": "Private supplied evidence",
+        "not_independent_audience": "This synthetic/instructor example is supplied practice evidence, not independent audience evidence.",
+        "synthetic_example": "Synthetic example",
+        "instructor_example": "Instructor example",
+        "private_ready": "Private example selected. No peer packet, response, or sharing permission is required.",
         "asset_reference": "Permission-approved presentation reference",
         "media_type": "Media type",
         "duration_ms": "Duration in milliseconds",
@@ -190,7 +205,7 @@ CONTENT: Mapping[str, Mapping[str, str]] = {
         "post_submit": "Commit post-task response",
         "timing_label": "Observed stage timing or schedule deviation",
         "help_label": "Help, tool, source, accessibility, or disruption deviation",
-        "export_heading": "Private learning bundle",
+        "export_heading": "4.2 Private learning bundle",
         "export_body": "The download contains the common private portfolio, linked V1/V2 artifact manifests, common outcome responses, and append-only fidelity notes. It contains no student-facing allocation field and is not a research submission.",
         "export_download": "Download private storytelling bundle",
         "export_waiting": "Complete V1, V2, and both common tasks before export.",
@@ -250,8 +265,17 @@ CONTENT: Mapping[str, Mapping[str, str]] = {
         "sound_role": "이야기에서 소리의 역할",
         "expected_reading": "예상되는 시청자 해석의 변화",
         "structure_submit": "이야기 구조 메모 저장",
-        "stage_audience": "3.2 교환 — 독립적인 관객 해석",
-        "audience_body": "권한이 확인된 익명 패킷을 만든 뒤 서로 다른 독립 해석을 두 개 이상 가져오세요. 두 해석은 수업 활동의 최소치일 뿐 연구 표본의 근거가 아닙니다.",
+        "stage_audience": "3.2 비교 — 동료 또는 비공개 근거 선택",
+        "audience_body": "동료 교환은 선택 사항이며 권한이 필요합니다. 불이익 없이 동등한 비공개 합성 또는 교수 예시를 선택할 수 있습니다. 두 경로는 같은 비교 체크포인트를 사용하며 교육 전용입니다.",
+        "exchange_route": "비교 근거 경로",
+        "peer_route": "선택적 권한 확인 동료 교환",
+        "private_route": "동등한 비공개 경로 — 불이익 없음",
+        "private_source": "비공개 예시 출처",
+        "private_evidence_label": "비공개 제공 근거",
+        "not_independent_audience": "이 합성/교수 예시는 제공된 연습 근거이며 독립 관객 근거가 아닙니다.",
+        "synthetic_example": "합성 예시",
+        "instructor_example": "교수 예시",
+        "private_ready": "비공개 예시를 선택했습니다. 동료 패킷, 응답, 공유 권한이 필요하지 않습니다.",
         "asset_reference": "권한이 확인된 프레젠테이션 참조",
         "media_type": "미디어 유형",
         "duration_ms": "재생 시간(밀리초)",
@@ -284,7 +308,7 @@ CONTENT: Mapping[str, Mapping[str, str]] = {
         "post_submit": "사후 과제 응답 저장",
         "timing_label": "관찰한 단계 시간 또는 일정 편차",
         "help_label": "도움, 도구, 소스, 접근성, 중단 관련 편차",
-        "export_heading": "개인 학습 번들",
+        "export_heading": "4.2 개인 학습 번들",
         "export_body": "다운로드에는 공통 개인 포트폴리오, 연결된 V1/V2 아티팩트 명세, 공통 성과 응답, 추가 전용 충실도 메모가 들어갑니다. 학생에게 배정 정보를 노출하지 않으며 연구 제출물이 아닙니다.",
         "export_download": "개인 스토리텔링 번들 다운로드",
         "export_waiting": "내보내기 전에 V1, V2, 공통 사전·사후 과제를 완료하세요.",
@@ -507,6 +531,8 @@ def build_private_story_bundle(
     post_response: Mapping[str, str],
     stage_timing_notes: Sequence[str],
     fidelity_deviations: Sequence[str],
+    exchange_route: ExchangeRouteDecision | None = None,
+    audience_reading_count: int = 0,
 ) -> dict[str, Any]:
     """Wrap the common private portfolio without mutating its canonical bytes."""
 
@@ -515,10 +541,22 @@ def build_private_story_bundle(
         raise ValueError("the private bundle requires linked V1 and V2 artifacts")
     if artifacts[1].parent_artifact_id != artifacts[0].artifact_id:
         raise ValueError("V2 must preserve the immutable V1 parent link")
-    log = new_session(session_pseudonym, decision=teaching_mode())
+    route = exchange_route or resolve_exchange_route(
+        PRIVATE_EQUIVALENT_ROUTE,
+        permission_confirmed=False,
+        evidence_source="instructor_example",
+    )
+    if route.audience_exchange_required and audience_reading_count < 2:
+        raise ValueError("peer exchange requires two distinct permission-valid readings")
+    log = new_session(
+        session_pseudonym,
+        decision=teaching_mode(PILOT_PROFILE.teaching_mode_reason),
+        course_release_id=PILOT_PROFILE.course_release_id,
+    )
     private_portfolio = build_private_portfolio(
         log,
         artifact_versions=tuple(artifact.to_dict() for artifact in artifacts),
+        learning_exchange=route.to_private_checkpoint_record(),
         boundary_disclosure=(
             "Session state is processed inside the hosted Molab session/container "
             "boundary, not solely on the student's device. This private download is "
@@ -536,6 +574,8 @@ def build_private_story_bundle(
         "schema_version": PRIVATE_BUNDLE_SCHEMA,
         "classification": "private learning bundle; pseudonymous; not research data",
         "route_id": COMPARISON_ROUTE_ID,
+        "course_release_id": PILOT_PROFILE.course_release_id,
+        "learning_exchange": route.to_private_checkpoint_record(),
         "route_release_status": "structural_preview_human_gates_unresolved",
         "private_portfolio": private_portfolio,
         "common_outcomes": outcome_bundle,
@@ -561,10 +601,30 @@ def validate_private_story_bundle(value: Mapping[str, Any]) -> StoryBundleValida
         issues.append("unsupported private storytelling bundle schema")
     if value.get("route_id") != COMPARISON_ROUTE_ID:
         issues.append("unexpected route identifier")
+    if value.get("course_release_id") != PILOT_PROFILE.course_release_id:
+        issues.append("unexpected teaching-pilot course release identifier")
     if value.get("automatic_student_data_egress") is not False:
         issues.append("automatic student-data egress must remain false")
     if value.get("research_ready") is not False:
         issues.append("the unresolved route cannot claim research readiness")
+    learning_exchange = value.get("learning_exchange")
+    if not isinstance(learning_exchange, Mapping):
+        issues.append("learning_exchange must be a mapping")
+    else:
+        if "route_id" in learning_exchange or "student_reason" in learning_exchange:
+            issues.append("private route choice or reason must not be serialized")
+        if learning_exchange.get("checkpoint_id") != "compare_readings":
+            issues.append("learning exchange must use the shared comparison checkpoint")
+        if learning_exchange.get("no_penalty") is not True:
+            issues.append("learning-exchange routes must carry the no-penalty policy")
+        if learning_exchange.get("research_ready") is not False:
+            issues.append("learning-exchange evidence cannot claim research readiness")
+        if learning_exchange.get("evidence_source") not in {
+            "independent_peer_readings",
+            "synthetic_example",
+            "instructor_example",
+        }:
+            issues.append("comparison evidence source must be explicit")
     portfolio = value.get("private_portfolio")
     if not isinstance(portfolio, Mapping):
         issues.append("private_portfolio must be a mapping")

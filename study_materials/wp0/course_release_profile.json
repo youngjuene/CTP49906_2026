@@ -5,7 +5,7 @@
   "immutable_course_release_id": null,
   "candidate_observation_only": true,
   "repository": {
-    "observed_head": "f504baf6810d47f30f3bcc4ebc61ba9c9f41e8bb",
+    "observed_head": "495875bdb297b809c82dccc6e631616444f47229",
     "release_commit": null,
     "release_tag": null,
     "repo_ref": "main",
@@ -13,7 +13,7 @@
   },
   "notebook": {
     "path": "avllm_interpretability/CTP49906_avllm_molab.py",
-    "sha256": "4302b5933fed8d7e54b39c2e8e2989d7e4a786630391c636a082bbd8a873c064"
+    "sha256": "22782b3485244a46dadce255eacb5ca9806ea0bf4b1d39407c082f1cadaef9af"
   },
   "model": {
     "id": "Qwen/Qwen2.5-Omni-3B",
@@ -62,7 +62,29 @@
     "metric_release_versions": null,
     "treatment_route_id": "classroom-ia/1.0.0",
     "comparison_route_id": "matched-comparison/1.0.0",
-    "audience_route_id": null
+    "audience_route_id": "blinded-audience/1.0.0"
+  },
+  "pilot_candidate": {
+    "baseline_commit": "495875bdb297b809c82dccc6e631616444f47229",
+    "protected_tag_ref": "refs/tags/teaching-pilot-candidate",
+    "protected_tag_published": false,
+    "course_release_id": "teaching-pilot-candidate/495875bdb297b809c82dccc6e631616444f47229",
+    "default_execution_mode": "saved_replay",
+    "automatic_student_data_egress": false,
+    "student_media_ownership": "student_retained_private_media",
+    "research_enabled": false,
+    "peer_exchange": {
+      "required": false,
+      "permission_required": true
+    },
+    "private_equivalent": {
+      "enabled": true,
+      "no_penalty": true,
+      "evidence_sources": [
+        "synthetic_example",
+        "instructor_example"
+      ]
+    }
   },
   "human_approved_versions": {
     "study_protocol": null,

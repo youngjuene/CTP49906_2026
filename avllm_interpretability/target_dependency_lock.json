@@ -1,0 +1,2204 @@
+{
+  "schema_version": "target-dependency-lock/2.0.0",
+  "status": "STATIC_CANDIDATE_UNVERIFIED",
+  "readiness": false,
+  "scope": "local-authorized-avllm-environment",
+  "inventory_role": "local_environment_observation_not_target_dependency_closure",
+  "source_requirements": {
+    "path": "avllm_interpretability/requirements.txt",
+    "sha256": "sha256:f5ff653492d02a9ccc060a4f3cbfcc414ef5a496c9f849aef2f404b9ce8454a3",
+    "direct_packages": [
+      "accelerate",
+      "openai",
+      "qwen-omni-utils",
+      "torch",
+      "torchvision",
+      "transformers"
+    ]
+  },
+  "distribution_count": 173,
+  "distribution_inventory_identity": "sha256:e39b367729f26b6429eb6b7b8153d9919837b6454aa4fa2c929ceac4f2d372dd",
+  "installed_distributions": [
+    {
+      "name": "accelerate",
+      "version": "1.14.0",
+      "direct": true,
+      "record_entry_count": 97,
+      "installed_record_sha256": "sha256:7a91e0e73f841b6b8a371e108a9c73435f59fa0d811f5850ff2087c2a21ef317",
+      "installed_tree_sha256": "sha256:491bd2ed6a2c7fdeaf1e493886566272672d479047efc28a1d30638a9b533d57",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "annotated-types",
+      "version": "0.7.0",
+      "direct": false,
+      "record_entry_count": 9,
+      "installed_record_sha256": "sha256:5bb4f1ca72420634ebd566dafd9d5fbce3051b0c1c1d13980f6ceeb5c4dbb843",
+      "installed_tree_sha256": "sha256:9db6193f8cec03ff5442a4f74feb356db1df2041dff3956e1e2431cb3e5777c1",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "anyio",
+      "version": "4.14.2",
+      "direct": false,
+      "record_entry_count": 54,
+      "installed_record_sha256": "sha256:722d3bb1432c0f34f49dca8ac66fa132db1e4a2151f7104ee66a8cd44222c0b6",
+      "installed_tree_sha256": "sha256:c95851fde042ad6c8e2709ff5a36c5298e78c8534e744b517b8f0a72492dc5d9",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "argon2-cffi",
+      "version": "25.1.0",
+      "direct": false,
+      "record_entry_count": 15,
+      "installed_record_sha256": "sha256:8377684d785a60355da086bcb4443a473dde7b79ad81f17133580c20dc018c4b",
+      "installed_tree_sha256": "sha256:f205d3cd2a26f428cd6c6a06f3bf1f723e61b143f71cf552fb04188e2c514e2c",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "argon2-cffi-bindings",
+      "version": "25.1.0",
+      "direct": false,
+      "record_entry_count": 10,
+      "installed_record_sha256": "sha256:88ad4282811daf0f53c070b33219b55956e774917c43683f4d2d59633bbf5333",
+      "installed_tree_sha256": "sha256:f87008c2fefd3b2c7230dcf0c5404fe161fccc72df5dd0261926c1372b34e7f9",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "arrow",
+      "version": "1.4.0",
+      "direct": false,
+      "record_entry_count": 17,
+      "installed_record_sha256": "sha256:887d9d15d6c5ee5ffe2d8a690c69e2bea1b5b0f913f2ccefe5001950e1aad143",
+      "installed_tree_sha256": "sha256:3959cf0eed30b41050e2ab9e49e23abdbdcdb7bf02965d98df749f367f64a0bc",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "asttokens",
+      "version": "3.0.2",
+      "direct": false,
+      "record_entry_count": 17,
+      "installed_record_sha256": "sha256:7f0b4dabfd410366c48fb66b1af7671f17ab499310c80c3103855a7893694314",
+      "installed_tree_sha256": "sha256:6f4e2335b2be18b1ae817a5c3d2504a41c5b19ebee3ced94fb000ef163193eb4",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "async-lru",
+      "version": "2.3.0",
+      "direct": false,
+      "record_entry_count": 9,
+      "installed_record_sha256": "sha256:2cb0f89bc69e325b3907f5ba4ea1f7e19b86852b46455fc7ca0dfa73721d1771",
+      "installed_tree_sha256": "sha256:089c9b9c9abef29a9b1e18610e5769a661d2fe7e91b259d906ee52cb5e9ecee5",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "attrs",
+      "version": "26.1.0",
+      "direct": false,
+      "record_entry_count": 37,
+      "installed_record_sha256": "sha256:6b0b326d4b4ee0fac27909ac7cbb066fc4bdf8e93d87031e27e770db059e5a04",
+      "installed_tree_sha256": "sha256:af70f0c4f88dbd8d752ff7b76030fb5f3a95f9be65371f1b72933d43aa53322a",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "audioread",
+      "version": "3.1.0",
+      "direct": false,
+      "record_entry_count": 14,
+      "installed_record_sha256": "sha256:428a76bab1ef230dd97d88e7214f179a230b05491d68f191bd61d216f31a8fe2",
+      "installed_tree_sha256": "sha256:941d3e35e6bf7f6b8fb571a2043134f30f7f52293561ed175349ad972938ae60",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "av",
+      "version": "17.1.0",
+      "direct": false,
+      "record_entry_count": 258,
+      "installed_record_sha256": "sha256:0b4fa526f1e62de65b4503e5748dfebe2ba9483db7671e86291e7ff7474c4247",
+      "installed_tree_sha256": "sha256:5363f1c21d53152c4670a5ad3fd32f5072d1b1c49ed4f13f9e2d831b574655c9",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "babel",
+      "version": "2.18.0",
+      "direct": false,
+      "record_entry_count": 1122,
+      "installed_record_sha256": "sha256:04e1c26d8f438c7f988fcff85e78a9cf06623b8a82084d6076b52a980d8585c5",
+      "installed_tree_sha256": "sha256:1b42cc7bffd6ccb8ede9ae3b84d47a5b256dbcb8ad6f6d2bdf0882aacb475e41",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "beautifulsoup4",
+      "version": "4.15.0",
+      "direct": false,
+      "record_entry_count": 23,
+      "installed_record_sha256": "sha256:d66734c0b7a8e4d1077ad38ba04541c15514f2a3ac92e39b3907483ced024c6f",
+      "installed_tree_sha256": "sha256:97de4c2b909041b4db60b2f2a0d38d5a8ab76719998967990eccbb219db32429",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "bleach",
+      "version": "6.4.0",
+      "direct": false,
+      "record_entry_count": 63,
+      "installed_record_sha256": "sha256:c70700c636e385e620e642a04a4090945c159c4a7c730fde24cd0f68a7f2c87e",
+      "installed_tree_sha256": "sha256:99d9e68ea38159692b0503b9785d628ae921527c1ba092acc43d87fbc546503b",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "certifi",
+      "version": "2026.6.17",
+      "direct": false,
+      "record_entry_count": 12,
+      "installed_record_sha256": "sha256:f010bf8e6401172bf2ac5eb50c0a44e60d4f5917b88a8f95ac05e37633a1803b",
+      "installed_tree_sha256": "sha256:e3b48729e147899fc95fef9c8d56e1e1fa213af15777d487ef8b8b17733f3e36",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "cffi",
+      "version": "2.1.0",
+      "direct": false,
+      "record_entry_count": 34,
+      "installed_record_sha256": "sha256:a530731e88066fefaac9a2027eb206687cfe20aca40a4b56b9e37c1d08fe96bf",
+      "installed_tree_sha256": "sha256:9b9054835962832a4056a771d34c638f69befd5f3aece3e98db8484934a24692",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "charset-normalizer",
+      "version": "2.1.1",
+      "direct": false,
+      "record_entry_count": 22,
+      "installed_record_sha256": "sha256:817aca00e54c0a89f36e0e1b30ceee1cc90095eb260e7a7d3984b74bf6c38c54",
+      "installed_tree_sha256": "sha256:e6f7fdc2b8f554f5bde5fd4af8765c4ab6f9f79e43d541759396de73088013cc",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "click",
+      "version": "8.4.2",
+      "direct": false,
+      "record_entry_count": 24,
+      "installed_record_sha256": "sha256:f14e3990f101ef4a1dd09903eb3f859f233ec1d9bd9a00e4470f207568804d12",
+      "installed_tree_sha256": "sha256:54b0bffc218aeb6cc3ca9d5b69f102ff280b7d3ac1039d5014198114d7bbf132",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "comm",
+      "version": "0.2.3",
+      "direct": false,
+      "record_entry_count": 9,
+      "installed_record_sha256": "sha256:d4854a07c72d25313dfa1c7322a12a09455a57adbf66939d785aeb8f07b79ee5",
+      "installed_tree_sha256": "sha256:2ea8955bce9e93fb57dd53e2fe081ec995527cf7f10aa07e56149d558f2ce167",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "contourpy",
+      "version": "1.3.2",
+      "direct": false,
+      "record_entry_count": 26,
+      "installed_record_sha256": "sha256:ad85a518a173aa80d33cb2672004b577d2d62c2a3e3c520249c41c0063769083",
+      "installed_tree_sha256": "sha256:0da843c3674ffd33006e154604a823556d6f52f14717d5c683559db8dde35bfd",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "cycler",
+      "version": "0.12.1",
+      "direct": false,
+      "record_entry_count": 9,
+      "installed_record_sha256": "sha256:cbcbee5f18d75bd4935199b135aa33c3ed62df14991110a35c428883798d7979",
+      "installed_tree_sha256": "sha256:76fadf99906b1fa7aa77805c3ee725c182dc7cadfefc745da07d2b3491f1af6e",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "debugpy",
+      "version": "1.8.21",
+      "direct": false,
+      "record_entry_count": 308,
+      "installed_record_sha256": "sha256:e258597d7112ef05749e7e178be9e11456b4a92d7271a2d867dc94cee517e8fc",
+      "installed_tree_sha256": "sha256:1ec3bcc6b27f8f0d493cdb37b768802c2694fa52d538ba3b76b13130ddc824d7",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "decorator",
+      "version": "5.3.1",
+      "direct": false,
+      "record_entry_count": 10,
+      "installed_record_sha256": "sha256:7c490ad9278bafef19a0455a7ec324a1c1bf31c3c6eb946afc0d6f30423502db",
+      "installed_tree_sha256": "sha256:7e30109c8a203cbde2c966ce0f6295f0d6e3fcb0743f9bb14028eefd22143a74",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "defusedxml",
+      "version": "0.7.1",
+      "direct": false,
+      "record_entry_count": 18,
+      "installed_record_sha256": "sha256:8d83b6f0c94380f24506bd6d01e9a3a8858aac7a9118bc9e7dee21e6b566d13c",
+      "installed_tree_sha256": "sha256:67c26d894a7f8a3af2c214ce632f09c8e6808b493ddc624d314a3e027ed4eca2",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "distro",
+      "version": "1.9.0",
+      "direct": false,
+      "record_entry_count": 13,
+      "installed_record_sha256": "sha256:c72d5813f768cb58d211b8e1578e413ba8177870f0d314608c129663e856c602",
+      "installed_tree_sha256": "sha256:bd33d9d762e6407e7e4e712eebd72e9b59711f24007d3bf824725a241730b3f2",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "docutils",
+      "version": "0.23",
+      "direct": false,
+      "record_entry_count": 225,
+      "installed_record_sha256": "sha256:f489e642a0c3d64a68a12479e95a5b2a9bf9f82fdd8a8b6dc617d28c133db43d",
+      "installed_tree_sha256": "sha256:7dffea5d09104fcb7267162607cbdc5820b1bd2f0d6849c0a7993fa7d1757d65",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "exceptiongroup",
+      "version": "1.3.1",
+      "direct": false,
+      "record_entry_count": 13,
+      "installed_record_sha256": "sha256:8d98b067ff01e83e232f994c4e16ed108bb0eee517c1c68a54fc7960b27e9d86",
+      "installed_tree_sha256": "sha256:17385c2ae7a14e4922bfd69a5f36b43c00a2ddcb299c320f9d40bb05b43141af",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "executing",
+      "version": "2.2.1",
+      "direct": false,
+      "record_entry_count": 15,
+      "installed_record_sha256": "sha256:483767c8f250006b2655250353b993e605b581fd6f5f41a5b7e2accb9bf3a414",
+      "installed_tree_sha256": "sha256:4e23293b03dd3d2a86a957ef726f516cbb07fbe8326ffdcd42980246c5cd1aa6",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "fastjsonschema",
+      "version": "2.21.2",
+      "direct": false,
+      "record_entry_count": 18,
+      "installed_record_sha256": "sha256:0fa28948d196d934697f92676d9282ceedf3346de5f7d044103ed2010bc9e96d",
+      "installed_tree_sha256": "sha256:4b9a853cc176a0bbced3f1fe9aa70a758ec3bbbcf9258bb49c2c51abd4619802",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "filelock",
+      "version": "3.29.0",
+      "direct": false,
+      "record_entry_count": 21,
+      "installed_record_sha256": "sha256:5d956d71e145eb7c04cd4b242c9a4aea7fe0bc9d12cc2112d79f324f7fa6e2e7",
+      "installed_tree_sha256": "sha256:1c9f4a8435089750272aae15218b7ce8cd2feddce53082d302bcbf95a7fe1af4",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "fonttools",
+      "version": "4.63.0",
+      "direct": false,
+      "record_entry_count": 365,
+      "installed_record_sha256": "sha256:b1856abc5452eb871e27335f3a760869de4c3917cec8b8c79717203b6c32810c",
+      "installed_tree_sha256": "sha256:32931146c99ccad15b34c14418d1b718720396332f6d7d443aaf678440180944",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "fqdn",
+      "version": "1.5.1",
+      "direct": false,
+      "record_entry_count": 10,
+      "installed_record_sha256": "sha256:e1fb33e8981c69db356797fcafb101a57336de04a26842ce5c484aeb382a4f53",
+      "installed_tree_sha256": "sha256:3cda3b6852141811d160f5f13c0a15a71688be1b0eae08a94505de08ba72d34b",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "fsspec",
+      "version": "2026.4.0",
+      "direct": false,
+      "record_entry_count": 63,
+      "installed_record_sha256": "sha256:31fa6b808fdb61a9cec4ba58485293a514de778a4e34b98bb8952815763dcd67",
+      "installed_tree_sha256": "sha256:75575849b13af938b69b73e40fffa67f639ff09c78808dc32b57251ae3adfa68",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "h11",
+      "version": "0.16.0",
+      "direct": false,
+      "record_entry_count": 19,
+      "installed_record_sha256": "sha256:3779e13c17d8e21c769ed9ee8780af123cc3f8656185f5f8d3af258ff5639b3e",
+      "installed_tree_sha256": "sha256:0f44344af3fe0c87da9bbf52593c81dd7ee2155544c246a93fa26bf6b80ce4f7",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "hf-xet",
+      "version": "1.5.1",
+      "direct": false,
+      "record_entry_count": 9,
+      "installed_record_sha256": "sha256:5b2d1a46cda28d22b1bcbb37e9b3aa8b497e9b4dfe8a8b27b0e17d29602743db",
+      "installed_tree_sha256": "sha256:808984f56e4cb847b4f3252d0cc3568bd698aef8f16d394c4fa36ff96d1ab8a3",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "httpcore",
+      "version": "1.0.9",
+      "direct": false,
+      "record_entry_count": 38,
+      "installed_record_sha256": "sha256:67cb4644d84fef1df8c5a0862c57c3380eff058a153bac7a4ba2722779982554",
+      "installed_tree_sha256": "sha256:aeb6136da2e2b86b7221307cdb22e71d6bca04a97c3a7e085dcf68daba74fbd0",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "httpx",
+      "version": "0.28.1",
+      "direct": false,
+      "record_entry_count": 32,
+      "installed_record_sha256": "sha256:2c1ea74028c7957443a8d44e6cc7224a8bea82900ffc0f1a385cb81f983201a2",
+      "installed_tree_sha256": "sha256:6f00e0145fa34d30a35f63912e0cb26d42b56f2a2f1f39734729a52e13f467d6",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "huggingface-hub",
+      "version": "0.36.2",
+      "direct": false,
+      "record_entry_count": 175,
+      "installed_record_sha256": "sha256:2310a8c870b4c79b0a5e38bd6512adbbe3a30e5ef856ce7580328a8bb9dad8a1",
+      "installed_tree_sha256": "sha256:a7e7e2c56108b9a28d0d9195b6c99653c06390ba25f0ddc5d23d3159718860dd",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "idna",
+      "version": "3.4",
+      "direct": false,
+      "record_entry_count": 15,
+      "installed_record_sha256": "sha256:96371ef044757d63963f26c9d72b8dadd8c8df348ebae47c83d9545d0d61b42f",
+      "installed_tree_sha256": "sha256:6b0449c1e3ca21a18c520a00196f00c381fbea4eab55e7e3687bccc43a33b9d5",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "iniconfig",
+      "version": "2.3.0",
+      "direct": false,
+      "record_entry_count": 12,
+      "installed_record_sha256": "sha256:4b560f65489a4dc0f32d8403da676d2e6338c371fe844160934b3fe469785185",
+      "installed_tree_sha256": "sha256:8c4ccfe82172335c801565807c05c2cf1a1e0f8cfee35870e2f0c1d772b7cb6a",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "ipykernel",
+      "version": "7.3.0",
+      "direct": false,
+      "record_entry_count": 60,
+      "installed_record_sha256": "sha256:89e45c5760ecead74f86f5b7bb2d8d151d2e9b0cd5227143727a33bf1ab77d0c",
+      "installed_tree_sha256": "sha256:d15fb62f5a110f6c714212a4501f7659d23a17a2d9800f64f7dd184730a6a1b9",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "ipython",
+      "version": "8.39.0",
+      "direct": false,
+      "record_entry_count": 297,
+      "installed_record_sha256": "sha256:64659f40918e3d439b9bc46065cc67a9ba41a7ba26472cd4a621408962991419",
+      "installed_tree_sha256": "sha256:d21f58dde0152b37e973d57705940276e775557a36e92d55adb06ae65f1ba4c4",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "isoduration",
+      "version": "20.11.0",
+      "direct": false,
+      "record_entry_count": 20,
+      "installed_record_sha256": "sha256:c2a21cb103ef192102e42a9a0a9617c580df3bf3135be3db928c22260c097acf",
+      "installed_tree_sha256": "sha256:4edcc9b9443cd41cc225cc6fe87d80e1ca598cfa86aaec907cabee60b925b198",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "itsdangerous",
+      "version": "2.2.0",
+      "direct": false,
+      "record_entry_count": 15,
+      "installed_record_sha256": "sha256:80583f52df848dbd699dbf2c9b8ed9bb3cc5c1fa81ca5c737b97563feeab729d",
+      "installed_tree_sha256": "sha256:6b449e05742fae0e6ff4723e2757a311efc7c211edc47a1f5dfb55f71a71c452",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "jedi",
+      "version": "0.19.2",
+      "direct": false,
+      "record_entry_count": 1882,
+      "installed_record_sha256": "sha256:b7089e4d638800c127fdbd03c643189b53dc28eb74f16337d003c86b62469f32",
+      "installed_tree_sha256": "sha256:b4db935e85909942bfcc05a5c023bec1244a2f4292a838593d3054341542123e",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "jinja2",
+      "version": "3.1.6",
+      "direct": false,
+      "record_entry_count": 33,
+      "installed_record_sha256": "sha256:4551b3fb657b85a9f01e961c0f8a235da65d758149b619400211964b3ac02bdc",
+      "installed_tree_sha256": "sha256:3ae7879bc15131f83086275643bcb27985c81006fa93d94ff8cdf675bc33041d",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "jiter",
+      "version": "0.16.0",
+      "direct": false,
+      "record_entry_count": 11,
+      "installed_record_sha256": "sha256:ca24c81068b319cbc37c4472cf0cdacfb0fb1c269f681049165aec23a5418c81",
+      "installed_tree_sha256": "sha256:e408e0eb9e7f6db33176c3beb26bd31ddeaddc400b31923f3e11c29319feb49d",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "joblib",
+      "version": "1.5.3",
+      "direct": false,
+      "record_entry_count": 145,
+      "installed_record_sha256": "sha256:de09a1190b65801ed7ada8395671b94da2278e33d15356223b2b2d3201180e76",
+      "installed_tree_sha256": "sha256:fad41a9394b4645bfe71df93d0cb578a1a3473065c2a197966d3c7c45f67213f",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "json5",
+      "version": "0.15.0",
+      "direct": false,
+      "record_entry_count": 17,
+      "installed_record_sha256": "sha256:5bdb9b2aca7b0ff0178b4485fad46364e0a4c9ba90109a5d00322c4bcc96b551",
+      "installed_tree_sha256": "sha256:da42c9de9f8a58af76746aabb1147ffaad15af071305b14dce92e7b5eb265410",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "jsonpointer",
+      "version": "3.1.1",
+      "direct": false,
+      "record_entry_count": 10,
+      "installed_record_sha256": "sha256:91d7ef875491452226c6df3619839b3ec74f30102e8236c7e6ce0d1c12a43a3a",
+      "installed_tree_sha256": "sha256:0859f3a7de4254c79517e242554bbd345078ff3d00725ffb5231474ef3741c48",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "jsonschema",
+      "version": "4.26.0",
+      "direct": false,
+      "record_entry_count": 46,
+      "installed_record_sha256": "sha256:72f4cc66c8762a99d52583f786ec8d9991570157ecdbb2e057c470550ef4c209",
+      "installed_tree_sha256": "sha256:3f93bc9244aeb0200f400d798861ca654da0a99929d2eff69949e84bbaea3606",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "jsonschema-specifications",
+      "version": "2025.9.1",
+      "direct": false,
+      "record_entry_count": 30,
+      "installed_record_sha256": "sha256:0b1047ee6c7d5d7c242b642d689820f4572860ecf7886b2074f821ed85cbe7b6",
+      "installed_tree_sha256": "sha256:8fa9d3a98c93f63dfc5817799f3ad0f4aa9ac4718cc5313b62e8730fa1db54e0",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "jupyter-builder",
+      "version": "1.1.0",
+      "direct": false,
+      "record_entry_count": 28,
+      "installed_record_sha256": "sha256:95ab3d0c65023975349778cf2d44b3fe27539a7bd77c5e216a4da97bee49eaf5",
+      "installed_tree_sha256": "sha256:5e2c71fcea987f63ef75277fe8aaff7d50531985078eca24b1a3c7ca2058a3d2",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "jupyter-client",
+      "version": "8.9.1",
+      "direct": false,
+      "record_entry_count": 49,
+      "installed_record_sha256": "sha256:3b217626696a83e2bf3913bd064f0908bdea6c3bbd1dca0436f702013ebc7c37",
+      "installed_tree_sha256": "sha256:ff842e225978d854b9360e86e05ab293e7c990eb32d91585b28bd77aee9d4665",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "jupyter-core",
+      "version": "5.9.1",
+      "direct": false,
+      "record_entry_count": 21,
+      "installed_record_sha256": "sha256:1dc84e9be95a56fa806f6fa7963c9639ad2ea6a621daf7f3917e4ebc6f25961b",
+      "installed_tree_sha256": "sha256:a1c3bd4c9197ceb555a162ef520eaccc40bf5730e5c164ebeec3d05a2056a7c4",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "jupyter-events",
+      "version": "0.12.1",
+      "direct": false,
+      "record_entry_count": 23,
+      "installed_record_sha256": "sha256:b112fcd64cabe8bb9fac2d15427e5553fe1ba0c02eaaca265fea1c02811a1cb0",
+      "installed_tree_sha256": "sha256:843b93ee8d24d482cfac5031ed040e174aa00346bf5f555672d0178f1508e37a",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "jupyter-lsp",
+      "version": "2.3.1",
+      "direct": false,
+      "record_entry_count": 73,
+      "installed_record_sha256": "sha256:c933242485de405eb236f24a755d875b993f9b805d506db2d54c9eb5615cfdc1",
+      "installed_tree_sha256": "sha256:1866b1d2874b20f31090042ff25552a45cccfa94520ba99ff3e82fc3b34deece",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "jupyter-server",
+      "version": "2.20.0",
+      "direct": false,
+      "record_entry_count": 131,
+      "installed_record_sha256": "sha256:ed59ed24f0aa5b467647d6f0e256bba34d057dd6be019d95cabb03ffe9436e6b",
+      "installed_tree_sha256": "sha256:de0934852086f99c03bbbbd8bfbe720893c96cdc0aecf97a2a1cb68734ef7719",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "jupyter-server-terminals",
+      "version": "0.5.4",
+      "direct": false,
+      "record_entry_count": 16,
+      "installed_record_sha256": "sha256:d9b56dc219782f271411704a7d326537d70edba8a2b3fad459bc4b7da6f96bc7",
+      "installed_tree_sha256": "sha256:45bed5432e37880af808da6761dfc0d4007457228315f91545f7f92cbb480149",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "jupyterlab",
+      "version": "4.6.1",
+      "direct": false,
+      "record_entry_count": 1028,
+      "installed_record_sha256": "sha256:9471ff47dea0834238a0f641a27d28877b7ae70f11f969d2a84f9c2aa70a415e",
+      "installed_tree_sha256": "sha256:9cc185ec8616e70bc58525d58fd62867db2e905b7cfcbcba61a8d07df1516dbf",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "jupyterlab-pygments",
+      "version": "0.3.0",
+      "direct": false,
+      "record_entry_count": 16,
+      "installed_record_sha256": "sha256:32f7609870d46f2fec2c1cdf53ef5c03f0249a9432a649b706016b307782f885",
+      "installed_tree_sha256": "sha256:f1089e8cb1722567c2c21f2d9353779734bc919f69a3bd8afc2e9012bd1feb52",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "jupyterlab-server",
+      "version": "2.28.0",
+      "direct": false,
+      "record_entry_count": 42,
+      "installed_record_sha256": "sha256:a8c3aa08c8c40b5724ac3c66dd8f55c1c9a6187d9993dbb2eb6bc1f295f54c80",
+      "installed_tree_sha256": "sha256:c6f5df6278120053d04bc178140bc936f69fca501c1c00a7c1a81defc38c11c4",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "kiwisolver",
+      "version": "1.5.0",
+      "direct": false,
+      "record_entry_count": 12,
+      "installed_record_sha256": "sha256:641f273836a218d1139c4feef4a5f145ed6893ecbc3f0cbda8c55e56b1502317",
+      "installed_tree_sha256": "sha256:20be2232216ef6b5e3c7b093cc3b24db18171dfb541b86f681f47010e7575207",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "lark",
+      "version": "1.3.1",
+      "direct": false,
+      "record_entry_count": 48,
+      "installed_record_sha256": "sha256:fbadc9926a1c5d8283a2602c94baf94ace2be62bd26bf65a1facfa2453f33623",
+      "installed_tree_sha256": "sha256:aa7a9ced756d7366824f12f9bd750e44bf03105aff913f6a6993c2e0fbf6ebff",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "lazy-loader",
+      "version": "0.5",
+      "direct": false,
+      "record_entry_count": 8,
+      "installed_record_sha256": "sha256:17312af17a8b58629003510078af9618391c81f67980ec518ba7ea37d910e620",
+      "installed_tree_sha256": "sha256:9ed3aa95cee81b5845aedff2e9ee988bf8a1d2f72d159a3b67b4e4ddc4af6de2",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "librosa",
+      "version": "0.11.0",
+      "direct": false,
+      "record_entry_count": 51,
+      "installed_record_sha256": "sha256:1b58c615f4d2a251273113053e7a7d612dda68601f55d4ba8fe18d53e886ecab",
+      "installed_tree_sha256": "sha256:5040e865d126bc943367d383f70138b13aa669f90bd1c679f61f6f0b0c7ecc44",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "llvmlite",
+      "version": "0.48.0",
+      "direct": false,
+      "record_entry_count": 47,
+      "installed_record_sha256": "sha256:72e457ccbd9ccd2813aac8c0cb5e6a113f9861c46c36351c982cd894c37c7a5e",
+      "installed_tree_sha256": "sha256:6772e274ac3559206df0bf13d36380f0215a3cd3d8cde805c9c70727c6e6b701",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "loro",
+      "version": "1.13.1",
+      "direct": false,
+      "record_entry_count": 11,
+      "installed_record_sha256": "sha256:bce862e96af1c78fddbcdde2bb4d1565893585db13252283f030892f9e3ea3fd",
+      "installed_tree_sha256": "sha256:dfa1942a5c538ec670005d880e3ba3ac9c2e91ee278de051be385c83f120f0d8",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "marimo",
+      "version": "0.23.14",
+      "direct": false,
+      "record_entry_count": 1646,
+      "installed_record_sha256": "sha256:a2eae12d1ce6556e70a7cbd32b56b660fd03221e2e4ac2274fa836d0e75032f0",
+      "installed_tree_sha256": "sha256:2c46bb719565b230618275127fcc9f1bb549ee4a14179e65c38baaed515922ea",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "markdown",
+      "version": "3.10.2",
+      "direct": false,
+      "record_entry_count": 42,
+      "installed_record_sha256": "sha256:d3214398053cd29e053e1377e8e8f4c2dd7cce5a56d9a9e84db0a46261b9bca7",
+      "installed_tree_sha256": "sha256:65a2ac94565fb38f647a112c472c29bc1d520dd314c2209d832f95831f83225c",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "markupsafe",
+      "version": "3.0.3",
+      "direct": false,
+      "record_entry_count": 13,
+      "installed_record_sha256": "sha256:494795404f6325705a427772276c3b02a2f728f33066b38325aa08f98ff54a76",
+      "installed_tree_sha256": "sha256:a7abd80b9f29eed70596f0474d6549ee223d80e601dc5ac33d597f27fd1f03dc",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "matplotlib",
+      "version": "3.10.9",
+      "direct": false,
+      "record_entry_count": 596,
+      "installed_record_sha256": "sha256:9a5850b47188e4c5da057693f6b3e06d213f2fad9ff7fb691f7735d296039e3d",
+      "installed_tree_sha256": "sha256:9b41d4e7fb15f632dc3dae3de27fd454796312afc7cfb0d405aa80b72d0b03f3",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "matplotlib-inline",
+      "version": "0.2.2",
+      "direct": false,
+      "record_entry_count": 11,
+      "installed_record_sha256": "sha256:9e3fca031d79eb520bebf44c820c831d604ddb76157308c28e9f7813f71268fe",
+      "installed_tree_sha256": "sha256:7e1ec8c5a3ed4495b901ce9fb7e4e53301b19b996be549f2d56849bbc6f9ee83",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "mistune",
+      "version": "3.3.3",
+      "direct": false,
+      "record_entry_count": 45,
+      "installed_record_sha256": "sha256:4815e54337f6a7ae5e4aaaf5fdbf390ab2a1e2ca2ef8417445fd984da9cd96bb",
+      "installed_tree_sha256": "sha256:fc27232f9a464382bec17f844fd302e9b6ae261f701c40764ad997d1dd449b15",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "mpmath",
+      "version": "1.3.0",
+      "direct": false,
+      "record_entry_count": 94,
+      "installed_record_sha256": "sha256:09cbd04e87d0c5ab64aab08291b31883e4ea27e8d2c640710e0beb1995e86b9b",
+      "installed_tree_sha256": "sha256:e2123c1474749ad2bdc8add6f577a773af617d21b7af686a837e1ce882227ab8",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "msgpack",
+      "version": "1.2.1",
+      "direct": false,
+      "record_entry_count": 12,
+      "installed_record_sha256": "sha256:579f8ac4f04ff02fe2ac1c64eae8574bc3150d9a82969d0b8ffda1d292124eb6",
+      "installed_tree_sha256": "sha256:96c16411baadb964cfcbdea531fdbf7035c662e3005fda924d3c00964cee815b",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "msgspec",
+      "version": "0.21.1",
+      "direct": false,
+      "record_entry_count": 25,
+      "installed_record_sha256": "sha256:1be67ff201d8d68cf7f98193c3fd3f09438f4a5c306c19511546368e784b01fe",
+      "installed_tree_sha256": "sha256:a4a2939ef364bc5777d53333aa0652a28174304e6e771ce1f83a6dcbe2353366",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "narwhals",
+      "version": "2.24.0",
+      "direct": false,
+      "record_entry_count": 169,
+      "installed_record_sha256": "sha256:84b81901888fba4975b695f2ebdab261d0d9652ddb6520616022844e80f0879a",
+      "installed_tree_sha256": "sha256:db3a6414e97257c7ed6f1946f047e174e787d7135d29d7ca4e9f22f75ac27317",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "nbclient",
+      "version": "0.11.0",
+      "direct": false,
+      "record_entry_count": 17,
+      "installed_record_sha256": "sha256:d4036a012d471b50aac277d5b7295931625a32faef525e04cf14b86ce3186d42",
+      "installed_tree_sha256": "sha256:4933e1d88a748f88b2be36ab5e1c0940434dc0e20567da2101d61ed78e0063d8",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "nbconvert",
+      "version": "7.17.1",
+      "direct": false,
+      "record_entry_count": 135,
+      "installed_record_sha256": "sha256:c2fdc5105ea6cf3afa034f6f16802af19737c1cbc59a0d8ebd16a28a2c0d4271",
+      "installed_tree_sha256": "sha256:f875414a70d000002fedede01511f47be5851b14c19689ec439f03e44ca13d67",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "nbformat",
+      "version": "5.10.4",
+      "direct": false,
+      "record_entry_count": 57,
+      "installed_record_sha256": "sha256:b3e7d65d4df097119ff3e9d63a137fb77e3ac3db22ed9821513b8c28463cd07b",
+      "installed_tree_sha256": "sha256:b822b830b22964afb2a03e8cded03f4617da898c8d389be71bdb83ccaadc610b",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "nest-asyncio2",
+      "version": "1.7.2",
+      "direct": false,
+      "record_entry_count": 8,
+      "installed_record_sha256": "sha256:af6b77cc381a9ad01e9dceaec38b899daa30449faf75ea7e3777a71805f7a76f",
+      "installed_tree_sha256": "sha256:df623845a7f2f3c36d4f6e58ea8caf2a89dc9c2dacb1e8f59864e5958fa9ff86",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "networkx",
+      "version": "3.4.2",
+      "direct": false,
+      "record_entry_count": 584,
+      "installed_record_sha256": "sha256:221ae0a94c75acd963f62b9909b58a2827a8cdfba8f0adcfb4141b598b201779",
+      "installed_tree_sha256": "sha256:948e21dd7317cf9a6f574965e31f13a14bbdf7d08670b907fb11cf98ef6538ea",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "notebook-shim",
+      "version": "0.2.4",
+      "direct": false,
+      "record_entry_count": 18,
+      "installed_record_sha256": "sha256:14b268fcf8337704e9090dd2483768672f46d4ce1ccab1263e14b2a8a9b2b75e",
+      "installed_tree_sha256": "sha256:f2856f8d5f59d84fc6095a9a61a73ec01054a018c2e65ecd92b23da3a5ff4909",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "numba",
+      "version": "0.66.0",
+      "direct": false,
+      "record_entry_count": 814,
+      "installed_record_sha256": "sha256:cb92883dafc2d94294d8368ff352386587d39ba7e6cb2a59e1c6481db9abaa6f",
+      "installed_tree_sha256": "sha256:3302aac21256c8ff54d71d3eea5c2ffdb1933239570c5eadffe3ae522bd23d7e",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "numpy",
+      "version": "2.2.6",
+      "direct": false,
+      "record_entry_count": 1008,
+      "installed_record_sha256": "sha256:a56d5120f7ecd885548495465aa76871366f3b5deb106acb8021dd0d1149dc80",
+      "installed_tree_sha256": "sha256:85bb01afae6014ae29470371a42486d1e5730b5e808b42a526fac3d18ec8a15f",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "nvidia-cublas-cu12",
+      "version": "12.4.5.8",
+      "direct": false,
+      "record_entry_count": 20,
+      "installed_record_sha256": "sha256:d9edc2882660d70c044afcb7b6cc00b86aab87b586d2e634fbb9a42071503424",
+      "installed_tree_sha256": "sha256:594bdebdc20716f63c2178518b9ae9ce09081cfdfc85d6477afa26bdab77b6ba",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "nvidia-cuda-cupti-cu12",
+      "version": "12.4.127",
+      "direct": false,
+      "record_entry_count": 50,
+      "installed_record_sha256": "sha256:c2a2a114f24d78d19b37e2348ea0d302e76d665e071d89e8c47d30e4c092233d",
+      "installed_tree_sha256": "sha256:b98303209e6e1616a891a326fc7bc017fe68c47579ea9736672d85d1602ec5e5",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "nvidia-cuda-nvrtc-cu12",
+      "version": "12.4.127",
+      "direct": false,
+      "record_entry_count": 14,
+      "installed_record_sha256": "sha256:a46863ce69428bf51f7c55eb4f311e94fa221d75d70f432eb81cca93acb6369b",
+      "installed_tree_sha256": "sha256:ede57b62c8bafed24cbe9291b4455c7f378bc1b426f139d806a2c8f1a160d204",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "nvidia-cuda-runtime-cu12",
+      "version": "12.4.127",
+      "direct": false,
+      "record_entry_count": 103,
+      "installed_record_sha256": "sha256:a2c4738f7adaf1add950d9e729ee1bd03672270d8635f16366b0286d3576552f",
+      "installed_tree_sha256": "sha256:9de37f69b67ec6c7f0bc3356537e0cab5cb7a410aafc5dd2ca2444d34d2fc8d8",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "nvidia-cudnn-cu12",
+      "version": "9.1.0.70",
+      "direct": false,
+      "record_entry_count": 33,
+      "installed_record_sha256": "sha256:5245de63babbeeb2311f657c2faa8ed27d51c8d9c103eb25c83ad9cfc6e06b3a",
+      "installed_tree_sha256": "sha256:e5502ae88ee1a36c6d69c9668ba8d255e16d601736ae9bb93d4283f8684f0973",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "nvidia-cufft-cu12",
+      "version": "11.2.1.3",
+      "direct": false,
+      "record_entry_count": 17,
+      "installed_record_sha256": "sha256:b63c8c15566fc1695d98774984f007b5e20f249fb8b8f9fde525996ff3a2d863",
+      "installed_tree_sha256": "sha256:565a28a3fb185e8ad6cc9e8784c85604eecac5d167593f489413ab847f588923",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "nvidia-curand-cu12",
+      "version": "10.3.5.147",
+      "direct": false,
+      "record_entry_count": 29,
+      "installed_record_sha256": "sha256:f0f8b60504c464595c84b4ec190cfed24013ba86dfd45c52c2c6c2f5881c79e4",
+      "installed_tree_sha256": "sha256:a987b195f5f666a6ccf62d0171cd523b09a163f49795c96cc945239d61e4939f",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "nvidia-cusolver-cu12",
+      "version": "11.6.1.9",
+      "direct": false,
+      "record_entry_count": 19,
+      "installed_record_sha256": "sha256:32ef36e553cbb45d87d4b4ce433446387cb8f89ce800f0b404c83479c618a875",
+      "installed_tree_sha256": "sha256:97b483a4fc574a9b1e95ddafe3d73861ccf6a28ec3c546919029c2dfc349075e",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "nvidia-cusparse-cu12",
+      "version": "12.3.1.170",
+      "direct": false,
+      "record_entry_count": 14,
+      "installed_record_sha256": "sha256:74578217c58d3c5ddbdbe8a6b1735bb4f57e3e63784aadcb420f0e6d5e162008",
+      "installed_tree_sha256": "sha256:eaca0c4e20b40abb86c39ae3186f0f48676d651c269f662fe34b4f78cd9a02f3",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "nvidia-cusparselt-cu12",
+      "version": "0.6.2",
+      "direct": false,
+      "record_entry_count": 9,
+      "installed_record_sha256": "sha256:f8897e5d1061b8a89ca1a8b9b3b2ce114a683ad2e407cccb53766b7e9e2f6111",
+      "installed_tree_sha256": "sha256:445456f533af1e4d43da42c09b1a48bbc0f119bf6d7be8ef595d1b5929c57dc9",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "nvidia-nccl-cu12",
+      "version": "2.21.5",
+      "direct": false,
+      "record_entry_count": 14,
+      "installed_record_sha256": "sha256:a4e89b66ef431f9da861ad1c09c9c4c98fdb340aefa19670629972f977a36a69",
+      "installed_tree_sha256": "sha256:a1001db5b54c4a8027b1cd0d10f520d39f33a613927c46a97fe09a0915cbc5eb",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "nvidia-nvjitlink-cu12",
+      "version": "12.4.127",
+      "direct": false,
+      "record_entry_count": 13,
+      "installed_record_sha256": "sha256:f0f16485feb27156391a7f03a5a419e87098f7ba824f7ba2d681c18a17f3f3d6",
+      "installed_tree_sha256": "sha256:33fac533cad52cfec2146b975002f0631b2ee5e6f211da829ab28482cb8c08e9",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "nvidia-nvtx-cu12",
+      "version": "12.4.127",
+      "direct": false,
+      "record_entry_count": 33,
+      "installed_record_sha256": "sha256:fde81b8891d907851e380237e22a06e6490163ef542ad048af5ad38d798c3120",
+      "installed_tree_sha256": "sha256:a50e20eb68a717320fb6fb3c9bf13476ae28c60bd113812bff627ead87557743",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "openai",
+      "version": "2.30.0",
+      "direct": true,
+      "record_entry_count": 1087,
+      "installed_record_sha256": "sha256:da85e6fe9a7cc8046d0ddafcd1b09c9166ebeeb4f4baa86316d7a4ffed9aa551",
+      "installed_tree_sha256": "sha256:879894fcde90878260d6c5f54ed63e0101dcae30041a2daa602de7062d915b2a",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "overrides",
+      "version": "7.7.0",
+      "direct": false,
+      "record_entry_count": 14,
+      "installed_record_sha256": "sha256:8ea51fc00b98386aa2a6fbec3f48bf5526f7ae8f719befc68fc3d9c742f8f029",
+      "installed_tree_sha256": "sha256:e5ca5b058185af8d7fdee8f4f0e2db3b74a264a01da28cd410149c1a580b0c5b",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "packaging",
+      "version": "26.2",
+      "direct": false,
+      "record_entry_count": 29,
+      "installed_record_sha256": "sha256:34a791dcc687723f1d7601aa68319f6d51aa00e44d85818995dd33a1b7c5a49c",
+      "installed_tree_sha256": "sha256:0fea87be5496d9c0efb11c4bb4f164f956cc0d1198d2bb699d1ff19c5e787014",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "pandocfilters",
+      "version": "1.5.1",
+      "direct": false,
+      "record_entry_count": 8,
+      "installed_record_sha256": "sha256:afdfd1e629a5f4f664e8aa1f59fe69710581b91bf254ec03d86ce54d4a15cb50",
+      "installed_tree_sha256": "sha256:802fbb48c0cfc8bd2514b7f041501f2129db7620ebb97b2a37f1fb50241d6042",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "parso",
+      "version": "0.8.7",
+      "direct": false,
+      "record_entry_count": 39,
+      "installed_record_sha256": "sha256:f12d7035431df6048bd4ed5e00a3ff1b3e5821c6201e269ac0ad7f1e643cd9b7",
+      "installed_tree_sha256": "sha256:74f4898fc3386307363de5b8da2bc3fb8052b0e8a1292ffee1b2afd9a562c32c",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "pexpect",
+      "version": "4.9.0",
+      "direct": false,
+      "record_entry_count": 26,
+      "installed_record_sha256": "sha256:18d1ff314a7a49821e1907a870b096a1aa90c0e726f99858d0da77043343a3ac",
+      "installed_tree_sha256": "sha256:940da235e0cf340ab4e07ea0e66394347dd3b15f4dab858f82cb9a4cd7606f8d",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "pillow",
+      "version": "12.2.0",
+      "direct": false,
+      "record_entry_count": 141,
+      "installed_record_sha256": "sha256:9aab7d4d44e40a84e6aa482c8937bbde7e6d5e514a61112817b515f0c09bec03",
+      "installed_tree_sha256": "sha256:ec412afbd5b1e7d2e7179cda564b09379096cfb4e6d9ad3bfa1be5000733d04f",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "pip",
+      "version": "26.1.2",
+      "direct": false,
+      "record_entry_count": 470,
+      "installed_record_sha256": "sha256:eab81de99eed994e0776f3e67db84903d1d48b4029e0c68e74ec6f1ae2c3d182",
+      "installed_tree_sha256": "sha256:a522ec821b05072686820eee8ae8d9906be66bd2e1a74ca792c653effdca2c8c",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "platformdirs",
+      "version": "4.10.0",
+      "direct": false,
+      "record_entry_count": 16,
+      "installed_record_sha256": "sha256:a0808e6f6e3f772ae227ceede94ddd97fd4dce499901c5bea859dd865d6cee4e",
+      "installed_tree_sha256": "sha256:482515f17af2b90a111d36682d4522743d1f7a927f45a875f25ec4e9d3b5c006",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "pluggy",
+      "version": "1.6.0",
+      "direct": false,
+      "record_entry_count": 16,
+      "installed_record_sha256": "sha256:a42a63bcba12ddb7e7db19158c8d05d8fc41d51f48686b411ad3a0213fbd7721",
+      "installed_tree_sha256": "sha256:ac8c7cf3358ce9b347364a4735253797bcc08ba644fb8d2cfab89a7c7e329489",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "pooch",
+      "version": "1.9.0",
+      "direct": false,
+      "record_entry_count": 41,
+      "installed_record_sha256": "sha256:7baabed9c89c1bebdd4a629b1784759faa0937e96930cb8f4dcec2b5271a2f4d",
+      "installed_tree_sha256": "sha256:308e5790753517d52798f39c9be1aebdcd8717380141514d152207e657909708",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "prometheus-client",
+      "version": "0.25.0",
+      "direct": false,
+      "record_entry_count": 39,
+      "installed_record_sha256": "sha256:e1715b2e4ba71d1df7e91051f533712f9f2f44f3a6bc68d71ed4f0e11b52b766",
+      "installed_tree_sha256": "sha256:8c8438a97dee70399e85504d78795e917cc6f37ff04762f2f89569ab77b10a8e",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "prompt-toolkit",
+      "version": "3.0.52",
+      "direct": false,
+      "record_entry_count": 154,
+      "installed_record_sha256": "sha256:d9763ce59edf45150a60528745aec92b9c608eb7422df445ae8c1a6f5cf2aec0",
+      "installed_tree_sha256": "sha256:8979b8df7362505680f7e62edb75dae42ac353e3031ba051ea9a78c5d66f7c63",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "psutil",
+      "version": "7.2.2",
+      "direct": false,
+      "record_entry_count": 18,
+      "installed_record_sha256": "sha256:2af7e87b12ad6542c1eaaf20a299c109fa09b9dc5d69faf745219bd61e8cfca6",
+      "installed_tree_sha256": "sha256:7f00d2c45f512771c15abaef480a47551045353e70e07ac7ed3794ab5ef792bf",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "ptyprocess",
+      "version": "0.7.0",
+      "direct": false,
+      "record_entry_count": 10,
+      "installed_record_sha256": "sha256:c4033a1a5bbd4f0aabc0b7f57aae33d735a97680c439581546f0a952654f1947",
+      "installed_tree_sha256": "sha256:c912cc8deb215f25c9dcd0a74c9db3495e06d79581812c9a2f44065f335b8456",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "pure-eval",
+      "version": "0.2.3",
+      "direct": false,
+      "record_entry_count": 13,
+      "installed_record_sha256": "sha256:284435bdb66a1dc88959559e214b8ae0d1fbbf1c6c92622624f33a9327ad7c51",
+      "installed_tree_sha256": "sha256:0f3901520180857d6d0f8bb0c1f650a165162bdc109e875f2bf07fb6a0003d91",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "pycparser",
+      "version": "3.0",
+      "direct": false,
+      "record_entry_count": 15,
+      "installed_record_sha256": "sha256:e752c5c64ce06f508a80e0edeef0c165df849587b829cb9a7b7bb22ac43b0c7e",
+      "installed_tree_sha256": "sha256:2d0e0cf411e04c52c7bb157d48070ff5eaf76685a2f404dc05b5365e75a0d5df",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "pydantic",
+      "version": "2.13.4",
+      "direct": false,
+      "record_entry_count": 113,
+      "installed_record_sha256": "sha256:d0cbe0f34b294885175920bc8f2ece0b3ed6d9874347dc9cfb2caf4931329272",
+      "installed_tree_sha256": "sha256:c9e3616124652452bf66640dbbc4cd8c02acfcd23b1a54677fa97de44e90b361",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "pydantic-core",
+      "version": "2.46.4",
+      "direct": false,
+      "record_entry_count": 12,
+      "installed_record_sha256": "sha256:299ff9fb7bad7066897e39f79d199692db76b0a14c26e778e24d1bdf00169c31",
+      "installed_tree_sha256": "sha256:1107fd21e1d8d738199c1e39885c2a4fc8ee1d00483ab34639669bc3e396687d",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "pygments",
+      "version": "2.20.0",
+      "direct": false,
+      "record_entry_count": 348,
+      "installed_record_sha256": "sha256:3848a82714ac7a5d0e853b64d5d8303081442d5821ea83e92d381fb93d8b3f9f",
+      "installed_tree_sha256": "sha256:550abe75e067600c176a49d24c91302bd4a28ee75fcd94810965f4ffa2ec3daa",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "pymdown-extensions",
+      "version": "10.21.3",
+      "direct": false,
+      "record_entry_count": 49,
+      "installed_record_sha256": "sha256:f715def253aceb2a9756c42308a5a1886291fe06e9c24cf1fc69dea190948ad0",
+      "installed_tree_sha256": "sha256:ed282b675968cea7cfd8b40e1da3ad7715f441bef9060bf71b0584fc104ab6b3",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "pyparsing",
+      "version": "3.3.2",
+      "direct": false,
+      "record_entry_count": 25,
+      "installed_record_sha256": "sha256:239325f438cc3542c4d936b77d4539132f7db3b83d55bf9b811db76cce83f0ee",
+      "installed_tree_sha256": "sha256:dd699fcbf933f1a4fea4215ea890a70fe4defefe4544082811bd810646be7a3c",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "pytest",
+      "version": "8.4.2",
+      "direct": false,
+      "record_entry_count": 85,
+      "installed_record_sha256": "sha256:c2b750cd5414ea9c526515f9d2a357e179e9de87d1d7b422792a289572befeb0",
+      "installed_tree_sha256": "sha256:e7a34a55c870be3512a553cf35042804214aba59b2664e4d378a32058841eaa0",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "python-dateutil",
+      "version": "2.9.0.post0",
+      "direct": false,
+      "record_entry_count": 27,
+      "installed_record_sha256": "sha256:e15e868a50b9c4e71df17b31369843617780146ac5adb1bbfdcced0ebe501824",
+      "installed_tree_sha256": "sha256:fa9f044ed747321c703c68c2acae521a85e30d96d9c082df1fa6d29a43192222",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "python-json-logger",
+      "version": "4.1.0",
+      "direct": false,
+      "record_entry_count": 17,
+      "installed_record_sha256": "sha256:a635b68ada7ff0a7025b56fe6c46bb6c106dc7a45416888ad61b2b8110ba2e75",
+      "installed_tree_sha256": "sha256:17132a311fba23ba309e3a3db78ea25088442cfa0ab974b6e939d6e4596d57bb",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "python-multipart",
+      "version": "0.0.32",
+      "direct": false,
+      "record_entry_count": 15,
+      "installed_record_sha256": "sha256:5c11c391e44fdc2dbec56603265b8af273dae504ee2e6143d3b9d3bab2bc12df",
+      "installed_tree_sha256": "sha256:328d98dfa090f399678161ca090d587edc9c8341e4d718f8c2719174b1f9d026",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "pyyaml",
+      "version": "6.0.3",
+      "direct": false,
+      "record_entry_count": 26,
+      "installed_record_sha256": "sha256:a1d0e932736e09070c9cc2d2fe7016eb2ac758110e900af7a94d0f3507da191a",
+      "installed_tree_sha256": "sha256:74f9d0e35935ce7b24694bf917e91b5c4d14ce0220d0e5faa2764d5877f2fd1d",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "pyzmq",
+      "version": "27.1.0",
+      "direct": false,
+      "record_entry_count": 98,
+      "installed_record_sha256": "sha256:0c6be195f6579ec3f41935dc8c2b93aff8b215c9eb80a3336fe20fccb582fc08",
+      "installed_tree_sha256": "sha256:63c4f7fc69fb63adb9274e1853d366e167a3fa6215bc72155c40b888f913a161",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "qwen-omni-utils",
+      "version": "0.0.9",
+      "direct": true,
+      "record_entry_count": 9,
+      "installed_record_sha256": "sha256:84f9281d0855ccadeb5c96ebcac8a1cf859b4ba58efd7016a92909a747b42743",
+      "installed_tree_sha256": "sha256:0a1a2def1e7718bb4df612b71957264de4c15d9295ebfa88798f385914b3370d",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "referencing",
+      "version": "0.37.0",
+      "direct": false,
+      "record_entry_count": 21,
+      "installed_record_sha256": "sha256:d7ecf9906a4a4ea4837d16e324e344f9f00b328570cf695a96a8de46b8766982",
+      "installed_tree_sha256": "sha256:45b9fee0725175685e9898a67f6b7f01f0f637f321cfe84ccefc5a878962c3b0",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "regex",
+      "version": "2026.7.10",
+      "direct": false,
+      "record_entry_count": 12,
+      "installed_record_sha256": "sha256:8201a2dc92781e10fe41fcbd0504a2a261a16c9d8fae9ab8aced18da277c960d",
+      "installed_tree_sha256": "sha256:0e3d5e93e8ac7b22d48f238d5f29ab1181798b3bcc42d0e8606802b30f067b6d",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "requests",
+      "version": "2.34.2",
+      "direct": false,
+      "record_entry_count": 28,
+      "installed_record_sha256": "sha256:fc8c5216d0e865d815bd04cc240b5adc5d56f6c3dbe9aef3b4ea3b83d735bdfe",
+      "installed_tree_sha256": "sha256:01723230c7ea432ba5a1ce7719b736b967bdff0ee1b428b8106ca97526158dbc",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "rfc3339-validator",
+      "version": "0.1.4",
+      "direct": false,
+      "record_entry_count": 9,
+      "installed_record_sha256": "sha256:f1af86ba48d8731f1ec42c92be12bd591cfa2b7504ee245893fc34a8462964b6",
+      "installed_tree_sha256": "sha256:ab83fb88920be9c9e4b46f1daf47a2dc3a956da792ddb4d19a1dc8a7dab5ae19",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "rfc3986-validator",
+      "version": "0.1.1",
+      "direct": false,
+      "record_entry_count": 9,
+      "installed_record_sha256": "sha256:8ed859cee09002e904307c508a744efe18db9f80b9693d4c101103d9a480bb41",
+      "installed_tree_sha256": "sha256:95a97af661b32370fbf196e34e1a83873b39eaa7d73bfc2cec0862e13102577c",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "rfc3987-syntax",
+      "version": "1.1.0",
+      "direct": false,
+      "record_entry_count": 11,
+      "installed_record_sha256": "sha256:9e4193c47e0b1b009023a33d7cda57b493043c9c1d6688eb3c20eb9fbf847c20",
+      "installed_tree_sha256": "sha256:38f2ea614c4d5c72283b803344339602148f748fc867fefb85d64848cc78bd41",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "rpds-py",
+      "version": "0.30.0",
+      "direct": false,
+      "record_entry_count": 10,
+      "installed_record_sha256": "sha256:6746bb42be9f504d31f7dfc9daa341b87816bae0bc06d149b139daee2a481520",
+      "installed_tree_sha256": "sha256:52b92c6d771ac7265f506ecbf9d58e3f6fed51b5ebebda8b63418e1fb27eb223",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "safetensors",
+      "version": "0.8.0",
+      "direct": false,
+      "record_entry_count": 17,
+      "installed_record_sha256": "sha256:c5110881c0c39a4f163a23b2ccc88cad19ce1823b6dce1ceef353d33f16c004b",
+      "installed_tree_sha256": "sha256:4cddb419761c9cafd08633e312a005eae5fc0273f54eeb7612b6f65c8f72d52c",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "scikit-learn",
+      "version": "1.7.2",
+      "direct": false,
+      "record_entry_count": 958,
+      "installed_record_sha256": "sha256:f13ce995753b8123ff49a222e01df5faa6f0dc88e0a965590139d306676458bb",
+      "installed_tree_sha256": "sha256:455292186d86183842d27dba0f68f168804ae60530d08f0129357f7230eb9b7f",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "scipy",
+      "version": "1.15.3",
+      "direct": false,
+      "record_entry_count": 1426,
+      "installed_record_sha256": "sha256:cdb5b36a168f9580b58a363ab6a08f4b51c4fdc645c61abc744a07ed6d7b4c8d",
+      "installed_tree_sha256": "sha256:47a4376395f76549951682ccde8f7ffdec32bbe316a3a31d1c576aacb81e639a",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "send2trash",
+      "version": "2.1.0",
+      "direct": false,
+      "record_entry_count": 22,
+      "installed_record_sha256": "sha256:611e62e405050b853cefe339836935ca56d202d0fbd57b3e11982dff9ab35f33",
+      "installed_tree_sha256": "sha256:8df94999455ea421574e6a8c113c0d5a994c988223fb661ef818bd6dbb36b40f",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "setuptools",
+      "version": "83.0.0",
+      "direct": false,
+      "record_entry_count": 443,
+      "installed_record_sha256": "sha256:2fe8f339e0ea1a1762bd8b21edcc2609e36aebaf13d993f6ce9e236a0fd2ebd1",
+      "installed_tree_sha256": "sha256:48d3f1eb66b72dbf5cbc3e593330921a096dc340423b40451c7500ad2f2ce93e",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "six",
+      "version": "1.17.0",
+      "direct": false,
+      "record_entry_count": 8,
+      "installed_record_sha256": "sha256:d16e50f347969b1e1919fb0c88bac4b9c644f5305bcfcfb00f72b646dbd4065d",
+      "installed_tree_sha256": "sha256:f74e36a38ae9ac466834e3ca35065518178c60f5fdab52691b71cf3613be853f",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "sniffio",
+      "version": "1.3.1",
+      "direct": false,
+      "record_entry_count": 15,
+      "installed_record_sha256": "sha256:e6c97953661def7ab6dac78f83c86f31e622bee38ff55ea508cb04e1a604d4ff",
+      "installed_tree_sha256": "sha256:71edec25c60ff6387f0fe16ae400502a692d56ee6fca318059e57f74308623e8",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "soundfile",
+      "version": "0.14.0",
+      "direct": false,
+      "record_entry_count": 13,
+      "installed_record_sha256": "sha256:88df91b7c81c51587afeab1a65ed44db69b1842a2f3d55f29c67025fe0445faa",
+      "installed_tree_sha256": "sha256:97c1a47ce4c965a100604571232aa0f478e11ff80173bf54dfdb1c70ff7102b6",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "soupsieve",
+      "version": "2.8.4",
+      "direct": false,
+      "record_entry_count": 14,
+      "installed_record_sha256": "sha256:f55cbea6a1db79120b193c8ae711dc04ff357300b3443aa5b01433e78ef23c96",
+      "installed_tree_sha256": "sha256:8d3f19fdd7ea82ab4b7b5eb05fe8c659aaa632c27578b6c64f027186d6495f41",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "soxr",
+      "version": "1.1.0",
+      "direct": false,
+      "record_entry_count": 13,
+      "installed_record_sha256": "sha256:76f212cfe3c7a9f8be104c10baa7faff31636d29b59bb7522b494291b094ad0e",
+      "installed_tree_sha256": "sha256:ed30cf63b6a4c3c454fa4169b5ede208e0ed0e4b76394ebe0c87644bfff999ab",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "stack-data",
+      "version": "0.6.3",
+      "direct": false,
+      "record_entry_count": 14,
+      "installed_record_sha256": "sha256:522b69b3fb8bc2aba2e176a824f62b51cda7c3c30e78abbf9ebf90ce5e3cb615",
+      "installed_tree_sha256": "sha256:2003b0045beede07291e0c79fd82a4858bc035fe4efd5d732af9534c17b6d804",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "starlette",
+      "version": "1.3.1",
+      "direct": false,
+      "record_entry_count": 41,
+      "installed_record_sha256": "sha256:798ee94d43c1be08a0c60745972eac69ae9c8fd249cf741df98d432218d3416d",
+      "installed_tree_sha256": "sha256:98c5fcf12fa3ab693e19b46f62f85372591a33b25468c6722b5097ca15379ee9",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "sympy",
+      "version": "1.13.1",
+      "direct": false,
+      "record_entry_count": 1558,
+      "installed_record_sha256": "sha256:ca7d6b4ffdb47df4bf5d42699ba05d4b07865b54ee672d20417f79dc730f6787",
+      "installed_tree_sha256": "sha256:44433e095a7edf558b567b38680f8a137c881bfe9ada5ea2e8a1642b84267459",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "terminado",
+      "version": "0.18.1",
+      "direct": false,
+      "record_entry_count": 14,
+      "installed_record_sha256": "sha256:234bfc694bb98042dc74b16ce8a5c3bac77a62c86f7e4abec718262471d9d69f",
+      "installed_tree_sha256": "sha256:c52d2bfbfcf8828c0a45f40a5bdefa6fcf29058e97d4a17ff82340f7480d66b5",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "threadpoolctl",
+      "version": "3.6.0",
+      "direct": false,
+      "record_entry_count": 7,
+      "installed_record_sha256": "sha256:21fd60a7b59ad0785db0d87b7f45a58b9c6961097749168c577efa5b1619e95e",
+      "installed_tree_sha256": "sha256:8055fb111de9a811052446022e3024d83d2a6ee897a16a144d2fe2416764c6c3",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "tinycss2",
+      "version": "1.5.1",
+      "direct": false,
+      "record_entry_count": 16,
+      "installed_record_sha256": "sha256:6207761ce025bef201d6326bc82eedba4658dd2d680a2a35040b50e29b92a3b4",
+      "installed_tree_sha256": "sha256:1723ddec4dfc82a56bb8ae85400e2c6fce6b9ab267f1580ef3065555dd100153",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "tokenizers",
+      "version": "0.21.4",
+      "direct": false,
+      "record_entry_count": 30,
+      "installed_record_sha256": "sha256:26ddeedfc0681126d280157ba47a3c5af2a61b99017bde63f2f1c2ccc7964c8d",
+      "installed_tree_sha256": "sha256:2bed29437e7c72da905e70d57be03aa95aee8a3d163b3386dd7023c148f51520",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "tomli",
+      "version": "2.4.1",
+      "direct": false,
+      "record_entry_count": 11,
+      "installed_record_sha256": "sha256:70cf9d053d6fa33ff94b4763cf31b66213b21ea2e662e19c4a5c83087b67525b",
+      "installed_tree_sha256": "sha256:0fd9fb420afdc445bcc2315bdea99b091659d23f66b4d2548498fbc87586ac15",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "tomlkit",
+      "version": "0.15.1",
+      "direct": false,
+      "record_entry_count": 19,
+      "installed_record_sha256": "sha256:54905d960cc7302beffa56e4abe15b094626b7b221b43a0ceb6e60bcbee1a341",
+      "installed_tree_sha256": "sha256:f9d8803e58f62dc62347cdc09a07f0e2d2cd9af691049db473b87bd68a98f531",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "torch",
+      "version": "2.6.0+cu124",
+      "direct": true,
+      "record_entry_count": 10922,
+      "installed_record_sha256": "sha256:5790401ea791e1a91246b35906f35c947c57b849ea2a6e09142e162a5c7eb8d4",
+      "installed_tree_sha256": "sha256:97246ebea680ad703f2655712af0e93d3f849411a05bab90421d91a0c910ea77",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "torchvision",
+      "version": "0.21.0+cu124",
+      "direct": true,
+      "record_entry_count": 201,
+      "installed_record_sha256": "sha256:7d0706b63ef472523e88bde96f57422e1c451cf433ae032bab6e138082e1ecd7",
+      "installed_tree_sha256": "sha256:d643e3387f4144a0d8d0c208d676a09a7db4c34e506c74cdbae69b38fe469476",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "tornado",
+      "version": "6.5.7",
+      "direct": false,
+      "record_entry_count": 99,
+      "installed_record_sha256": "sha256:e267ef345a7aad29e83211a50f45fd55fe498338e031d41d34f21e15a09c0ec6",
+      "installed_tree_sha256": "sha256:cbdce5ee19ebc98c301a6bceecc526d8d37fe9e5fa9513219ce894f92b48d04a",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "tqdm",
+      "version": "4.66.5",
+      "direct": false,
+      "record_entry_count": 43,
+      "installed_record_sha256": "sha256:dec1181facb5fbdaddfc2cd0f7e40200733768b3ab03a586d9627460bc024142",
+      "installed_tree_sha256": "sha256:5d4db20f51e3274e76db72491bd07c776ff98e1faf8dd8c20ead1d9a9c1fd83c",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "traitlets",
+      "version": "5.15.1",
+      "direct": false,
+      "record_entry_count": 31,
+      "installed_record_sha256": "sha256:6ed5692039740148b0145c8171d3ca7016249a2943cfda7a6406663b36fa7b81",
+      "installed_tree_sha256": "sha256:b96992df051acb1b0fe667f432996a27215fe647e7d161d78004fd378fe61dbd",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "transformers",
+      "version": "4.52.0",
+      "direct": true,
+      "record_entry_count": 1911,
+      "installed_record_sha256": "sha256:b29269585751b221986ef8d2aebc3f84c5db94f27d3d3de2ec68a43a727b4cdb",
+      "installed_tree_sha256": "sha256:be9724a86e562d9af034adf38acd672780d05b80274b9962bc44dd2401270354",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "triton",
+      "version": "3.2.0",
+      "direct": false,
+      "record_entry_count": 324,
+      "installed_record_sha256": "sha256:8b7d93c2cfc3c5640562b71ec9877dfac724781d011c03e192c79587af011e59",
+      "installed_tree_sha256": "sha256:d5d1f5a92b065fed6be73f855fe0ea8495431df9567e355759c60c23b51abfdd",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "typing-extensions",
+      "version": "4.15.0",
+      "direct": false,
+      "record_entry_count": 7,
+      "installed_record_sha256": "sha256:c42db5851c3a20efb41dbe1a0d03c18db577a5449c7e685f6b139df34b98e62f",
+      "installed_tree_sha256": "sha256:5443ba19368059c12a676448144a28e60bde22296ee62feb8669890ded8e59f2",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "typing-inspection",
+      "version": "0.4.2",
+      "direct": false,
+      "record_entry_count": 11,
+      "installed_record_sha256": "sha256:96edfd27f64244b308dd9b63a60613ad2a04e5012066fdbd1aeebe85b348ba29",
+      "installed_tree_sha256": "sha256:24f34d1f9afc2d12513d0c9bf61f0a505108cb84d052e5e2e93e747dec592fa1",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "tzdata",
+      "version": "2026.3",
+      "direct": false,
+      "record_entry_count": 635,
+      "installed_record_sha256": "sha256:031878bab19ea0c4ce5d227eaa31da6573fb1b3764b1b906c4a7f7e5aae085e0",
+      "installed_tree_sha256": "sha256:91c26554200145b7ec0f08f87129fc429af9b3209eb89e08e188f26d9a6adf40",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "uri-template",
+      "version": "1.3.0",
+      "direct": false,
+      "record_entry_count": 13,
+      "installed_record_sha256": "sha256:e2b2ec1d4a766630c1f4877f77ac33d88014b620ace99cc3e614c95df3c215aa",
+      "installed_tree_sha256": "sha256:de9b02758c5c3e049e296765302a05054e5f4cdc87fc98ef5ae52b7e715d1c31",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "urllib3",
+      "version": "1.26.13",
+      "direct": false,
+      "record_entry_count": 45,
+      "installed_record_sha256": "sha256:10acba9fbd7b9fec2953ce1a3e13885243afff590ad0c9d8a9deab39c3a0e52b",
+      "installed_tree_sha256": "sha256:35f7d20bde4f4085fba4de3f77d5457f5b657cbbd0d179c1c3c148e1f416e3b4",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "uvicorn",
+      "version": "0.51.0",
+      "direct": false,
+      "record_entry_count": 50,
+      "installed_record_sha256": "sha256:2fcde66581827409f3c4d0c4be9c46dd33e6016a0133ded6abe6245508eed31b",
+      "installed_tree_sha256": "sha256:17218ef8e1aa92f126e9583922e33232d2f033f5f5fcd82a2a8754b35cf62c62",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "wcwidth",
+      "version": "0.8.2",
+      "direct": false,
+      "record_entry_count": 54,
+      "installed_record_sha256": "sha256:c499601de55ec3c1f42503caea51cc30d5e66d88072b8da1bd120accc644cb8a",
+      "installed_tree_sha256": "sha256:d877bc7a9564c39c49b2a5d7fbbacade6a56091512cb282e24e7a1b1c66becf4",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "webcolors",
+      "version": "25.10.0",
+      "direct": false,
+      "record_entry_count": 13,
+      "installed_record_sha256": "sha256:705fde2617424e75ba088962d7b1adb89c5860fb58745bd1f163a1102e561ad9",
+      "installed_tree_sha256": "sha256:c2023ae93d6d594c601a305213112b053cd6da278dac3d97b096643d538c5802",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "webencodings",
+      "version": "0.5.1",
+      "direct": false,
+      "record_entry_count": 13,
+      "installed_record_sha256": "sha256:a08b718df958d1a8334ab84db4117c07d756a0bbadb1435a851336b13bc9ce14",
+      "installed_tree_sha256": "sha256:5ebf318e414ff67db816791d8c8fec2bb61a5588e707a99509779b35f2c80008",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "websocket-client",
+      "version": "1.9.0",
+      "direct": false,
+      "record_entry_count": 44,
+      "installed_record_sha256": "sha256:b7599c066797088fe4debebf7536b9c71daa7981af810bffc2c9242ac0ca0f1d",
+      "installed_tree_sha256": "sha256:b3acd16ae461ade5511ad924e55bfdaf22acb9e1599eb488fa1295895c9f8d71",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "websockets",
+      "version": "16.1.1",
+      "direct": false,
+      "record_entry_count": 61,
+      "installed_record_sha256": "sha256:4e846c49b44381d5f8815954e4cfda940f278b315738177f507f3a28845c4a80",
+      "installed_tree_sha256": "sha256:2482df1a959b909cba2b21e787a0c41c6e668a207e60e4b260d2c12e2318e940",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    },
+    {
+      "name": "wheel",
+      "version": "0.47.0",
+      "direct": false,
+      "record_entry_count": 23,
+      "installed_record_sha256": "sha256:1f596a6b982fbab489f55e2443142421b24d47a599210ef0038eb902f0bf41f9",
+      "installed_tree_sha256": "sha256:96a920261543ca18d7e5fdb9107bd414afed56bf039f25092c2d8b015d119c94",
+      "installed_tree_fingerprint_kind": "normalized-installed-RECORD",
+      "wheel_artifact_sha256": null
+    }
+  ],
+  "course_required_closure": {
+    "root_packages": [
+      "accelerate",
+      "av",
+      "marimo",
+      "matplotlib",
+      "numpy",
+      "openai",
+      "qwen-omni-utils",
+      "torch",
+      "torchvision",
+      "transformers"
+    ],
+    "distribution_count": 100,
+    "distribution_names": [
+      "accelerate",
+      "annotated-types",
+      "anyio",
+      "audioread",
+      "av",
+      "certifi",
+      "cffi",
+      "charset-normalizer",
+      "click",
+      "contourpy",
+      "cycler",
+      "decorator",
+      "distro",
+      "docutils",
+      "exceptiongroup",
+      "filelock",
+      "fonttools",
+      "fsspec",
+      "h11",
+      "hf-xet",
+      "httpcore",
+      "httpx",
+      "huggingface-hub",
+      "idna",
+      "itsdangerous",
+      "jedi",
+      "jinja2",
+      "jiter",
+      "joblib",
+      "kiwisolver",
+      "lazy-loader",
+      "librosa",
+      "llvmlite",
+      "loro",
+      "marimo",
+      "markdown",
+      "markupsafe",
+      "matplotlib",
+      "mpmath",
+      "msgpack",
+      "msgspec",
+      "narwhals",
+      "networkx",
+      "numba",
+      "numpy",
+      "nvidia-cublas-cu12",
+      "nvidia-cuda-cupti-cu12",
+      "nvidia-cuda-nvrtc-cu12",
+      "nvidia-cuda-runtime-cu12",
+      "nvidia-cudnn-cu12",
+      "nvidia-cufft-cu12",
+      "nvidia-curand-cu12",
+      "nvidia-cusolver-cu12",
+      "nvidia-cusparse-cu12",
+      "nvidia-cusparselt-cu12",
+      "nvidia-nccl-cu12",
+      "nvidia-nvjitlink-cu12",
+      "nvidia-nvtx-cu12",
+      "openai",
+      "packaging",
+      "parso",
+      "pillow",
+      "platformdirs",
+      "pooch",
+      "psutil",
+      "pycparser",
+      "pydantic",
+      "pydantic-core",
+      "pygments",
+      "pymdown-extensions",
+      "pyparsing",
+      "python-dateutil",
+      "python-multipart",
+      "pyyaml",
+      "pyzmq",
+      "qwen-omni-utils",
+      "regex",
+      "requests",
+      "safetensors",
+      "scikit-learn",
+      "scipy",
+      "six",
+      "sniffio",
+      "soundfile",
+      "soxr",
+      "starlette",
+      "sympy",
+      "threadpoolctl",
+      "tokenizers",
+      "tomlkit",
+      "torch",
+      "torchvision",
+      "tqdm",
+      "transformers",
+      "triton",
+      "typing-extensions",
+      "typing-inspection",
+      "urllib3",
+      "uvicorn",
+      "websockets"
+    ],
+    "inventory_identity": "sha256:a66df087a20ffc894fc0e3a5e1d94a12dd0407ca3ffb1f633d3f247ca00a2e35"
+  },
+  "local_runtime": {
+    "python_version": "3.10.16",
+    "python_implementation": "CPython",
+    "python_abi": "cpython-310-x86_64-linux-gnu",
+    "platform_tag": "linux-x86_64",
+    "machine": "x86_64",
+    "libc": {
+      "name": "glibc",
+      "version": "2.31"
+    },
+    "pyav_version": "17.1.0",
+    "linked_ffmpeg": {
+      "libavcodec": [
+        62,
+        28,
+        101
+      ],
+      "libavdevice": [
+        62,
+        3,
+        101
+      ],
+      "libavfilter": [
+        11,
+        14,
+        101
+      ],
+      "libavformat": [
+        62,
+        12,
+        101
+      ],
+      "libavutil": [
+        60,
+        26,
+        101
+      ],
+      "libswresample": [
+        6,
+        3,
+        101
+      ],
+      "libswscale": [
+        9,
+        5,
+        101
+      ]
+    }
+  },
+  "local_runtime_identity": "sha256:6e97dfc9458220133bf311830993fab4d3c0cddc31f75fc70e12471b41eb410e",
+  "target_runtime": {
+    "python_abi": null,
+    "platform_tag": null,
+    "runtime_image_digest": null,
+    "pyav_version": null,
+    "linked_ffmpeg": null
+  },
+  "bindings": {
+    "repo_baseline": {
+      "kind": "git-commit",
+      "identity": "sha256:180aced9bb3e89caabada379c9ef2e3fecc925ba011bc1f3eb1eb13df6bb73b3",
+      "sources": [
+        "git baseline"
+      ],
+      "content": {
+        "commit": "495875bdb297b809c82dccc6e631616444f47229"
+      }
+    },
+    "model": {
+      "kind": "hf-snapshot-blob-references",
+      "identity": "sha256:953c69a79426e9fa170d3120b9f5b44bf6d6c55e8eaec46ae75825e65aba9e48",
+      "sources": [
+        "hf://Qwen/Qwen2.5-Omni-3B@f75b40e3da2003cdd6e1829b1f420ca70797c34e"
+      ],
+      "content": {
+        "model_id": "Qwen/Qwen2.5-Omni-3B",
+        "revision": "f75b40e3da2003cdd6e1829b1f420ca70797c34e",
+        "files": [
+          {
+            "path": "config.json",
+            "snapshot_object": "b384ba8df87edb013db2077327643bc3c885e49c",
+            "size": 13183
+          },
+          {
+            "path": "generation_config.json",
+            "snapshot_object": "1c1ac9d737684b833c80a438e30fc3ba53e89bd4",
+            "size": 74
+          },
+          {
+            "path": "model-00001-of-00003.safetensors",
+            "snapshot_object": "349972cebff443030e9e96e1e930d7230979c6961cf046fa29fc580e4bcf49a6",
+            "size": 4994850880
+          },
+          {
+            "path": "model-00002-of-00003.safetensors",
+            "snapshot_object": "b29a76dfefb3aa33a5bd0faa19c681d039a44de57223653ea0e933df728c6d8c",
+            "size": 4999787448
+          },
+          {
+            "path": "model-00003-of-00003.safetensors",
+            "snapshot_object": "8f2138170a87ec604b53232491a96d6dcf19e0724aca37e69aace143e508b170",
+            "size": 1978024880
+          },
+          {
+            "path": "model.safetensors.index.json",
+            "snapshot_object": "0f020dad805c3e7ed7f3b5b5f151e51ca58bad6c",
+            "size": 241817
+          }
+        ]
+      }
+    },
+    "processor": {
+      "kind": "hf-snapshot-files",
+      "identity": "sha256:8658b7cac951a7092b0b2ef6e2113a0b5bcc83c48ab34ecb403f66071f6c2df6",
+      "sources": [
+        "config.json",
+        "preprocessor_config.json",
+        "spk_dict.pt"
+      ],
+      "content": [
+        {
+          "path": "63c79f1c43bce173ab13d94096dea54b3688436f",
+          "sha256": "sha256:b47055ce61463ce143e9aab741d55c0aa520801a0a5d63be73c5b17cecb6bc69",
+          "size": 667
+        },
+        {
+          "path": "6a05609b28f5d42b7b748f0f07592545c8f1f6885b9ae8fff64baf56e86b2a18",
+          "sha256": "sha256:6a05609b28f5d42b7b748f0f07592545c8f1f6885b9ae8fff64baf56e86b2a18",
+          "size": 259544
+        },
+        {
+          "path": "b384ba8df87edb013db2077327643bc3c885e49c",
+          "sha256": "sha256:20790f362c37a1718a3e764f597ae33dfc20177399762018dffaabf8321d4dd1",
+          "size": 13183
+        }
+      ]
+    },
+    "tokenizer": {
+      "kind": "hf-snapshot-files",
+      "identity": "sha256:f1bb4f7b883ccf1c7f4a1ab14088b8e2da29600da68deff66209beac2e225db1",
+      "sources": [
+        "added_tokens.json",
+        "merges.txt",
+        "special_tokens_map.json",
+        "tokenizer.json",
+        "tokenizer_config.json",
+        "vocab.json"
+      ],
+      "content": [
+        {
+          "path": "22c6d3668a32e4fe6dc09331bff96e7cc3a2290f",
+          "sha256": "sha256:569aa7a9171e36dfff80f0a7550ab0c9c09e46ac840fea5030641417394fb0d2",
+          "size": 6469
+        },
+        {
+          "path": "31349551d90c7606f325fe0f11bbb8bd5fa0d7c7",
+          "sha256": "sha256:8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5",
+          "size": 1671853
+        },
+        {
+          "path": "4562256351969d3b68f81fd5623ae42a9c7fbb25",
+          "sha256": "sha256:e81a2cc3bd867a1217019eed202d1d8a07e1063ece716f22060dda14f6cc07d8",
+          "size": 579
+        },
+        {
+          "path": "4783fe10ac3adce15ac8f358ef5462739852c569",
+          "sha256": "sha256:ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910",
+          "size": 2776833
+        },
+        {
+          "path": "8441917e39ae0244e06d704b95b3124795cec478e297f9afac39ba670d7e9d99",
+          "sha256": "sha256:8441917e39ae0244e06d704b95b3124795cec478e297f9afac39ba670d7e9d99",
+          "size": 11421870
+        },
+        {
+          "path": "8c2a71eaac0f526df324364d953503def113b7a1",
+          "sha256": "sha256:dc241604d085780a33f760f69c47e6622451104c20eee3cd3a12b6e884b43f44",
+          "size": 832
+        }
+      ]
+    },
+    "chat_template": {
+      "kind": "hf-snapshot-file",
+      "identity": "sha256:9eb83573a25377c825fc5c5bfa38e5fe101d82db76480067474b54bb4bca36c2",
+      "sources": [
+        "chat_template.json"
+      ],
+      "content": [
+        {
+          "path": "e696060ab7ab6e20f60e4e09b18e5da4c1830000",
+          "sha256": "sha256:1933f7ca08e6503460e981d9037ddc0b851196abfa3aceea52d6ee0c0fdfd9f0",
+          "size": 1313
+        }
+      ]
+    },
+    "notebook_dependencies": {
+      "kind": "pep723-script-metadata",
+      "identity": "sha256:ac4c9ede0f6337e3fbc866b9159b613e37c6cbd6c740664e95dcf56e50f7fad9",
+      "sources": [
+        "avllm_interpretability/CTP49906_avllm_molab.py#PEP-723"
+      ],
+      "content": {
+        "block_sha256": "sha256:782bf21bc510d37ccf21142b10bb9b8b83ee22d4d7051766668448a233d1e098",
+        "requires_python": ">=3.10",
+        "dependencies": [
+          "marimo==0.23.14",
+          "numpy==2.2.6",
+          "matplotlib==3.10.9",
+          "torch==2.6.0",
+          "torchvision==0.21.0",
+          "transformers==4.52.0",
+          "accelerate==1.14.0",
+          "qwen-omni-utils==0.0.9",
+          "av==17.1.0"
+        ],
+        "pyav_runtime_package": "av"
+      }
+    },
+    "prompts": {
+      "kind": "canonical-prompt-contract",
+      "identity": "sha256:c6c2e75bfdb56259b1f5961b8b6a16c2ea42850d879e8f8c7955b718be296c4b",
+      "sources": [
+        "precomputed/meta.json"
+      ],
+      "content": {
+        "logit_prompt": "Describe what you hear in the video",
+        "attention_prompt": "Describe what you see and hear in the video",
+        "knockout_rules": [
+          [
+            "generated",
+            "video",
+            0,
+            36
+          ]
+        ],
+        "max_new_tokens": 32
+      }
+    },
+    "stimulus_manifest": {
+      "kind": "local-candidate-stimulus-manifest",
+      "identity": "sha256:6d9b2af3164d1ce89c4718d1504c5cad13c6b2fbe294e461aec323d6f09ee04f",
+      "sources": [
+        "avllm_interpretability/assets/02321.mp4",
+        "avllm_interpretability/assets/02321_silent.mp4"
+      ],
+      "content": {
+        "status": "LOCAL_CANDIDATE_NOT_RELEASED",
+        "selected_clip": "02321.mp4",
+        "assets": [
+          {
+            "path": "avllm_interpretability/assets/02321.mp4",
+            "sha256": "sha256:9dcf1572e593777267eab01351022fcaf7b00f9a564da6059eb97f422266ddec",
+            "size": 1056059
+          },
+          {
+            "path": "avllm_interpretability/assets/02321_silent.mp4",
+            "sha256": "sha256:88c72f00bf52f18b1a62a31d3f187990518bdb7b0b77b64b75bf2b4c5295e231",
+            "size": 895437
+          }
+        ]
+      }
+    },
+    "replay": {
+      "kind": "replay-contract-files",
+      "identity": "sha256:4a700e340ea315115fe479e16a74da2031e3494a7978665a0823b79f72503d30",
+      "sources": [
+        "avllm_interpretability/precomputed/README.md",
+        "avllm_interpretability/src/precompute.py",
+        "study_materials/wp6/replay_manifest.json"
+      ],
+      "content": [
+        {
+          "path": "avllm_interpretability/precomputed/README.md",
+          "sha256": "sha256:1154440294143a91a1d4db415d7e3216e1cd3a3daefe0dd5c1eede1358af52c4",
+          "size": 1723
+        },
+        {
+          "path": "avllm_interpretability/src/precompute.py",
+          "sha256": "sha256:b97b1108e047d2d049dcf4d3b9f72f36c626cc49a248b8e75f848c18ad12e8e9",
+          "size": 12312
+        },
+        {
+          "path": "study_materials/wp6/replay_manifest.json",
+          "sha256": "sha256:0a1aebe26bda6aad91208639c212f42583858b80c7201f765446881dc2fd26eb",
+          "size": 2134
+        }
+      ]
+    },
+    "precompute": {
+      "kind": "precompute-artifact-set",
+      "identity": "sha256:60d00e9fd6ae8a97e0124826923a31024e557c1af384f6a390da18be214b4a88",
+      "sources": [
+        "avllm_interpretability/precomputed/README.md",
+        "avllm_interpretability/precomputed/attention_summary.json",
+        "avllm_interpretability/precomputed/captions.json",
+        "avllm_interpretability/precomputed/logit_lens_audio_token_analysis.csv",
+        "avllm_interpretability/precomputed/meta.json"
+      ],
+      "content": [
+        {
+          "path": "avllm_interpretability/precomputed/README.md",
+          "sha256": "sha256:1154440294143a91a1d4db415d7e3216e1cd3a3daefe0dd5c1eede1358af52c4",
+          "size": 1723
+        },
+        {
+          "path": "avllm_interpretability/precomputed/attention_summary.json",
+          "sha256": "sha256:8d1de50b36e64c357b036c24c9ab09d36bdcc1028f02154548c4b0562beb12a3",
+          "size": 20695
+        },
+        {
+          "path": "avllm_interpretability/precomputed/captions.json",
+          "sha256": "sha256:09d30b17693280ff6550eac3cb46701e245684006e399195d5390de7005ed2f4",
+          "size": 540
+        },
+        {
+          "path": "avllm_interpretability/precomputed/logit_lens_audio_token_analysis.csv",
+          "sha256": "sha256:a3f4dc0ececd7893bcd8a02b296019bb6788a70a345622eefb068c8f42954d7f",
+          "size": 64175
+        },
+        {
+          "path": "avllm_interpretability/precomputed/meta.json",
+          "sha256": "sha256:86fb2a46c274c8f5c3a3c8a68c153e5c1269023230707885a4a4be805517ee04",
+          "size": 491
+        }
+      ]
+    }
+  },
+  "limitations": [
+    "Installed RECORD/tree fingerprints are not wheel artifact hashes.",
+    "Exact target-Molab runtime and wheel artifacts were not observed.",
+    "The stimulus binding is a local candidate manifest, not a licensed release manifest."
+  ],
+  "lock_identity": "sha256:e1a1fa38dfaa0bf50975b3f2f2dce75dc97914718a562816702edf2d1c74dd19"
+}

@@ -1,7 +1,7 @@
 # /// script
 # requires-python = ">=3.10"
 # dependencies = [
-#     "marimo",
+#     "marimo==0.23.14",
 # ]
 # ///
 
@@ -31,6 +31,12 @@ def _(mo):
 
     from curriculum_common.audience_packets import AudiencePacket, AudienceReading
     from curriculum_common.json_import import parse_json_object
+    from curriculum_common.pilot_profile import (
+        PEER_EXCHANGE_ROUTE,
+        PRIVATE_EQUIVALENT_ROUTE,
+        load_pilot_profile,
+        resolve_exchange_route,
+    )
     from digital_storytelling.workflow import (
         ACCESSIBILITY_OVERLAY_POLICY,
         COMPARISON_ROUTE_ID,
@@ -45,6 +51,10 @@ def _(mo):
         validate_replay,
     )
 
+    PILOT_PROFILE = load_pilot_profile(
+        _repo_root / "study_materials" / "wp0" / "course_release_profile.json"
+    )
+    COURSE_RELEASE_ID = PILOT_PROFILE.course_release_id
     session_pseudonym = f"story-{uuid4().hex[:12]}"
     get_artifacts, set_artifacts = mo.state(tuple())
     get_packet, set_packet = mo.state(None)
@@ -58,6 +68,10 @@ def _(mo):
         AudiencePacket,
         AudienceReading,
         COMPARISON_ROUTE_ID,
+        COURSE_RELEASE_ID,
+        PEER_EXCHANGE_ROUTE,
+        PILOT_PROFILE,
+        PRIVATE_EQUIVALENT_ROUTE,
         build_blinded_packet,
         build_private_story_bundle,
         content_for,
@@ -70,6 +84,7 @@ def _(mo):
         json,
         parse_json_object,
         require_complete_audience_exchange,
+        resolve_exchange_route,
         saved_replay,
         serialize_private_story_bundle,
         session_pseudonym,
@@ -101,7 +116,7 @@ def _(content_for, language_control):
 
 
 @app.cell(hide_code=True)
-def _(mo, text):
+def _(PILOT_PROFILE, mo, text):
     mo.md(
         f"""
         # {text['title']}
@@ -115,7 +130,7 @@ def _(mo, text):
 
 
 @app.cell(hide_code=True)
-def _(mo, text):
+def _(PILOT_PROFILE, mo, text):
     mo.hstack(
         [
             mo.stat(
@@ -134,6 +149,16 @@ def _(mo, text):
                 value=text["release_status"],
                 label="Fidelity status / 충실도 상태",
                 caption=text["release_caption"],
+                bordered=True,
+            ),
+            mo.stat(
+                value="Candidate / 후보",
+                label="Pilot profile / 파일럿 프로필",
+                caption=(
+                    "Research disabled / 연구 비활성화"
+                    if PILOT_PROFILE.research_enabled is False
+                    else "Invalid profile / 잘못된 프로필"
+                ),
                 bordered=True,
             ),
         ],
@@ -417,19 +442,55 @@ def _(set_structure_note, structure_form):
 
 @app.cell(hide_code=True)
 def _(mo, text):
-    mo.md(
-        f"""
-        ### {text['stage_audience']}
+    mo.vstack(
+        [
+            mo.md(
+                f"""
+                ### {text['stage_audience']}
 
-        **Required / 필수.** {text['audience_body']}
-        """
+                **Required / 필수.** {text['audience_body']}
+                """
+            ),
+            mo.md(r"""
+            Optional peer exchange / 선택적 동료 교환 requires permission / 권한.
+            The equivalent private / 비공개 route uses a clearly labeled synthetic /
+            합성 or instructor / 교수 example with no penalty / 불이익 없음; it is
+            supplied practice evidence, never independent audience evidence.
+            """),
+        ]
     )
     return
 
 
 @app.cell(hide_code=True)
-def _(mo, text):
+def _(PEER_EXCHANGE_ROUTE, PRIVATE_EQUIVALENT_ROUTE, mo, text):
+    # Stable internal route IDs: peer_exchange and private_equivalent. They are
+    # not serialized into shareable packets or common outcome records.
+    exchange_route_control = mo.ui.radio(
+        {
+            text["peer_route"]: PEER_EXCHANGE_ROUTE,
+            text["private_route"]: PRIVATE_EQUIVALENT_ROUTE,
+        },
+        value=text["private_route"] if "private_route" in text else "Equivalent private route — no penalty / 동등한 비공개 경로 — 불이익 없음",
+        label=text["exchange_route"],
+    )
+    private_evidence_control = mo.ui.dropdown(
+        {
+            text["synthetic_example"]: "synthetic_example",
+            text["instructor_example"]: "instructor_example",
+        },
+        value=text["instructor_example"],
+        label=text["private_source"],
+    )
+    mo.vstack([exchange_route_control, private_evidence_control])
+    return exchange_route_control, private_evidence_control
+
+
+@app.cell(hide_code=True)
+def _(PRIVATE_EQUIVALENT_ROUTE, exchange_route_control, mo, text):
     def _validate_packet(_value):
+        if exchange_route_control.value == PRIVATE_EQUIVALENT_ROUTE:
+            return None
         if not _value:
             return text["packet_waiting"]
         for _key in ("asset_reference", "media_type", "duration_ms", "caption_reference"):
@@ -479,6 +540,8 @@ def _(mo, text):
 @app.cell(hide_code=True)
 def _(
     build_blinded_packet,
+    PRIVATE_EQUIVALENT_ROUTE,
+    exchange_route_control,
     get_artifacts,
     get_packet,
     json,
@@ -490,7 +553,15 @@ def _(
 ):
     _packet_card = mo.callout(mo.md(text["packet_waiting"]), kind="info")
     _packet_value = packet_form.value
-    if _packet_value is not None:
+    if exchange_route_control.value == PRIVATE_EQUIVALENT_ROUTE:
+        _packet_card = mo.callout(
+            mo.md(
+                f"**{text['private_route']}.** No shareable packet is created for "
+                "this student-retained route."
+            ),
+            kind="success",
+        )
+    elif _packet_value is not None:
         try:
             _v1_artifact = next(
                 _item for _item in get_artifacts() if _item.version_label == "V1"
@@ -539,8 +610,10 @@ def _(
 
 
 @app.cell(hide_code=True)
-def _(mo, text):
+def _(PRIVATE_EQUIVALENT_ROUTE, exchange_route_control, mo, text):
     def _validate_audience_import(_value):
+        if exchange_route_control.value == PRIVATE_EQUIVALENT_ROUTE:
+            return None
         if not _value or not _value["packet"] or len(_value["readings"] or ()) < 2:
             return text["audience_import_submit"]
         return None
@@ -571,7 +644,9 @@ def _(mo, text):
 def _(
     AudiencePacket,
     AudienceReading,
+    PRIVATE_EQUIVALENT_ROUTE,
     audience_import_form,
+    exchange_route_control,
     mo,
     parse_json_object,
     require_complete_audience_exchange,
@@ -581,7 +656,17 @@ def _(
 ):
     _audience_card = mo.callout(mo.md(text["audience_waiting"]), kind="info")
     _audience_value = audience_import_form.value
-    if _audience_value is not None:
+    if exchange_route_control.value == PRIVATE_EQUIVALENT_ROUTE:
+        set_packet(None)
+        set_readings(tuple())
+        _audience_card = mo.callout(
+            mo.md(
+                f"**{text['private_route']}.** {text['private_evidence_label']} "
+                f"{text['not_independent_audience']}"
+            ),
+            kind="success",
+        )
+    elif _audience_value is not None:
         try:
             _imported_packet = AudiencePacket.from_mapping(
                 parse_json_object(_audience_value["packet"][0].contents)
@@ -617,13 +702,49 @@ def _(
     return
 
 
+@app.cell
+def _(
+    PEER_EXCHANGE_ROUTE,
+    PRIVATE_EQUIVALENT_ROUTE,
+    exchange_route_control,
+    get_packet,
+    get_readings,
+    private_evidence_control,
+    resolve_exchange_route,
+):
+    _selected_route = exchange_route_control.value or PRIVATE_EQUIVALENT_ROUTE
+    if _selected_route == PRIVATE_EQUIVALENT_ROUTE:
+        learning_exchange = resolve_exchange_route(
+            PRIVATE_EQUIVALENT_ROUTE,
+            permission_confirmed=False,
+            evidence_source=private_evidence_control.value or "instructor_example",
+        )
+    elif get_packet() is not None and len(get_readings()) >= 2:
+        learning_exchange = resolve_exchange_route(
+            PEER_EXCHANGE_ROUTE,
+            permission_confirmed=True,
+        )
+    else:
+        learning_exchange = None
+    return (learning_exchange,)
+
+
 @app.cell(hide_code=True)
-def _(get_artifacts, get_readings, mo, text):
+def _(get_artifacts, get_readings, learning_exchange, mo, text):
     _readings_ready = len(get_readings()) >= 2
     _v1_for_reveal = next(
         (_item for _item in get_artifacts() if _item.version_label == "V1"), None
     )
-    if _readings_ready and _v1_for_reveal is not None:
+    if learning_exchange is not None and not learning_exchange.audience_exchange_required:
+        _creator_context_card = mo.callout(
+            mo.md(
+                f"**{text['private_evidence_label']}** — "
+                f"{text[learning_exchange.evidence_source]}. "
+                f"{text['not_independent_audience']}"
+            ),
+            kind="neutral",
+        )
+    elif _readings_ready and _v1_for_reveal is not None:
         _creator_context_card = mo.callout(
             mo.md(
                 f"**{text['intention']}** — {_v1_for_reveal.creator_intention}\n\n"
@@ -665,8 +786,8 @@ def _(mo, text):
 
 
 @app.cell
-def _(disagreement_form, get_readings, set_disagreement_note):
-    if disagreement_form.value is not None and len(get_readings()) >= 2:
+def _(disagreement_form, learning_exchange, set_disagreement_note):
+    if disagreement_form.value is not None and learning_exchange is not None:
         set_disagreement_note(dict(disagreement_form.value))
     return
 
@@ -884,7 +1005,9 @@ def _(
     build_private_story_bundle,
     fidelity_notes_form,
     get_artifacts,
+    get_readings,
     language,
+    learning_exchange,
     mo,
     post_task_form,
     pre_task_form,
@@ -911,6 +1034,8 @@ def _(
                 post_response=post_task_form.value,
                 stage_timing_notes=(_notes["timing"],),
                 fidelity_deviations=(_notes["deviation"],),
+                exchange_route=learning_exchange,
+                audience_reading_count=len(get_readings()),
             )
             _bundle_bytes = serialize_private_story_bundle(_bundle)
         except Exception as _error:  # noqa: BLE001 — export errors belong in UI

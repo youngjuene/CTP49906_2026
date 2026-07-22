@@ -18,6 +18,9 @@ from curriculum_common.audience_packets import (
     validate_packet_mapping,
 )
 from curriculum_common.outcome_records import validate_outcome_bundle
+from curriculum_common.pilot_profile import (
+    EXCHANGE_CHECKPOINT_ID,
+)
 
 
 PRIVATE_PORTFOLIO_SCHEMA_VERSION = "private-portfolio/1.0.0"
@@ -175,6 +178,61 @@ def validate_private_portfolio(value: Any) -> ExportValidationReport:
                         "audience_exchange",
                         "audience_exchange",
                         str(exc),
+                    )
+                )
+    learning_exchange = mapping.get("learning_exchange")
+    if learning_exchange is not None:
+        if not isinstance(learning_exchange, Mapping):
+            issues.append(
+                ValidationIssue(
+                    "learning_exchange_type",
+                    "learning_exchange",
+                    "learning exchange must be a mapping",
+                )
+            )
+        else:
+            if "route_id" in learning_exchange or "student_reason" in learning_exchange:
+                issues.append(
+                    ValidationIssue(
+                        "learning_exchange_private_choice",
+                        "learning_exchange",
+                        "private route choice or reason must not be serialized",
+                    )
+                )
+            if learning_exchange.get("checkpoint_id") != EXCHANGE_CHECKPOINT_ID:
+                issues.append(
+                    ValidationIssue(
+                        "learning_exchange_checkpoint",
+                        "learning_exchange.checkpoint_id",
+                        "learning exchange must preserve the shared comparison checkpoint",
+                    )
+                )
+            if learning_exchange.get("no_penalty") is not True:
+                issues.append(
+                    ValidationIssue(
+                        "learning_exchange_penalty",
+                        "learning_exchange.no_penalty",
+                        "peer and private routes must carry the same no-penalty policy",
+                    )
+                )
+            if learning_exchange.get("research_ready") is not False:
+                issues.append(
+                    ValidationIssue(
+                        "learning_exchange_research_claim",
+                        "learning_exchange.research_ready",
+                        "teaching exchange evidence is not research-ready",
+                    )
+                )
+            if learning_exchange.get("evidence_source") not in {
+                "independent_peer_readings",
+                "synthetic_example",
+                "instructor_example",
+            }:
+                issues.append(
+                    ValidationIssue(
+                        "learning_exchange_evidence_source",
+                        "learning_exchange.evidence_source",
+                        "comparison evidence must be labeled peer, synthetic, or instructor",
                     )
                 )
     issues.extend(_validate_record_links(mapping))

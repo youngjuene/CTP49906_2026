@@ -56,7 +56,7 @@ def _():
 def _(mo):
     language = mo.ui.dropdown(
         {"English": "en", "한국어": "ko"},
-        value="en",
+        value="English",
         label="Language / 언어",
     )
     language

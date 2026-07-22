@@ -103,6 +103,7 @@ def build_private_portfolio(
     artifact_versions: Sequence[Mapping[str, Any]] = (),
     audience_packet: Mapping[str, Any] | None = None,
     audience_readings: Sequence[Mapping[str, Any]] = (),
+    learning_exchange: Mapping[str, Any] | None = None,
     common_outcomes: Mapping[str, Any] | None = None,
     boundary_disclosure: str = DEFAULT_MOLAB_BOUNDARY_DISCLOSURE,
 ) -> dict[str, Any]:
@@ -152,6 +153,8 @@ def build_private_portfolio(
             "packet": packet.to_dict(),
             "readings": [reading.to_dict() for reading in readings],
         }
+    if learning_exchange is not None:
+        payload["learning_exchange"] = _clone(dict(learning_exchange))
     content_checksum = _checksum(payload)
     payload["portfolio_id"] = f"private-{content_checksum[:24]}"
     payload["checksum_sha256"] = _checksum(payload)

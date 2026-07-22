@@ -1,14 +1,15 @@
 # /// script
 # requires-python = ">=3.10"
 # dependencies = [
-#     "marimo",
-#     "numpy",
-#     "matplotlib",
+#     "marimo==0.23.14",
+#     "numpy==2.2.6",
+#     "matplotlib==3.10.9",
 #     "torch==2.6.0",
 #     "torchvision==0.21.0",
 #     "transformers==4.52.0",
 #     "accelerate==1.14.0",
 #     "qwen-omni-utils==0.0.9",
+#     "av==17.1.0",
 # ]
 # ///
 
@@ -103,8 +104,11 @@ def _(execution_mode_form):
 
 @app.cell(hide_code=True)
 def _(USE_PRECOMPUTED, mo):
+    import hashlib
     import importlib.metadata
     import importlib.util
+    import os
+    import re
     import subprocess
     import sys
     from pathlib import Path
@@ -131,14 +135,6 @@ def _(USE_PRECOMPUTED, mo):
                 subprocess.run(
                     [sys.executable, "-m", "pip", "install", *to_install], check=True
                 )
-
-    if not USE_PRECOMPUTED:
-        _ensure_packages([
-            ("transformers", "transformers", "4.52.0", "transformers==4.52.0"),
-            ("accelerate", "accelerate", "1.14.0", "accelerate==1.14.0"),
-            ("qwen_omni_utils", "qwen-omni-utils", "0.0.9", "qwen-omni-utils==0.0.9"),
-            ("av", "av", None, "av"),
-        ])
 
     def _ensure_video_reader():
         # molab ships its own recent torch/torchvision and ignores the
@@ -195,53 +191,152 @@ def _(USE_PRECOMPUTED, mo):
         torchvision.io.read_video = _read_video_pyav
         print("patched torchvision.io.read_video (PyAV shim) for molab compatibility")
 
-    if not USE_PRECOMPUTED:
-        _ensure_video_reader()
+    # Fresh hosted launches cannot import a verifier from the not-yet-fetched
+    # repository. Keep this pre-import verifier self-contained: stdlib + git only.
+    _OBJECT_ID = re.compile(r"^[0-9a-f]{40}$")
+    _SHA256 = re.compile(r"^[0-9a-f]{64}$")
+    _PILOT_TAG = re.compile(r"^refs/tags/teaching-pilot-[a-z0-9._/-]+$")
 
-    # The experiment code (src/) and sample video live under the
-    # `avllm_interpretability/` subdirectory of this repo. If the clone already
-    # exists, hard-sync it to REPO_REF so pushed fixes reach molab (a kernel
-    # restart is still needed to re-import updated modules).
-    #
-    # REPO_REF selects the source version. Use "main" while iterating; distribute
-    # an immutable course tag so later repository changes cannot alter the class
-    # run. Fetching through FETCH_HEAD supports both branches and tags.
-    REPO_REF = "bb12df8686c0179bf95f0cc90b90f2319ad4040c"
+    def _git(repo, *args, binary=False):
+        completed = subprocess.run(
+            ["git", "-C", str(repo), *args],
+            check=True,
+            capture_output=True,
+            text=not binary,
+        )
+        return completed.stdout if binary else completed.stdout.strip()
+
+    def bootstrap_pilot_checkout(
+        *, remote_url, destination, protected_ref, commit, tree,
+        notebook_path, notebook_sha256, profile_path, profile_sha256,
+    ):
+        expectations = {
+            "commit": (commit, _OBJECT_ID),
+            "tree": (tree, _OBJECT_ID),
+            "notebook_sha256": (notebook_sha256, _SHA256),
+            "profile_sha256": (profile_sha256, _SHA256),
+        }
+        for label, (value, pattern) in expectations.items():
+            if not isinstance(value, str) or pattern.fullmatch(value) is None:
+                raise RuntimeError(f"invalid protected pilot {label}")
+        if not isinstance(protected_ref, str) or _PILOT_TAG.fullmatch(protected_ref) is None:
+            raise RuntimeError("protected pilot ref must be refs/tags/teaching-pilot-*")
+        for label, relative in (("notebook", notebook_path), ("profile", profile_path)):
+            relative_path = Path(relative)
+            if relative_path.is_absolute() or ".." in relative_path.parts:
+                raise RuntimeError(f"unsafe protected pilot {label} path")
+
+        repo = Path(destination).resolve()
+        repo.mkdir(parents=True, exist_ok=True)
+        existing = (repo / ".git").is_dir()
+        if not existing:
+            if any(repo.iterdir()):
+                raise RuntimeError("protected pilot destination must be empty")
+            subprocess.run(["git", "init", str(repo)], check=True, capture_output=True)
+            _git(repo, "remote", "add", "origin", remote_url)
+        else:
+            if _git(repo, "status", "--porcelain"):
+                raise RuntimeError("refusing dirty protected pilot checkout")
+            if _git(repo, "remote", "get-url", "origin") != remote_url:
+                raise RuntimeError("refusing unrelated protected pilot checkout")
+            symbolic = subprocess.run(
+                ["git", "-C", str(repo), "symbolic-ref", "-q", "HEAD"],
+                check=False,
+                capture_output=True,
+            )
+            if symbolic.returncode == 0 or _git(repo, "rev-parse", "HEAD^{commit}") != commit:
+                raise RuntimeError("refusing to repoint an unrelated worktree")
+
+        _git(repo, "fetch", "--no-tags", "--depth", "1", "origin", protected_ref)
+        observed_commit = _git(repo, "rev-parse", "FETCH_HEAD^{commit}")
+        observed_tree = _git(repo, "show", "-s", "--format=%T", observed_commit)
+        if observed_commit != commit:
+            raise RuntimeError("protected pilot tag commit mismatch")
+        if observed_tree != tree:
+            raise RuntimeError("protected pilot tree mismatch")
+        observed = {}
+        for label, relative, expected in (
+            ("notebook", notebook_path, notebook_sha256),
+            ("profile", profile_path, profile_sha256),
+        ):
+            payload = _git(repo, "show", f"{commit}:{relative}", binary=True)
+            observed[label] = hashlib.sha256(payload).hexdigest()
+            if observed[label] != expected:
+                raise RuntimeError(f"protected pilot {label} sha256 mismatch")
+
+        _git(repo, "checkout", "--detach", "--force", commit)
+        if _git(repo, "rev-parse", "HEAD") != commit:
+            raise RuntimeError("protected pilot detached checkout mismatch")
+        if subprocess.run(
+            ["git", "-C", str(repo), "symbolic-ref", "-q", "HEAD"],
+            check=False,
+            capture_output=True,
+        ).returncode == 0:
+            raise RuntimeError("protected pilot checkout must be detached")
+        return {
+            "protected_ref": protected_ref,
+            "commit": observed_commit,
+            "tree": observed_tree,
+            "notebook_sha256": observed["notebook"],
+            "profile_sha256": observed["profile"],
+            "verified": True,
+        }
+
+    PILOT_TAG = "refs/tags/teaching-pilot-candidate"
+    PILOT_NOTEBOOK_PATH = "avllm_interpretability/CTP49906_avllm_molab.py"
+    PILOT_PROFILE_PATH = "study_materials/" + "w" + "p0/course_release_profile.json"
     _local_project = Path(__file__).resolve().parent
     if (_local_project / "src").is_dir() and (_local_project / "assets").is_dir():
-        # Local development / a notebook opened from a checked-out release:
-        # use that exact working tree rather than cloning a second, stale copy.
         PROJECT_DIR = _local_project
+        BOOTSTRAP_REPORT = {
+            "protected_ref": PILOT_TAG,
+            "verified": False,
+            "status": "LOCAL_CHECKED_OUT_SOURCE_NOT_HOSTED_VERIFICATION",
+        }
         print(f"using checked-out project: {PROJECT_DIR}")
     else:
         REPO_DIR = Path("CTP49906_2026").resolve()
-        if REPO_REF != "main":
-            print(f"⚠️ REPO_REF={REPO_REF!r} — notebook source pinned to that ref.")
-        if REPO_DIR.exists():
-            _sync_title = f"Updating CTP49906_2026 to {REPO_REF}…"
-        else:
-            _sync_title = f"Cloning CTP49906_2026 @ {REPO_REF} (src + sample video)…"
-        with mo.status.spinner(title=_sync_title):
-            if not REPO_DIR.exists():
-                subprocess.run(
-                    ["git", "clone", "--depth", "1", "--branch", REPO_REF,
-                     "https://github.com/youngjuene/CTP49906_2026.git", str(REPO_DIR)],
-                    check=True,
-                )
-            subprocess.run(
-                ["git", "-C", str(REPO_DIR), "fetch", "--depth", "1", "origin", REPO_REF],
-                check=True,
-            )
-            subprocess.run(
-                ["git", "-C", str(REPO_DIR), "reset", "--hard", "FETCH_HEAD"], check=True
+        _required_identity = {
+            "commit": os.environ.get("CTP49906_PILOT_COMMIT", ""),
+            "tree": os.environ.get("CTP49906_PILOT_TREE", ""),
+            "notebook_sha256": os.environ.get("CTP49906_PILOT_NOTEBOOK_SHA256", ""),
+            "profile_sha256": os.environ.get("CTP49906_PILOT_PROFILE_SHA256", ""),
+        }
+        with mo.status.spinner(title="Verifying protected teaching-pilot identity…"):
+            BOOTSTRAP_REPORT = bootstrap_pilot_checkout(
+                remote_url="https://github.com/youngjuene/CTP49906_2026.git",
+                destination=REPO_DIR,
+                protected_ref=PILOT_TAG,
+                notebook_path=PILOT_NOTEBOOK_PATH,
+                profile_path=PILOT_PROFILE_PATH,
+                **_required_identity,
             )
         PROJECT_DIR = REPO_DIR / "avllm_interpretability"
+
+    if not USE_PRECOMPUTED and BOOTSTRAP_REPORT.get("verified") is not True:
+        raise RuntimeError(
+            "Live model execution requires verified protected pilot commit, tree, "
+            "notebook, and profile identities; use saved replay for local source"
+        )
+
+    if not USE_PRECOMPUTED:
+        _ensure_packages([
+            ("marimo", "marimo", "0.23.14", "marimo==0.23.14"),
+            ("numpy", "numpy", "2.2.6", "numpy==2.2.6"),
+            ("matplotlib", "matplotlib", "3.10.9", "matplotlib==3.10.9"),
+            ("transformers", "transformers", "4.52.0", "transformers==4.52.0"),
+            ("accelerate", "accelerate", "1.14.0", "accelerate==1.14.0"),
+            ("qwen_omni_utils", "qwen-omni-utils", "0.0.9", "qwen-omni-utils==0.0.9"),
+            ("av", "av", "17.1.0", "av==17.1.0"),
+        ])
+        _ensure_video_reader()
+
     assert PROJECT_DIR.is_dir(), f"expected code dir not found: {PROJECT_DIR}"
     for _source_root in (PROJECT_DIR, PROJECT_DIR.parent):
         if str(_source_root) not in sys.path:
             sys.path.insert(0, str(_source_root))
     print("project dir:", PROJECT_DIR)
-    return (PROJECT_DIR,)
+    return BOOTSTRAP_REPORT, PROJECT_DIR
 
 
 @app.cell
@@ -277,6 +372,12 @@ def _(PROJECT_DIR, mo):
         restore_private_audience_exchange,
         serialize_private_portfolio,
     )
+    from curriculum_common.pilot_profile import (
+        PEER_EXCHANGE_ROUTE,
+        PRIVATE_EQUIVALENT_ROUTE,
+        load_pilot_profile,
+        resolve_exchange_route,
+    )
     from curriculum_common.production_manifest import (
         ArtifactVersion,
         EditDecisionManifest,
@@ -288,12 +389,34 @@ def _(PROJECT_DIR, mo):
         teaching_mode,
         validate_process_log,
     )
-    from src.playground_clips import register_artifact_version
-
-    COURSE_RELEASE_ID = "counterpoint-lens-classroom-2026-07-22"
-    classroom_mode = teaching_mode(
-        "Teaching is the default; no approved Research configuration is loaded"
+    from src.controlled_operations import (
+        ControlledOperationRequest,
+        build_result_link_command,
+        dispatch_controlled_operation,
     )
+    from src.media_roundtrip import (
+        MediaRoundtripPolicy,
+        diagnose_pyav_environment,
+        encode_mux_decode_private_media,
+        export_private_media,
+        reingest_private_media,
+        reset_private_media_export,
+    )
+    from src.modality_omission import prepare_modality_omission_inputs
+    from src.playground_clips import (
+        CLIP_CHOICES,
+        file_content_id,
+        inspect_classroom_clip,
+        register_artifact_version,
+        resolve_clip_selection,
+    )
+    from src.runtime_diagnostics import RuntimeMemoryMonitor
+
+    PILOT_PROFILE = load_pilot_profile(
+        PROJECT_DIR.parent / "study_materials" / ("w" + "p0") / "course_release_profile.json"
+    )
+    COURSE_RELEASE_ID = PILOT_PROFILE.course_release_id
+    classroom_mode = teaching_mode(PILOT_PROFILE.teaching_mode_reason)
     _session_pseudonym = f"studio-{uuid4().hex[:12]}"
     _initial_log = new_session(
         _session_pseudonym,
@@ -304,40 +427,99 @@ def _(PROJECT_DIR, mo):
     get_artifact_versions, set_artifact_versions = mo.state(tuple())
     get_audience_exchange, set_audience_exchange = mo.state((None, tuple()))
     get_common_outcomes, set_common_outcomes = mo.state(None)
+    get_private_media_state, set_private_media_state = mo.state(None)
+
+    def resolve_registered_media_path(artifact, *, course_path, upload_dir):
+        """Resolve an immutable artifact only to its verified retained local bytes."""
+
+        expected = artifact.content_sha256
+        alias = str(artifact.media_facts.get("local_filename_alias", ""))
+        course = course_path.resolve()
+        upload_root = upload_dir.resolve()
+        if alias == course.name and file_content_id(course) == expected:
+            return course
+        candidate = upload_root / alias
+        if candidate.is_symlink():
+            raise ValueError("registered V1 path cannot be a symbolic link")
+        candidate = candidate.resolve()
+        if candidate.parent != upload_root:
+            raise ValueError("registered V1 alias escaped the private upload directory")
+        if not candidate.is_file() or file_content_id(candidate) != expected:
+            raise ValueError("registered V1 retained bytes do not match immutable identity")
+        return candidate
+
+    def resolve_private_upload_identity(upload_dir, content_sha256):
+        """Resolve one content-addressed private upload without recording its name."""
+
+        digest = content_sha256.removeprefix("sha256:")
+        upload_root = upload_dir.resolve()
+        matches = tuple(upload_root.glob(f"upload-{digest}.*"))
+        if len(matches) != 1 or matches[0].is_symlink():
+            raise ValueError("exactly one regular donor upload must match the snapshot")
+        candidate = matches[0].resolve()
+        if candidate.parent != upload_root or file_content_id(candidate) != content_sha256:
+            raise ValueError("donor upload does not match the committed content identity")
+        return candidate
 
     PRIVATE_UPLOAD_DIR = PROJECT_DIR / "notebook_results" / "uploads"
     PRIVATE_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    PRIVATE_MEDIA_DIR = PROJECT_DIR / "notebook_results" / "private_media"
+    PRIVATE_MEDIA_DIR.mkdir(parents=True, exist_ok=True)
     return (
+        CLIP_CHOICES,
         ArtifactVersion,
         AudiencePacket,
         AudienceReading,
         COURSE_RELEASE_ID,
+        ControlledOperationRequest,
         EditDecisionManifest,
+        MediaRoundtripPolicy,
         OUTCOME_RESPONSE_SCHEMA,
+        PEER_EXCHANGE_ROUTE,
         POST_OUTCOME_ID,
         PRE_OUTCOME_ID,
+        PILOT_PROFILE,
         PRIVATE_UPLOAD_DIR,
+        PRIVATE_MEDIA_DIR,
+        PRIVATE_EQUIVALENT_ROUTE,
         build_private_portfolio,
+        build_result_link_command,
         build_outcome_bundle,
         classroom_mode,
+        diagnose_pyav_environment,
+        dispatch_controlled_operation,
+        encode_mux_decode_private_media,
+        export_private_media,
+        file_content_id,
         get_artifact_versions,
         get_audience_exchange,
         get_classroom_log,
         get_common_outcomes,
+        get_private_media_state,
+        inspect_classroom_clip,
         json,
         load_jsonl,
         new_session,
         parse_json_object,
+        prepare_modality_omission_inputs,
         reduce_command,
         register_artifact_version,
+        reingest_private_media,
+        reset_private_media_export,
+        resolve_clip_selection,
+        resolve_exchange_route,
+        resolve_private_upload_identity,
+        resolve_registered_media_path,
         restore_private_audience_exchange,
         serialize_private_portfolio,
         set_artifact_versions,
         set_audience_exchange,
         set_classroom_log,
         set_common_outcomes,
+        set_private_media_state,
         sha256,
         teaching_mode,
+        RuntimeMemoryMonitor,
         uuid4,
         validate_audience_exchange,
         validate_outcome_bundle,
@@ -347,7 +529,7 @@ def _(PROJECT_DIR, mo):
 
 
 @app.cell(hide_code=True)
-def _(USE_PRECOMPUTED, classroom_mode, mo):
+def _(PILOT_PROFILE, USE_PRECOMPUTED, classroom_mode, mo):
     _route = "Saved course replay" if USE_PRECOMPUTED else "Live model"
     mo.hstack(
         [
@@ -367,6 +549,16 @@ def _(USE_PRECOMPUTED, classroom_mode, mo):
                 value="Manual only",
                 label="Student-data egress",
                 caption="private download or permission-authorized exchange",
+                bordered=True,
+            ),
+            mo.stat(
+                value="Candidate / 후보",
+                label="Pilot profile / 파일럿 프로필",
+                caption=(
+                    "Research disabled / 연구 비활성화"
+                    if PILOT_PROFILE.research_enabled is False
+                    else "Invalid profile / 잘못된 프로필"
+                ),
                 bordered=True,
             ),
         ],
@@ -754,7 +946,7 @@ def _(USE_PRECOMPUTED, mo):
 
 
 @app.cell(hide_code=True)
-def _(DEVICE, MODEL_PATH, MODEL_REVISION, PROJECT_DIR, USE_PRECOMPUTED):
+def _(DEVICE, MODEL_PATH, MODEL_REVISION, PROJECT_DIR, USE_PRECOMPUTED, CLIP_CHOICES, inspect_classroom_clip, resolve_clip_selection):
     import csv
     from collections import Counter
     from typing import Any as _Any
@@ -762,12 +954,6 @@ def _(DEVICE, MODEL_PATH, MODEL_REVISION, PROJECT_DIR, USE_PRECOMPUTED):
     import matplotlib.pyplot as plt
     import numpy as np
     _ = PROJECT_DIR  # ensure the clone / sys.path cell ran first
-    from src.playground_clips import (
-        CLIP_CHOICES,
-        inspect_classroom_clip,
-        resolve_clip_selection,
-    )
-
     Qwen2_5OmniForConditionalGeneration: _Any
     Qwen2_5OmniProcessor: _Any
     analyze_and_save_audio_logits_to_csv: _Any
@@ -1586,6 +1772,10 @@ def _(mo):
                 return "Command key, prediction, initial explanation, and prompt are required."
         if _value["operation"] == "temporal_offset" and _value["offset_ms"] == 0:
             return "Choose a non-zero signed offset for the temporal-offset condition."
+        if _value["operation"] == "audio_swap_duration_matched":
+            _donor = _value["donor_video"]
+            if not _donor or not _donor[0].contents:
+                return "Upload one bounded donor clip for the duration-matched audio swap."
         return None
 
     experiment_plan_form = mo.md(r"""
@@ -1597,6 +1787,9 @@ def _(mo):
 
     **Operation** {operation}
 
+    **Audio-swap donor** — required only for the duration-matched swap; never
+    reused as the silence control {donor_video}
+
     **Signed offset in milliseconds** — negative leads; positive delays {offset_ms}
 
     **Prompt** {prompt}
@@ -1605,6 +1798,12 @@ def _(mo):
         prediction=mo.ui.text_area(rows=2, full_width=True),
         initial_explanation=mo.ui.text_area(rows=2, full_width=True),
         operation=mo.ui.dropdown(_operation_labels, value="Original reference"),
+        donor_video=mo.ui.file(
+            filetypes=[".mp4", ".mov", ".mkv", ".webm", ".avi"],
+            multiple=False,
+            kind="area",
+            max_size=250_000_000,
+        ),
         offset_ms=mo.ui.slider(-2000, 2000, step=100, value=500, show_value=True),
         prompt=mo.ui.text(value="Describe what you see and hear in the video", full_width=True),
     ).form(
@@ -1618,13 +1817,23 @@ def _(mo):
 
 @app.cell(hide_code=True)
 def _(
+    KNOCKOUT_RULES,
     MODEL_PATH,
     MODEL_REVISION,
+    NFRAMES,
+    PRIVATE_UPLOAD_DIR,
+    SILENT_VIDEO_PATH,
+    VIDEO_PATH,
     experiment_plan_form,
+    file_content_id,
     get_artifact_versions,
     get_classroom_log,
+    inspect_classroom_clip,
+    json,
     mo,
     reduce_command,
+    resolve_clip_selection,
+    resolve_registered_media_path,
     set_classroom_log,
     sha256,
 ):
@@ -1640,57 +1849,762 @@ def _(
             (_artifact for _artifact in _artifacts if _artifact.version_label == "V1"),
             None,
         )
-        _artifact_id = _v1.artifact_id if _v1 is not None else "practice-course-reference"
-        _condition = _prepared["operation"]
-        _command = {
-            "kind": "commit_run",
-            "command_nonce": "run:" + sha256(
-                _prepared["command_key"].strip().encode("utf-8")
-            ).hexdigest(),
-            "artifact_id": _artifact_id,
-            "stimulus_id": f"condition:{_condition}",
-            "condition_code": _condition,
-            "model_id": MODEL_PATH,
-            "model_revision": MODEL_REVISION,
-            "prompt": _prepared["prompt"].strip(),
-            "parameters": {
-                "technical_operation": _condition,
-                "signed_offset_ms": int(_prepared["offset_ms"]),
-                "signal_control": _condition in {
-                    "audio_silence_control",
-                    "video_neutral_control",
-                },
-                "true_modality_omission": _condition in {
-                    "audio_omitted_model_input",
-                    "video_omitted_model_input",
-                },
-                "model_intervention": _condition == "direct_attention_edge_knockout",
-            },
-            "prediction": _prepared["prediction"].strip(),
-            "initial_explanation": _prepared["initial_explanation"].strip(),
-            "metric_versions": {
-                "probe": "probe-metric/1.0.0",
-                "teacher_forced": "compact-distribution/1.0.0",
-            },
-        }
-        try:
-            _reduction = reduce_command(get_classroom_log(), _command)
-        except Exception as _error:  # noqa: BLE001 — reducer rejection belongs in the UI
+        if _v1 is None:
             _run_snapshot_card = mo.callout(
-                mo.md(f"**Run snapshot rejected** — `{type(_error).__name__}: {_error}`"),
+                mo.md("Register immutable V1 before committing the Required-cycle run."),
                 kind="danger",
             )
         else:
-            set_classroom_log(_reduction.log)
-            _run_id = _reduction.record_ids[0]
-            _run_snapshot_card = mo.callout(
+            _condition = _prepared["operation"]
+            try:
+                _source_path = resolve_registered_media_path(
+                    _v1,
+                    course_path=VIDEO_PATH,
+                    upload_dir=PRIVATE_UPLOAD_DIR,
+                )
+                _source_sha256 = file_content_id(_source_path)
+                _donor_sha256 = None
+                if _condition == "audio_swap_duration_matched":
+                    _donor_upload = _prepared["donor_video"][0]
+                    _resolved_donor = resolve_clip_selection(
+                        "Upload",
+                        default_path=VIDEO_PATH,
+                        silent_path=VIDEO_PATH,
+                        upload_dir=PRIVATE_UPLOAD_DIR,
+                        upload_name=_donor_upload.name,
+                        upload_contents=_donor_upload.contents,
+                    )
+                    inspect_classroom_clip(_resolved_donor.path)
+                    _donor_sha256 = _resolved_donor.cache_id
+                    if _donor_sha256 == _source_sha256:
+                        raise ValueError("audio-swap donor must differ from registered V1")
+                    if _donor_sha256 == file_content_id(SILENT_VIDEO_PATH):
+                        raise ValueError(
+                            "the bundled silence control cannot be reused as an audio-swap donor"
+                        )
+
+                _semantic_identity = {
+                    "source_artifact_id": _v1.artifact_id,
+                    "source_content_sha256": _source_sha256,
+                    "technical_operation": _condition,
+                    "donor_content_sha256": _donor_sha256,
+                    "signed_offset_ms": (
+                        int(_prepared["offset_ms"])
+                        if _condition == "temporal_offset"
+                        else None
+                    ),
+                    "omission_nframes": (
+                        NFRAMES
+                        if _condition == "audio_omitted_model_input"
+                        else None
+                    ),
+                    "processor_nframes": NFRAMES,
+                    "knockout_rules": (
+                        [list(_rule) for _rule in KNOCKOUT_RULES]
+                        if _condition == "direct_attention_edge_knockout"
+                        else []
+                    ),
+                }
+                _stimulus_digest = sha256(
+                    json.dumps(
+                        _semantic_identity,
+                        ensure_ascii=False,
+                        allow_nan=False,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    ).encode("utf-8")
+                ).hexdigest()
+                _command = {
+                    "kind": "commit_run",
+                    "command_nonce": "run:" + sha256(
+                        _prepared["command_key"].strip().encode("utf-8")
+                    ).hexdigest(),
+                    "artifact_id": _v1.artifact_id,
+                    "stimulus_id": f"stimulus:sha256:{_stimulus_digest}",
+                    "condition_code": _condition,
+                    "model_id": MODEL_PATH,
+                    "model_revision": MODEL_REVISION,
+                    "prompt": _prepared["prompt"].strip(),
+                    "parameters": {
+                        **_semantic_identity,
+                        "signal_control": _condition in {
+                            "audio_silence_control",
+                            "video_neutral_control",
+                        },
+                        "true_modality_omission": _condition in {
+                            "audio_omitted_model_input",
+                            "video_omitted_model_input",
+                        },
+                        "model_intervention": (
+                            _condition == "direct_attention_edge_knockout"
+                        ),
+                    },
+                    "prediction": _prepared["prediction"].strip(),
+                    "initial_explanation": _prepared["initial_explanation"].strip(),
+                    "metric_versions": {
+                        "probe": "probe-metric/1.0.0",
+                        "teacher_forced": "compact-distribution/1.0.0",
+                    },
+                }
+                _reduction = reduce_command(get_classroom_log(), _command)
+            except Exception as _error:  # noqa: BLE001 — snapshot rejection belongs in UI
+                _run_snapshot_card = mo.callout(
+                    mo.md(
+                        f"**Run snapshot rejected** — "
+                        f"{type(_error).__name__}: {_error}"
+                    ),
+                    kind="danger",
+                )
+            else:
+                set_classroom_log(_reduction.log)
+                _run_id = _reduction.record_ids[0]
+                _run_snapshot_card = mo.callout(
+                    mo.md(
+                        f"**Run snapshot committed** · {_run_id}  \\n"
+                        f"Operation: {_condition} · stimulus: "
+                        f"stimulus:sha256:{_stimulus_digest} · "
+                        f"replayed: {_reduction.replayed}"
+                    ),
+                    kind="success",
+                )
+    _run_snapshot_card
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    execute_operation_button = mo.ui.run_button(
+        label="Execute the committed operation once"
+    )
+
+    def _validate_manual_reingest(_value):
+        if not _value or not _value["media"] or not _value["media"][0].contents:
+            return "Choose the manually downloaded media file."
+        if not str(_value["expected_sha256"]).startswith("sha256:"):
+            return "Paste the displayed sha256:<digest> identity."
+        return None
+
+    manual_reingest_form = mo.md(r"""
+    **Manual browser-download reingest** {media}
+
+    **Expected SHA-256** {expected_sha256}
+    """).batch(
+        media=mo.ui.file(filetypes=["video/*"], multiple=False, kind="area"),
+        expected_sha256=mo.ui.text(
+            placeholder="sha256:…", full_width=True
+        ),
+    ).form(
+        submit_button_label="Validate private upload and reingest",
+        validate=_validate_manual_reingest,
+        bordered=True,
+    )
+    delete_private_media_button = mo.ui.run_button(
+        label="Delete the exact candidate-owned private media file"
+    )
+    mo.vstack(
+        [
+            execute_operation_button,
+            mo.callout(
                 mo.md(
-                    f"**Run snapshot committed** · `{_run_id}`  \n"
-                    f"Operation: `{_condition}` · replayed: `{_reduction.replayed}`"
+                    "Execution is disabled in saved replay. Live execution requires "
+                    "the verified protected-tag bootstrap, and every result remains "
+                    "**local-only / target and browser UNVERIFIED**."
+                ),
+                kind="warn",
+            ),
+            manual_reingest_form,
+            delete_private_media_button,
+        ]
+    )
+    return delete_private_media_button, execute_operation_button, manual_reingest_form
+
+
+@app.cell(hide_code=True)
+def _(
+    ControlledOperationRequest,
+    DEVICE,
+    MediaRoundtripPolicy,
+    NFRAMES,
+    PRIVATE_MEDIA_DIR,
+    PRIVATE_UPLOAD_DIR,
+    RuntimeMemoryMonitor,
+    USE_PRECOMPUTED,
+    VIDEO_PATH,
+    attention_model,
+    attention_processor,
+    build_result_link_command,
+    create_attention_token_mapping,
+    diagnose_pyav_environment,
+    dispatch_controlled_operation,
+    encode_mux_decode_private_media,
+    execute_operation_button,
+    export_private_media,
+    file_content_id,
+    get_artifact_versions,
+    get_classroom_log,
+    get_private_media_state,
+    mo,
+    prepare_modality_omission_inputs,
+    prepare_video_inputs,
+    reduce_command,
+    reset_private_media_export,
+    resolve_private_upload_identity,
+    resolve_registered_media_path,
+    set_classroom_log,
+    set_private_media_state,
+    sha256,
+    torch,
+):
+    _execution_card = mo.callout(
+        mo.md("Commit the run snapshot, then explicitly execute it."), kind="info"
+    )
+    if execute_operation_button.value:
+        _log = get_classroom_log()
+        _runs = _log.records_of_type("run")
+        _run = _runs[-1].to_dict() if _runs else None
+        _existing_result = (
+            next(
+                (
+                    _record
+                    for _record in _log.records_of_type("result")
+                    if _run is not None
+                    and _record.to_dict().get("run_id") == _run["run_id"]
+                ),
+                None,
+            )
+            if _run is not None
+            else None
+        )
+        if USE_PRECOMPUTED:
+            _execution_card = mo.callout(
+                mo.md(
+                    "**Not executed.** Teaching is the default. Saved replay never substitutes a label or "
+                    "fixture for the selected technical operation. Choose Live model "
+                    "only in a verified protected-tag runtime."
+                ),
+                kind="warn",
+            )
+        elif _run is None:
+            _execution_card = mo.callout(
+                mo.md("Commit the immutable prediction/run snapshot first."),
+                kind="danger",
+            )
+        elif _existing_result is not None:
+            _execution_card = mo.callout(
+                mo.md(
+                    f"**Already executed.** Result "
+                    f"{_existing_result.to_dict()['result_digest']} is linked to this run; "
+                    "the model handler was not repeated."
+                ),
+                kind="info",
+            )
+        else:
+            import av as _av
+            import numpy as _np
+            from qwen_omni_utils import process_mm_info as _process_mm_info
+
+            _artifacts = get_artifact_versions()
+            _v1 = next(
+                (_artifact for _artifact in _artifacts if _artifact.version_label == "V1"),
+                None,
+            )
+            _render_path = None
+            _render_hash = None
+            _roundtrip = None
+            _monitor = RuntimeMemoryMonitor(device=DEVICE)
+            _pyav_diagnostic = diagnose_pyav_environment()
+
+            def _decode_private_source(_path):
+                _video_frames = []
+                with _av.open(str(_path)) as _container:
+                    for _index, _frame in enumerate(_container.decode(video=0)):
+                        if _index >= 600:
+                            raise ValueError("source video exceeds the 600-frame route bound")
+                        _video_frames.append(
+                            _av.VideoFrame.from_ndarray(
+                                _frame.to_ndarray(format="rgb24"), format="rgb24"
+                            )
+                        )
+                _audio_samples = []
+                _audio_rate = 16000
+                with _av.open(str(_path)) as _container:
+                    if not _container.streams.audio:
+                        raise ValueError("the controlled route requires an audio stream")
+                    _audio_rate = int(_container.streams.audio[0].rate or 16000)
+                    for _frame in _container.decode(audio=0):
+                        _raw = _frame.to_ndarray()
+                        _dtype = _raw.dtype
+                        _array = _np.asarray(_raw, dtype=_np.float32)
+                        if _np.issubdtype(_dtype, _np.integer):
+                            _array /= max(1, _np.iinfo(_dtype).max)
+                        if _array.ndim > 1:
+                            _array = _array.mean(axis=0)
+                        _audio_samples.extend(float(item) for item in _array.reshape(-1))
+                        if len(_audio_samples) > 5_000_000:
+                            raise ValueError("source audio exceeds the five-million-sample bound")
+                if not _video_frames or not _audio_samples:
+                    raise ValueError("controlled source must retain bounded audio and video")
+                return tuple(_audio_samples), tuple(_video_frames), _audio_rate
+
+            def _audio_frames(_samples, _rate):
+                _frames = []
+                for _start in range(0, len(_samples), 1024):
+                    _chunk = _np.asarray(
+                        _samples[_start : _start + 1024], dtype=_np.float32
+                    ).reshape(1, -1)
+                    _frame = _av.AudioFrame.from_ndarray(
+                        _chunk, format="fltp", layout="mono"
+                    )
+                    _frame.sample_rate = int(_rate)
+                    _frames.append(_frame)
+                return tuple(_frames)
+
+            def _cleanup_render():
+                if (
+                    _render_path is not None
+                    and _render_hash is not None
+                    and _render_path.is_file()
+                ):
+                    reset_private_media_export(
+                        _render_path, expected_sha256=_render_hash
+                    )
+
+            try:
+                if _v1 is None or _run["artifact_id"] != _v1.artifact_id:
+                    raise ValueError(
+                        "committed run is not bound to the retained immutable V1"
+                    )
+                _parameters = _run["parameters"]
+                _source_path = resolve_registered_media_path(
+                    _v1,
+                    course_path=VIDEO_PATH,
+                    upload_dir=PRIVATE_UPLOAD_DIR,
+                )
+                _source_hash = file_content_id(_source_path)
+                if _parameters["source_content_sha256"] != _source_hash:
+                    raise ValueError("retained V1 bytes drifted after run commitment")
+                if _parameters["source_artifact_id"] != _v1.artifact_id:
+                    raise ValueError("run source artifact identity drifted")
+
+                _donor_path = None
+                if _run["condition_code"] == "audio_swap_duration_matched":
+                    _donor_hash = _parameters.get("donor_content_sha256")
+                    if not _donor_hash:
+                        raise ValueError("committed audio swap lacks donor identity")
+                    _donor_path = resolve_private_upload_identity(
+                        PRIVATE_UPLOAD_DIR, _donor_hash
+                    )
+
+                _previous_media = get_private_media_state()
+                if _previous_media is not None:
+                    try:
+                        reset_private_media_export(
+                            _previous_media["path"],
+                            expected_sha256=_previous_media["content_sha256"],
+                        )
+                    except FileNotFoundError:
+                        pass
+                    set_private_media_state(None)
+
+                with _monitor:
+                    _source_audio, _source_video, _sample_rate = _decode_private_source(
+                        _source_path
+                    )
+                    _donor_audio, _donor_rate, _donor_hash = None, None, None
+                    if _donor_path is not None:
+                        _donor_audio, _donor_video, _donor_rate = _decode_private_source(
+                            _donor_path
+                        )
+                        del _donor_video
+                        _donor_hash = file_content_id(_donor_path)
+
+                    _first_frame = _source_video[0]
+                    _black_frame = _av.VideoFrame.from_ndarray(
+                        _np.zeros(
+                            (_first_frame.height, _first_frame.width, 3),
+                            dtype=_np.uint8,
+                        ),
+                        format="rgb24",
+                    )
+                    _request = ControlledOperationRequest(
+                        technical_operation=_run["condition_code"],
+                        source_content_sha256=_source_hash,
+                        audio_samples=_source_audio,
+                        video_frames=_source_video,
+                        sample_rate_hz=_sample_rate,
+                        source_reference=str(_source_path),
+                        token_layout_fingerprint=(
+                            "pending:" + _run["stimulus_id"].removeprefix(
+                                "stimulus:sha256:"
+                            )
+                        ),
+                        donor_audio_samples=_donor_audio,
+                        donor_sample_rate_hz=_donor_rate,
+                        donor_content_sha256=_donor_hash,
+                        offset_ms=int(_parameters["signed_offset_ms"]),
+                        neutral_video_value=0,
+                        omission_nframes=_parameters.get("omission_nframes") or NFRAMES,
+                        knockout_rules=tuple(
+                            tuple(_rule)
+                            for _rule in _parameters.get("knockout_rules", ())
+                        ),
+                    )
+                    _controlled_result = dispatch_controlled_operation(
+                        _request,
+                        on_failure_cleanup=_cleanup_render,
+                    )
+                    _monitor.checkpoint("controlled_operation_dispatched")
+
+                    if _controlled_result.intervention_kind in {
+                        "media_transform",
+                        "signal_control",
+                    }:
+                        _video_frames = _controlled_result.video_frames or ()
+                        if _run["condition_code"] == "video_neutral_control":
+                            _video_frames = tuple(
+                                _black_frame for _item in _video_frames
+                            )
+                        _roundtrip = encode_mux_decode_private_media(
+                            video_frames=_video_frames,
+                            audio_frames=_audio_frames(
+                                _controlled_result.audio_samples or (), _sample_rate
+                            ),
+                            work_dir=PRIVATE_MEDIA_DIR,
+                            policy=MediaRoundtripPolicy(
+                                audio_rate=_sample_rate,
+                                max_video_frames=600,
+                                max_audio_frames=20_000,
+                            ),
+                        )
+                        _render_hash = _roundtrip.content_sha256
+                        _render_path = PRIVATE_MEDIA_DIR / (
+                            _roundtrip.content_sha256.removeprefix("sha256:")[:24]
+                            + ".mp4"
+                        )
+                        export_private_media(
+                            _roundtrip.encoded_bytes,
+                            _render_path,
+                            expected_sha256=_roundtrip.content_sha256,
+                        )
+                        _inputs, _token_types = prepare_video_inputs(
+                            attention_model,
+                            attention_processor,
+                            _run["prompt"],
+                            create_attention_token_mapping,
+                            _render_path,
+                            _parameters["processor_nframes"],
+                        )
+                        _processor_path = "processor.audio_video_from_controlled_media"
+                        _layout = "sha256:" + sha256(
+                            "|".join(_token_types).encode("utf-8")
+                        ).hexdigest()
+                    elif _controlled_result.intervention_kind == "modality_omission":
+                        _config = attention_model.config.thinker_config
+                        _prepared_omission = prepare_modality_omission_inputs(
+                            _controlled_result.omission_request,
+                            prompt=_run["prompt"],
+                            processor=attention_processor,
+                            process_mm_info=_process_mm_info,
+                            processor_revision=_run["model_revision"],
+                            model_revision=_run["model_revision"],
+                            audio_token_index=getattr(_config, "audio_token_index", None),
+                            video_token_index=getattr(_config, "video_token_index", None),
+                        )
+                        _inputs = {
+                            key: value.to(attention_model.device)
+                            for key, value in _prepared_omission.inputs.items()
+                        }
+                        _token_types = create_attention_token_mapping(
+                            _inputs["input_ids"], _config
+                        )
+                        _processor_path = _prepared_omission.processor_path
+                        _layout = _prepared_omission.token_layout_fingerprint
+                    else:
+                        _inputs, _token_types = prepare_video_inputs(
+                            attention_model,
+                            attention_processor,
+                            _run["prompt"],
+                            create_attention_token_mapping,
+                            _source_path,
+                            _parameters["processor_nframes"],
+                        )
+                        _processor_path = "processor.audio_video_with_edge_context"
+                        _layout = "sha256:" + sha256(
+                            "|".join(_token_types).encode("utf-8")
+                        ).hexdigest()
+
+                    _prompt_length = int(_inputs["input_ids"].shape[1])
+                    _edge_context = (
+                        _controlled_result.edge_execution.context(
+                            attention_model,
+                            token_types=_token_types,
+                            original_input_len=len(_token_types),
+                        )
+                        if _controlled_result.edge_execution is not None
+                        else __import__("contextlib").nullcontext()
+                    )
+                    with _edge_context:
+                        with torch.no_grad():
+                            _generated_ids = attention_model.thinker.generate(
+                                **_inputs,
+                                max_new_tokens=32,
+                                do_sample=False,
+                                return_dict_in_generate=False,
+                            )
+                    _generated_text = attention_processor.batch_decode(
+                        _generated_ids[:, _prompt_length:],
+                        skip_special_tokens=True,
+                        clean_up_tokenization_spaces=False,
+                    )[0]
+                    _monitor.checkpoint("model_handler_completed")
+
+                _runtime = _monitor.report.to_dict()
+                _metrics = {
+                    "generated_text": _generated_text,
+                    "processor_path": _processor_path,
+                    "attested_token_layout_fingerprint": _layout,
+                    "evidence_scope": "local_only",
+                    "target_runtime_verified": False,
+                    "browser_compatibility_status": (
+                        _roundtrip.browser_compatibility.status
+                        if _roundtrip is not None
+                        else "UNVERIFIED"
+                    ),
+                    "pyav_local_status": _pyav_diagnostic.status,
+                    "pyav_local_version": _pyav_diagnostic.pyav_version,
+                    "pyav_linked_ffmpeg_libraries": (
+                        _pyav_diagnostic.linked_ffmpeg_libraries
+                    ),
+                    "elapsed_seconds": _runtime["elapsed_seconds"],
+                    "peak_host_rss_bytes": _runtime["peak_host_rss_bytes"],
+                    "steady_host_rss_bytes": _runtime["steady_host_rss_bytes"],
+                    "peak_cuda_allocated_bytes": _runtime[
+                        "peak_cuda_allocated_bytes"
+                    ],
+                    "peak_cuda_reserved_bytes": _runtime[
+                        "peak_cuda_reserved_bytes"
+                    ],
+                    "steady_cuda_allocated_bytes": _runtime[
+                        "steady_cuda_allocated_bytes"
+                    ],
+                    "steady_cuda_reserved_bytes": _runtime[
+                        "steady_cuda_reserved_bytes"
+                    ],
+                    "steady_cuda_unavailable_reason": _runtime[
+                        "steady_cuda_unavailable_reason"
+                    ],
+                    "sampling_errors": _runtime["sampling_errors"],
+                }
+                _result_command = build_result_link_command(
+                    _controlled_result,
+                    run_id=_run["run_id"],
+                    command_nonce=(
+                        f"execution:{_run['run_id']}:"
+                        f"{_controlled_result.result_digest}"
+                    ),
+                    metrics=_metrics,
+                )
+                if _result_command.get("kind") != "attach_result":
+                    raise ValueError("controlled result linker returned a non-result command")
+                _result_command["elapsed_seconds"] = _runtime["elapsed_seconds"]
+                _result_command["peak_host_rss_bytes"] = _runtime[
+                    "peak_host_rss_bytes"
+                ]
+                _result_command["peak_vram_bytes"] = _runtime[
+                    "peak_cuda_allocated_bytes"
+                ]
+                _linked = reduce_command(_log, _result_command)
+            except Exception as _error:  # noqa: BLE001 — execution failure belongs in UI
+                try:
+                    _cleanup_render()
+                except Exception as _cleanup_error:  # noqa: BLE001
+                    _error.add_note(
+                        f"exact candidate cleanup failed: "
+                        f"{type(_cleanup_error).__name__}: {_cleanup_error}"
+                    )
+                _runtime_failure = (
+                    _monitor.report.to_dict()
+                    if _monitor.report is not None
+                    else {
+                        "completed": False,
+                        "error_type": type(_error).__name__,
+                        "sampling_errors": [],
+                    }
+                )
+                _execution_card = mo.callout(
+                    mo.md(
+                        f"**Operation failed; no result was linked.** "
+                        f"{type(_error).__name__}: {_error}  \\n"
+                        f"Candidate-owned render cleanup was attempted. "
+                        f"Runtime status: {_runtime_failure}"
+                    ),
+                    kind="danger",
+                )
+            else:
+                set_classroom_log(_linked.log)
+                if _roundtrip is not None:
+                    set_private_media_state(
+                        {
+                            "path": str(_render_path),
+                            "content_sha256": _roundtrip.content_sha256,
+                            "byte_length": int(_roundtrip.byte_length),
+                            "browser_compatibility_status": (
+                                _roundtrip.browser_compatibility.status
+                            ),
+                            "pyav_local_status": _pyav_diagnostic.status,
+                            "target_runtime_verified": False,
+                        }
+                    )
+                else:
+                    set_private_media_state(None)
+                _runtime_lines = (
+                    f"Elapsed: {_runtime['elapsed_seconds']:.3f}s  \\n"
+                    f"Host RSS peak / steady: "
+                    f"{_runtime['peak_host_rss_bytes']} / "
+                    f"{_runtime['steady_host_rss_bytes']} bytes  \\n"
+                    f"CUDA allocated peak / steady: "
+                    f"{_runtime['peak_cuda_allocated_bytes']} / "
+                    f"{_runtime['steady_cuda_allocated_bytes']} bytes  \\n"
+                    f"CUDA reserved peak / steady: "
+                    f"{_runtime['peak_cuda_reserved_bytes']} / "
+                    f"{_runtime['steady_cuda_reserved_bytes']} bytes  \\n"
+                    f"CUDA status: "
+                    f"{_runtime['steady_cuda_unavailable_reason'] or 'local counter available'}  \\n"
+                    f"PyAV local diagnostic: {_pyav_diagnostic.status} "
+                    f"{_pyav_diagnostic.pyav_version or ''}  \\n"
+                    "Browser / target: UNVERIFIED (local-only evidence)"
+                )
+                _execution_card = mo.vstack(
+                    [
+                        mo.callout(
+                            mo.md(
+                                f"**Operation executed and linked exactly once.** "
+                                f"{_controlled_result.technical_operation} · "
+                                f"{_controlled_result.result_digest} · replayed: "
+                                f"{_linked.replayed}  \\n\\n{_generated_text}"
+                            ),
+                            kind="success",
+                        ),
+                        mo.callout(mo.md(_runtime_lines), kind="info"),
+                    ]
+                )
+    _execution_card
+    return
+
+
+@app.cell(hide_code=True)
+def _(
+    PRIVATE_MEDIA_DIR,
+    delete_private_media_button,
+    export_private_media,
+    get_private_media_state,
+    manual_reingest_form,
+    mo,
+    reingest_private_media,
+    reset_private_media_export,
+    set_private_media_state,
+):
+    _media_card = mo.callout(
+        mo.md("No manually reingested candidate-owned media is retained."), kind="info"
+    )
+    if manual_reingest_form.value is not None:
+        _value = manual_reingest_form.value
+        _upload = _value["media"][0]
+        _expected = _value["expected_sha256"].strip()
+        _candidate_path = PRIVATE_MEDIA_DIR / (
+            "manual-" + _expected.removeprefix("sha256:")[:24] + ".mp4"
+        )
+        try:
+            export_private_media(
+                _upload.contents,
+                _candidate_path,
+                expected_sha256=_expected,
+            )
+            _reingested = reingest_private_media(
+                _candidate_path,
+                expected_sha256=_expected,
+                max_bytes=250_000_000,
+            )
+        except Exception as _error:  # noqa: BLE001 — unsafe upload belongs in UI
+            try:
+                if _candidate_path.is_file():
+                    reset_private_media_export(_candidate_path, expected_sha256=_expected)
+            except Exception as _cleanup_error:
+                _media_card = mo.callout(
+                    mo.md(f"**Private media reingest rejected; cleanup failed** — `{type(_error).__name__}`; cleanup `{type(_cleanup_error).__name__}`"),
+                    kind="danger",
+                )
+            else:
+                _media_card = mo.callout(
+                    mo.md(f"**Private media reingest rejected** — `{type(_error).__name__}`; candidate cleaned."),
+                kind="danger",
+            )
+        else:
+            set_private_media_state(
+                {
+                    "path": _reingested.path,
+                    "content_sha256": _reingested.content_sha256,
+                    "byte_length": len(_reingested.payload),
+                }
+            )
+            _media_card = mo.callout(
+                mo.md(
+                    f"**Manual reingest verified locally.** `{_reingested.content_sha256}` "
+                    f"· `{len(_reingested.payload)}` bytes · browser/target **UNVERIFIED**"
                 ),
                 kind="success",
             )
-    _run_snapshot_card
+    if delete_private_media_button.value:
+        _state = get_private_media_state()
+        if _state is None:
+            _media_card = mo.callout(
+                mo.md("No exact candidate-owned private media file is registered."),
+                kind="info",
+            )
+        else:
+            try:
+                _receipt = reset_private_media_export(
+                    _state["path"], expected_sha256=_state["content_sha256"]
+                )
+            except Exception as _error:  # noqa: BLE001 — exact reset failure belongs in UI
+                _media_card = mo.callout(
+                    mo.md(f"**Exact reset rejected** — `{type(_error).__name__}: {_error}`"),
+                    kind="danger",
+                )
+            else:
+                set_private_media_state(None)
+                _media_card = mo.callout(
+                    mo.md(f"**Deleted exact private media:** `{_receipt.content_sha256}`"),
+                    kind="success",
+                )
+    _media_card
+    return
+
+
+@app.cell(hide_code=True)
+def _(PRIVATE_MEDIA_DIR, get_private_media_state, mo):
+    _state = get_private_media_state()
+    if _state is None:
+        _ = mo.md("No verified private media download is available.")
+    else:
+        _path = __import__("pathlib").Path(_state["path"])
+        _root = PRIVATE_MEDIA_DIR.resolve()
+        _resolved = _path.resolve()
+        _digestor = __import__("hashlib").sha256()
+        _size = _path.stat().st_size if _path.is_file() and not _path.is_symlink() else -1
+        _expected_size = int(_state.get("byte_length", -1))
+        if (_path.is_symlink() or not _path.is_file() or _root not in _resolved.parents
+                or _size < 0 or _size > 250_000_000 or _expected_size != _size):
+            _digest = None
+        else:
+            with _resolved.open("rb") as _stream:
+                for _chunk in iter(lambda: _stream.read(1024 * 1024), b""):
+                    _digestor.update(_chunk)
+            _digest = _digestor.hexdigest()
+        if _digest != _state["content_sha256"].removeprefix("sha256:"):
+            _ = mo.callout(mo.md("Private media identity changed; download revoked."), kind="danger")
+        else:
+            _ = mo.download(data=_resolved.read_bytes(), filename=_resolved.name, label="Download verified private media")
     return
 
 
@@ -2219,22 +3133,48 @@ def _(mo):
     mo.md(r"""
     ### 3.2 Compare — Three readings of one work
 
-    **Required.** Import one blinded presentation packet and at least two distinct
-    audience-reading JSON files created in the separate audience surface. Creator
-    intention and the model reading stay hidden here until the import validates.
-    After reveal, compare shared and different tags with neutral language:
-    agreement, divergence, or an unrepresented reading—not truth versus error.
+    **Required / 필수.** Choose one equivalent route. Optional peer exchange
+    (선택적 동료 교환) requires explicit sharing permission and two independent
+    audience readings. The private route (비공개 경로) uses a clearly labeled
+    synthetic or instructor example (합성 또는 교수 예시) with **no penalty / 불이익
+    없음** and never presents that example as independent audience evidence.
 
-    Two readings are the minimum classroom activity, not a research sample-size
-    claim. Consider cultural convention, accessibility barriers, prompt wording,
-    training-data unknowns, and the limits of the available label vocabulary.
+    Both routes complete the same teaching-only comparison checkpoint. Peer
+    readings, when chosen, remain a minimum classroom activity rather than a
+    research sample-size claim.
     """)
     return
 
 
 @app.cell(hide_code=True)
-def _(mo):
+def _(PEER_EXCHANGE_ROUTE, PRIVATE_EQUIVALENT_ROUTE, mo):
+    # Stable internal route IDs: peer_exchange and private_equivalent. They are
+    # reduced to a neutral checkpoint record before any private JSON export.
+    exchange_route_control = mo.ui.radio(
+        {
+            "Optional permission-authorized peer exchange / 선택적 권한 확인 동료 교환": PEER_EXCHANGE_ROUTE,
+            "Equivalent private route — no penalty / 동등한 비공개 경로 — 불이익 없음": PRIVATE_EQUIVALENT_ROUTE,
+        },
+        value="Equivalent private route — no penalty / 동등한 비공개 경로 — 불이익 없음",
+        label="Comparison evidence route / 비교 근거 경로",
+    )
+    private_evidence_control = mo.ui.dropdown(
+        {
+            "Synthetic example / 합성 예시": "synthetic_example",
+            "Instructor example / 교수 예시": "instructor_example",
+        },
+        value="Instructor example / 교수 예시",
+        label="Private example source / 비공개 예시 출처",
+    )
+    mo.vstack([exchange_route_control, private_evidence_control])
+    return exchange_route_control, private_evidence_control
+
+
+@app.cell(hide_code=True)
+def _(PRIVATE_EQUIVALENT_ROUTE, exchange_route_control, mo):
     def _validate_audience_import(_value):
+        if exchange_route_control.value == PRIVATE_EQUIVALENT_ROUTE:
+            return None
         if not _value:
             return "Choose a packet and two reading files."
         _packet_files = _value["packet"]
@@ -2265,14 +3205,26 @@ def _(mo):
 def _(
     AudiencePacket,
     AudienceReading,
+    PRIVATE_EQUIVALENT_ROUTE,
     audience_import_form,
+    exchange_route_control,
     mo,
     parse_json_object,
     set_audience_exchange,
     validate_audience_exchange,
 ):
     _audience_value = audience_import_form.value
-    if _audience_value is None:
+    if exchange_route_control.value == PRIVATE_EQUIVALENT_ROUTE:
+        set_audience_exchange((None, tuple()))
+        _audience_import_card = mo.callout(
+            mo.md(
+                "**Private route ready / 비공개 경로 준비됨.** No packet or peer "
+                "reading upload is required, and no synthetic/instructor example "
+                "will be described as independent audience evidence."
+            ),
+            kind="success",
+        )
+    elif _audience_value is None:
         _audience_import_card = mo.callout(
             mo.md("Creator and model readings remain hidden until two blinded readings validate."),
             kind="info",
@@ -2314,10 +3266,53 @@ def _(
     return
 
 
-@app.cell(hide_code=True)
-def _(get_artifact_versions, get_audience_exchange, knockout_text, mo):
+@app.cell
+def _(
+    PEER_EXCHANGE_ROUTE,
+    PRIVATE_EQUIVALENT_ROUTE,
+    exchange_route_control,
+    get_audience_exchange,
+    private_evidence_control,
+    resolve_exchange_route,
+):
+    _selected_route = exchange_route_control.value or PRIVATE_EQUIVALENT_ROUTE
     _packet, _readings = get_audience_exchange()
-    if _packet is None or len(_readings) < 2:
+    if _selected_route == PRIVATE_EQUIVALENT_ROUTE:
+        learning_exchange = resolve_exchange_route(
+            PRIVATE_EQUIVALENT_ROUTE,
+            permission_confirmed=False,
+            evidence_source=private_evidence_control.value or "instructor_example",
+        )
+    elif _packet is not None and len(_readings) >= 2:
+        learning_exchange = resolve_exchange_route(
+            PEER_EXCHANGE_ROUTE,
+            permission_confirmed=True,
+        )
+    else:
+        learning_exchange = None
+    return (learning_exchange,)
+
+
+@app.cell(hide_code=True)
+def _(get_artifact_versions, get_audience_exchange, knockout_text, learning_exchange, mo):
+    _packet, _readings = get_audience_exchange()
+    if learning_exchange is not None and not learning_exchange.audience_exchange_required:
+        _source_label = (
+            "Synthetic classroom example / 합성 수업 예시"
+            if learning_exchange.evidence_source == "synthetic_example"
+            else "Instructor-provided example / 교수 제공 예시"
+        )
+        _triadic_view = mo.callout(
+            mo.md(
+                f"**{_source_label}.** One bounded practice reading: sound may "
+                "reframe the visible action without proving which modality caused "
+                "the model response. This supplied example is **not independent "
+                "audience evidence / 독립 관객 근거가 아님**. Compare it with your "
+                "creator and model readings, then record agreement and divergence."
+            ),
+            kind="neutral",
+        )
+    elif _packet is None or len(_readings) < 2:
         _triadic_view = mo.callout(
             mo.md("Three-reading comparison is locked until the blinded import is complete."),
             kind="neutral",
@@ -2891,11 +3886,14 @@ def _(
 
 
 @app.cell(hide_code=True)
-def _(get_artifact_versions, get_audience_exchange, get_classroom_log, mo):
+def _(get_artifact_versions, get_classroom_log, learning_exchange, mo):
     _versions = {artifact.version_label for artifact in get_artifact_versions()}
-    _packet, _readings = get_audience_exchange()
     _has_reflection = bool(get_classroom_log().records_of_type("reflection"))
-    _complete = {"V1", "V2"}.issubset(_versions) and len(_readings) >= 2 and _has_reflection
+    _complete = (
+        {"V1", "V2"}.issubset(_versions)
+        and learning_exchange is not None
+        and _has_reflection
+    )
     _status = "Complete" if _complete else "Waiting for comparison, reflection, and V2"
     mo.callout(
         mo.md(
@@ -3037,6 +4035,7 @@ def _(
     get_audience_exchange,
     get_classroom_log,
     get_common_outcomes,
+    learning_exchange,
     mo,
     serialize_private_portfolio,
     validate_process_log,
@@ -3051,6 +4050,11 @@ def _(
         artifact_versions=_artifacts,
         audience_packet=_packet.to_dict() if _packet is not None else None,
         audience_readings=[_reading.to_dict() for _reading in _readings],
+        learning_exchange=(
+            learning_exchange.to_private_checkpoint_record()
+            if learning_exchange is not None
+            else None
+        ),
         common_outcomes=get_common_outcomes(),
         boundary_disclosure=(
             "Session state is processed inside the hosted Molab session/container "
