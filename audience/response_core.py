@@ -22,7 +22,6 @@ if __package__ in {None, ""}:
 
 from curriculum_common.audience_packets import (  # noqa: E402
     AUDIENCE_READING_SCHEMA_VERSION,
-    AUDIENCE_SHARING_PERMISSION,
     AudiencePacket,
     AudienceReading,
     RevealState,

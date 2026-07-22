@@ -231,9 +231,12 @@ def _(
     reading_error = None
     if packet is not None and response_form.value:
         _snapshot = response_form.value
-        _split_tags = lambda _text: [
-            _item.strip() for _item in str(_text).split(",") if _item.strip()
-        ]
+
+        def _split_tags(_text):
+            return [
+                _item.strip() for _item in str(_text).split(",") if _item.strip()
+            ]
+
         try:
             committed_reading = build_reading(
                 packet,
