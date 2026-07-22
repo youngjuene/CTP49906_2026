@@ -30,6 +30,7 @@ def _(mo):
         sys.path.insert(0, str(_repo_root))
 
     from curriculum_common.audience_packets import AudiencePacket, AudienceReading
+    from curriculum_common.json_import import parse_json_object
     from digital_storytelling.workflow import (
         ACCESSIBILITY_OVERLAY_POLICY,
         COMPARISON_ROUTE_ID,
@@ -67,6 +68,7 @@ def _(mo):
         get_readings,
         get_structure_note,
         json,
+        parse_json_object,
         require_complete_audience_exchange,
         saved_replay,
         serialize_private_story_bundle,
@@ -570,8 +572,8 @@ def _(
     AudiencePacket,
     AudienceReading,
     audience_import_form,
-    json,
     mo,
+    parse_json_object,
     require_complete_audience_exchange,
     set_packet,
     set_readings,
@@ -582,11 +584,11 @@ def _(
     if _audience_value is not None:
         try:
             _imported_packet = AudiencePacket.from_mapping(
-                json.loads(_audience_value["packet"][0].contents.decode("utf-8"))
+                parse_json_object(_audience_value["packet"][0].contents)
             )
             _imported_readings = tuple(
                 AudienceReading.from_mapping(
-                    json.loads(_file.contents.decode("utf-8")), packet=_imported_packet
+                    parse_json_object(_file.contents), packet=_imported_packet
                 )
                 for _file in _audience_value["readings"]
             )

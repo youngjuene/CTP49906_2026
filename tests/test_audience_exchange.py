@@ -155,6 +155,21 @@ class AudienceReadingTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "JSON object"):
             parse_json_object(b"[]")
 
+    def test_json_import_rejects_oversize_invalid_and_unsafe_envelopes(self) -> None:
+        with self.assertRaisesRegex(ValueError, "exceeds the 1000000-byte limit"):
+            parse_json_object(b'{"padding":"' + b"x" * 1_000_001 + b'"}')
+        with self.assertRaisesRegex(ValueError, "invalid JSON"):
+            parse_json_object(b'{"packet_schema_version":')
+
+        unsafe = load_fixture("packet.json")
+        unsafe["exchange_artifact_id"] = "../private/student-cut.mp4"
+        unsafe["presentation_checksum"] = presentation_asset_checksum(
+            unsafe["presentation_asset"]
+        )
+        parsed = parse_json_object(json.dumps(unsafe))
+        with self.assertRaisesRegex(AudienceValidationError, "without path data"):
+            AudiencePacket.from_mapping(parsed)
+
     def test_reveal_requires_complete_blinded_exchange(self) -> None:
         with self.assertRaisesRegex(ValueError, "two distinct valid blinded readings"):
             prepare_reveal_bundle(

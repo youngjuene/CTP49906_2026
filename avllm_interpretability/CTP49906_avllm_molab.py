@@ -263,8 +263,18 @@ def _(PROJECT_DIR, mo):
         AudienceReading,
         validate_audience_exchange,
     )
+    from curriculum_common.export_validation import validate_private_portfolio
+    from curriculum_common.json_import import parse_json_object
+    from curriculum_common.outcome_records import (
+        OUTCOME_RESPONSE_SCHEMA,
+        POST_OUTCOME_ID,
+        PRE_OUTCOME_ID,
+        build_outcome_bundle,
+        validate_outcome_bundle,
+    )
     from curriculum_common.portfolio_export import (
         build_private_portfolio,
+        restore_private_audience_exchange,
         serialize_private_portfolio,
     )
     from curriculum_common.production_manifest import (
@@ -293,6 +303,7 @@ def _(PROJECT_DIR, mo):
     get_classroom_log, set_classroom_log = mo.state(_initial_log)
     get_artifact_versions, set_artifact_versions = mo.state(tuple())
     get_audience_exchange, set_audience_exchange = mo.state((None, tuple()))
+    get_common_outcomes, set_common_outcomes = mo.state(None)
 
     PRIVATE_UPLOAD_DIR = PROJECT_DIR / "notebook_results" / "uploads"
     PRIVATE_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
@@ -302,25 +313,35 @@ def _(PROJECT_DIR, mo):
         AudienceReading,
         COURSE_RELEASE_ID,
         EditDecisionManifest,
+        OUTCOME_RESPONSE_SCHEMA,
+        POST_OUTCOME_ID,
+        PRE_OUTCOME_ID,
         PRIVATE_UPLOAD_DIR,
         build_private_portfolio,
+        build_outcome_bundle,
         classroom_mode,
         get_artifact_versions,
         get_audience_exchange,
         get_classroom_log,
+        get_common_outcomes,
         json,
         load_jsonl,
         new_session,
+        parse_json_object,
         reduce_command,
         register_artifact_version,
+        restore_private_audience_exchange,
         serialize_private_portfolio,
         set_artifact_versions,
         set_audience_exchange,
         set_classroom_log,
+        set_common_outcomes,
         sha256,
         teaching_mode,
         uuid4,
         validate_audience_exchange,
+        validate_outcome_bundle,
+        validate_private_portfolio,
         validate_process_log,
     )
 
@@ -357,12 +378,17 @@ def _(USE_PRECOMPUTED, classroom_mode, mo):
 
 @app.cell(hide_code=True)
 def _(USE_PRECOMPUTED):
+    from typing import Any as _Any
+
+    torch: _Any
     if USE_PRECOMPUTED:
         DEVICE = "cpu"
         torch = None
         print("Saved course replay → CPU (no GPU allocation or model download)")
     else:
-        import torch
+        import torch as _torch
+
+        torch = _torch
 
         assert torch.cuda.is_available(), (
             "No GPU visible. In molab, attach a GPU via the notebook-specs button in the header. "
@@ -389,6 +415,39 @@ def _(mo):
     your planning card belongs to your own project and is not sent anywhere.
     """)
     return
+
+
+@app.cell(hide_code=True)
+def _(OUTCOME_RESPONSE_SCHEMA, PRE_OUTCOME_ID, mo):
+    def _validate_common_pre(_value):
+        if not _value or any(not str(_value[_field]).strip() for _field in _value):
+            return "Complete all three shared pre-task fields before continuing."
+        return None
+
+    common_pre_form = mo.md(
+        f"""
+        **Common pre-task** · schema `{OUTCOME_RESPONSE_SCHEMA}` · `{PRE_OUTCOME_ID}`
+
+        Before making, explain what you would check when an automated caption sounds
+        plausible but may miss how sound and image work together.
+
+        **Evidence you would seek** {{evidence}}
+
+        **A plausible alternative explanation** {{alternative}}
+
+        **What the caption alone cannot establish** {{limit}}
+        """
+    ).batch(
+        evidence=mo.ui.text_area(rows=2, full_width=True),
+        alternative=mo.ui.text_area(rows=2, full_width=True),
+        limit=mo.ui.text_area(rows=2, full_width=True),
+    ).form(
+        submit_button_label="Commit shared pre-task response",
+        validate=_validate_common_pre,
+        bordered=True,
+    )
+    common_pre_form
+    return (common_pre_form,)
 
 
 @app.cell(hide_code=True)
@@ -698,6 +757,7 @@ def _(USE_PRECOMPUTED, mo):
 def _(DEVICE, MODEL_PATH, MODEL_REVISION, PROJECT_DIR, USE_PRECOMPUTED):
     import csv
     from collections import Counter
+    from typing import Any as _Any
 
     import matplotlib.pyplot as plt
     import numpy as np
@@ -708,6 +768,15 @@ def _(DEVICE, MODEL_PATH, MODEL_REVISION, PROJECT_DIR, USE_PRECOMPUTED):
         resolve_clip_selection,
     )
 
+    Qwen2_5OmniForConditionalGeneration: _Any
+    Qwen2_5OmniProcessor: _Any
+    analyze_and_save_audio_logits_to_csv: _Any
+    block_attention: _Any
+    clear_logit_lens_hooks: _Any
+    create_attention_token_mapping: _Any
+    create_token_type_mapping: _Any
+    process_mm_info: _Any
+    register_logit_lens_hooks: _Any
     if USE_PRECOMPUTED:
         Qwen2_5OmniForConditionalGeneration = None
         Qwen2_5OmniProcessor = None
@@ -719,22 +788,31 @@ def _(DEVICE, MODEL_PATH, MODEL_REVISION, PROJECT_DIR, USE_PRECOMPUTED):
         process_mm_info = None
         register_logit_lens_hooks = None
     else:
-        from qwen_omni_utils import process_mm_info
+        from qwen_omni_utils import process_mm_info as _process_mm_info
         from transformers import (
-            Qwen2_5OmniForConditionalGeneration,
-            Qwen2_5OmniProcessor,
+            Qwen2_5OmniForConditionalGeneration as _QwenModel,
+            Qwen2_5OmniProcessor as _QwenProcessor,
         )
 
-        from src.attention_knockout_experiment import block_attention
+        from src.attention_knockout_experiment import block_attention as _block_attention
         from src.attention_knockout_experiment import (
-            create_token_type_mapping as create_attention_token_mapping,
+            create_token_type_mapping as _create_attention_token_mapping,
         )
         from src.logitlens_experiment import (
-            analyze_and_save_audio_logits_to_csv,
-            clear_logit_lens_hooks,
-            create_token_type_mapping,
-            register_logit_lens_hooks,
+            analyze_and_save_audio_logits_to_csv as _analyze_audio_logits,
+            clear_logit_lens_hooks as _clear_logit_lens_hooks,
+            create_token_type_mapping as _create_token_type_mapping,
+            register_logit_lens_hooks as _register_logit_lens_hooks,
         )
+        Qwen2_5OmniForConditionalGeneration = _QwenModel
+        Qwen2_5OmniProcessor = _QwenProcessor
+        analyze_and_save_audio_logits_to_csv = _analyze_audio_logits
+        block_attention = _block_attention
+        clear_logit_lens_hooks = _clear_logit_lens_hooks
+        create_attention_token_mapping = _create_attention_token_mapping
+        create_token_type_mapping = _create_token_type_mapping
+        process_mm_info = _process_mm_info
+        register_logit_lens_hooks = _register_logit_lens_hooks
 
     def load_model_and_processor(attn_implementation):
         if USE_PRECOMPUTED:
@@ -824,13 +902,18 @@ def _(PRECOMPUTED_DIR, USE_PRECOMPUTED, logit_model, logit_processor):
 
 @app.cell(hide_code=True)
 def _(attention_model):
+    from typing import Any as _Any
+
     # Submit-to-submit caches for the two playground forms, keyed on
     # (clip SHA-256, nframes, prompt): "encode" holds prepared inputs +
     # token types, "caption" holds greedy caption ids for teacher forcing — so a
     # layer-band sweep re-encodes and re-captions nothing after the first ▶.
     # Depending on attention_model flushes them whenever the model is reloaded.
     _ = attention_model
-    playground_caches = {"encode": {}, "caption": {}}
+    playground_caches: dict[str, dict[_Any, _Any]] = {
+        "encode": {},
+        "caption": {},
+    }
 
     def cache_put(cache, key, value, keep=4):
         cache[key] = value
@@ -1010,6 +1093,8 @@ def _(mo):
 
 @app.cell
 def _(Counter, KNOCKOUT_RULES, attention_token_types, mo, plt):
+    from typing import Any as _Any
+
     # Visual primer: THIS run's actual token sequence, and what the default rule
     # cuts. Rebuilt from attention_token_types every run, so it is never a stale
     # abstraction — the striping is the real audio/video interleaving.
@@ -1021,7 +1106,7 @@ def _(Counter, KNOCKOUT_RULES, attention_token_types, mo, plt):
     _n = max(1, len(_pt))
 
     # Contiguous runs -> (type, start, width)
-    _runs = []
+    _runs: list[list[_Any]] = []
     for _i, _t in enumerate(_pt):
         if _runs and _runs[-1][0] == _t:
             _runs[-1][2] += 1
@@ -1821,6 +1906,7 @@ def _(
     torch,
 ):
     from contextlib import nullcontext as _nullcontext
+    from typing import Any as _Any
 
     _p = scoreboard_controls.value
     mo.stop(
@@ -1970,6 +2056,11 @@ def _(
             return [], [], 0
         return _diversity(_csv_path)
 
+    _bl_u: list[int] | None = None
+    _bl_d: list[float] | None = None
+    _ko_u: list[int] | None = None
+    _ko_d: list[float] | None = None
+    _n_audio = 0
     _scoreboard = None
     try:
         with mo.status.spinner(
@@ -1992,9 +2083,11 @@ def _(
         )
 
     if _scoreboard is None:
-        _primary_u = _ko_u if _ko_u else _bl_u
-        _primary_d = _ko_d if _ko_d else _bl_d
-        _both = bool(_ko_u) and bool(_bl_u)
+        _primary_u = _ko_u if _ko_u is not None else _bl_u
+        _primary_d = _ko_d if _ko_d is not None else _bl_d
+        _comparison_u = _ko_u if _ko_u is not None else []
+        _baseline_u = _bl_u if _bl_u is not None else []
+        _both = bool(_comparison_u) and bool(_baseline_u)
 
     if _scoreboard is not None:
         pass
@@ -2008,15 +2101,20 @@ def _(
             kind="warn",
         )
     else:
+        assert _primary_d is not None
         _n_l = len(_primary_u)
         _order = sorted(range(_n_l), key=lambda k: _primary_u[k], reverse=True)
 
-        _rows = []
+        _rows: list[dict[str, _Any]] = []
         for _rank, _i in enumerate(_order, 1):
-            _row = {"Rank": _rank, "Layer": _i, "Unique preds": _primary_u[_i]}
+            _row: dict[str, _Any] = {
+                "Rank": _rank,
+                "Layer": _i,
+                "Unique preds": _primary_u[_i],
+            }
             if _both:
-                _row["Baseline"] = _bl_u[_i]
-                _row["Δ vs base"] = _ko_u[_i] - _bl_u[_i]
+                _row["Baseline"] = _baseline_u[_i]
+                _row["Δ vs base"] = _comparison_u[_i] - _baseline_u[_i]
             _row["Dominant share"] = round(_primary_d[_i], 3)
             _rows.append(_row)
         _table = mo.ui.table(_rows, selection=None, pagination=True, page_size=12)
@@ -2043,8 +2141,12 @@ def _(
             ),
         ]
         if _both:
-            _mean_delta = sum(_ko_u[k] - _bl_u[k] for k in range(_n_l)) / _n_l
-            _less = sum(1 for k in range(_n_l) if _ko_u[k] < _bl_u[k])
+            _mean_delta = sum(
+                _comparison_u[k] - _baseline_u[k] for k in range(_n_l)
+            ) / _n_l
+            _less = len(
+                [k for k in range(_n_l) if _comparison_u[k] < _baseline_u[k]]
+            )
             _stats.append(
                 mo.stat(
                     value=f"{_mean_delta:+.1f}",
@@ -2058,12 +2160,12 @@ def _(
         _x = np.arange(_n_l)
         _fig, _axes = plt.subplots(1, 2, figsize=(14, 4), constrained_layout=True)
         if _both:
-            _axes[0].bar(_x, _ko_u, color="#4C78A8", label="knockout")
-            _axes[0].plot(_x, _bl_u, color="#F58518", marker="o", ms=3, lw=1.5, label="baseline")
+            _axes[0].bar(_x, _comparison_u, color="#4C78A8", label="knockout")
+            _axes[0].plot(_x, _baseline_u, color="#F58518", marker="o", ms=3, lw=1.5, label="baseline")
             _axes[0].legend()
             _axes[0].set(title="Unique predictions by layer",
                          xlabel="Thinker layer", ylabel="Unique predictions")
-            _delta = [_ko_u[k] - _bl_u[k] for k in range(_n_l)]
+            _delta = [_comparison_u[k] - _baseline_u[k] for k in range(_n_l)]
             _axes[1].bar(_x, _delta, color=["#E45756" if d < 0 else "#54A24B" for d in _delta])
             _axes[1].axhline(0, color="black", lw=0.8)
             _axes[1].set(title="Δ diversity (knockout − baseline)",
@@ -2164,8 +2266,8 @@ def _(
     AudiencePacket,
     AudienceReading,
     audience_import_form,
-    json,
     mo,
+    parse_json_object,
     set_audience_exchange,
     validate_audience_exchange,
 ):
@@ -2177,13 +2279,13 @@ def _(
         )
     else:
         try:
-            _packet_payload = json.loads(
-                _audience_value["packet"][0].contents.decode("utf-8")
+            _packet_payload = parse_json_object(
+                _audience_value["packet"][0].contents
             )
             _packet = AudiencePacket.from_mapping(_packet_payload)
             _readings = tuple(
                 AudienceReading.from_mapping(
-                    json.loads(_file.contents.decode("utf-8")), packet=_packet
+                    parse_json_object(_file.contents), packet=_packet
                 )
                 for _file in _audience_value["readings"]
             )
@@ -2831,6 +2933,58 @@ def _(mo):
 
 
 @app.cell(hide_code=True)
+def _(OUTCOME_RESPONSE_SCHEMA, POST_OUTCOME_ID, mo):
+    def _validate_common_post(_value):
+        if not _value or any(not str(_value[_field]).strip() for _field in _value):
+            return "Complete all three shared post-task fields before exporting."
+        return None
+
+    common_post_form = mo.md(
+        f"""
+        **Common post-task** · schema `{OUTCOME_RESPONSE_SCHEMA}` · `{POST_OUTCOME_ID}`
+
+        After revising, explain what evidence you would now seek before trusting an
+        automated audiovisual caption and what alternative reading remains plausible.
+
+        **Evidence you would seek** {{evidence}}
+
+        **A plausible alternative explanation** {{alternative}}
+
+        **What the caption alone cannot establish** {{limit}}
+        """
+    ).batch(
+        evidence=mo.ui.text_area(rows=2, full_width=True),
+        alternative=mo.ui.text_area(rows=2, full_width=True),
+        limit=mo.ui.text_area(rows=2, full_width=True),
+    ).form(
+        submit_button_label="Commit shared post-task response",
+        validate=_validate_common_post,
+        bordered=True,
+    )
+    common_post_form
+    return (common_post_form,)
+
+
+@app.cell(hide_code=True)
+def _(
+    build_outcome_bundle,
+    common_post_form,
+    common_pre_form,
+    get_classroom_log,
+    set_common_outcomes,
+):
+    if common_pre_form.value is not None and common_post_form.value is not None:
+        _common_outcomes = build_outcome_bundle(
+            session_pseudonym=get_classroom_log().session_pseudonym,
+            language="en",
+            pre_response=common_pre_form.value,
+            post_response=common_post_form.value,
+        )
+        set_common_outcomes(_common_outcomes)
+    return
+
+
+@app.cell(hide_code=True)
 def _(mo):
     def _validate_synthesis(_value):
         if not _value:
@@ -2880,7 +3034,9 @@ def _(mo):
 def _(
     build_private_portfolio,
     get_artifact_versions,
+    get_audience_exchange,
     get_classroom_log,
+    get_common_outcomes,
     mo,
     serialize_private_portfolio,
     validate_process_log,
@@ -2889,9 +3045,13 @@ def _(
     _artifacts = tuple(
         _artifact.to_dict() for _artifact in get_artifact_versions()
     )
+    _packet, _readings = get_audience_exchange()
     _portfolio = build_private_portfolio(
         _log,
         artifact_versions=_artifacts,
+        audience_packet=_packet.to_dict() if _packet is not None else None,
+        audience_readings=[_reading.to_dict() for _reading in _readings],
+        common_outcomes=get_common_outcomes(),
         boundary_disclosure=(
             "Session state is processed inside the hosted Molab session/container "
             "boundary, not solely on the student's device. This private download "
@@ -2966,18 +3126,24 @@ def _(
     load_jsonl,
     mo,
     new_session,
+    parse_json_object,
     portfolio_import_form,
     reset_session_button,
+    restore_private_audience_exchange,
     set_artifact_versions,
     set_audience_exchange,
     set_classroom_log,
+    set_common_outcomes,
     uuid4,
+    validate_outcome_bundle,
+    validate_private_portfolio,
 ):
     _restore_card = None
     if portfolio_import_form.value:
         try:
             _upload = portfolio_import_form.value[0]
-            _payload = json.loads(_upload.contents.decode("utf-8"))
+            _payload = parse_json_object(_upload.contents)
+            validate_private_portfolio(_payload).require_valid()
             _record_lines = [
                 json.dumps(
                     _record,
@@ -2993,6 +3159,16 @@ def _(
                 ArtifactVersion.from_dict(_artifact)
                 for _artifact in _payload.get("artifacts", [])
             )
+            _restored_outcomes = _payload.get("common_outcomes")
+            if _restored_outcomes is not None:
+                if not isinstance(_restored_outcomes, dict):
+                    raise ValueError("common_outcomes must be a JSON object")
+                _outcome_issues = validate_outcome_bundle(_restored_outcomes)
+                if _outcome_issues:
+                    raise ValueError("; ".join(_outcome_issues))
+            _restored_packet, _restored_readings = restore_private_audience_exchange(
+                _payload
+            )
         except Exception as _error:  # noqa: BLE001 — unsafe restore belongs in the UI
             _restore_card = mo.callout(
                 mo.md(f"**Portfolio restore rejected** — `{type(_error).__name__}: {_error}`"),
@@ -3001,7 +3177,8 @@ def _(
         else:
             set_classroom_log(_restored_log)
             set_artifact_versions(_restored_artifacts)
-            set_audience_exchange((None, tuple()))
+            set_common_outcomes(_restored_outcomes)
+            set_audience_exchange((_restored_packet, _restored_readings))
             _restore_card = mo.callout(
                 mo.md(
                     f"**Portfolio restored** · {len(_restored_log.records)} records · "
@@ -3017,6 +3194,7 @@ def _(
         )
         set_classroom_log(_fresh_log)
         set_artifact_versions(tuple())
+        set_common_outcomes(None)
         set_audience_exchange((None, tuple()))
         for _path in PRIVATE_UPLOAD_DIR.glob("*"):
             if _path.is_file() or _path.is_symlink():

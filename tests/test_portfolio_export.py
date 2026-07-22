@@ -1,12 +1,16 @@
 from datetime import datetime, timedelta, timezone
 import copy
+import json
+from pathlib import Path
 import unittest
 
+from curriculum_common.audience_packets import AudiencePacket, AudienceReading
 from curriculum_common.portfolio_export import (
     ProjectionError,
     build_private_portfolio,
     forbidden_research_paths,
     project_research,
+    restore_private_audience_exchange,
     serialize_private_portfolio,
 )
 from curriculum_common.session_records import (
@@ -17,6 +21,7 @@ from curriculum_common.session_records import (
 
 
 NOW = datetime(2026, 7, 21, 8, 0, tzinfo=timezone.utc)
+FIXTURES = Path(__file__).parent / "fixtures" / "audience_export"
 PERMITTED = {
     "condition_code",
     "metrics",
@@ -94,6 +99,19 @@ def populated_log():
 
 
 class PortfolioTests(unittest.TestCase):
+    def audience_exchange(self):
+        packet = AudiencePacket.from_mapping(
+            json.loads((FIXTURES / "packet.json").read_text(encoding="utf-8"))
+        ).reveal(protocol_deviation="scheduled creator-side reveal")
+        readings = tuple(
+            AudienceReading.from_mapping(
+                json.loads((FIXTURES / name).read_text(encoding="utf-8")),
+                packet=packet,
+            )
+            for name in ("reading-1.json", "reading-2.json")
+        )
+        return packet, readings
+
     def test_private_portfolio_retains_private_history_without_research_claim(self):
         private = build_private_portfolio(
             populated_log(),
@@ -143,6 +161,33 @@ class PortfolioTests(unittest.TestCase):
         self.assertEqual(data["artifacts"][0]["study_artifact_id"], "study-artifact-42")
         self.assertIn("study_record_id", data["records"][0])
         self.assertTrue(data["redaction_report"])
+
+    def test_private_portfolio_preserves_audience_state_but_research_omits_it(self):
+        packet, readings = self.audience_exchange()
+        private = build_private_portfolio(
+            populated_log(),
+            audience_packet=packet.to_dict(),
+            audience_readings=[reading.to_dict() for reading in readings],
+        )
+
+        self.assertEqual(
+            private["audience_exchange"]["packet"]["exchange_artifact_id"],
+            packet.exchange_artifact_id,
+        )
+        self.assertEqual(len(private["audience_exchange"]["readings"]), 2)
+        restored_packet, restored_readings = restore_private_audience_exchange(private)
+        self.assertEqual(restored_packet, packet)
+        self.assertEqual(restored_readings, readings)
+
+        projection = project_research(
+            private,
+            decision=research_decision(),
+            identity_map={"private-artifact-1": "study-artifact-42"},
+        )
+        serialized = projection.to_bytes()
+        self.assertNotIn(b"audience_exchange", serialized)
+        self.assertNotIn(packet.exchange_artifact_id.encode("utf-8"), serialized)
+        self.assertNotIn(readings[0].open_interpretation.encode("utf-8"), serialized)
 
     def test_teaching_or_revoked_analysis_permission_cannot_project(self):
         private = build_private_portfolio(populated_log())

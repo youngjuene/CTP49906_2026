@@ -7,6 +7,7 @@ import hashlib
 import json
 from typing import Any, Mapping, Sequence
 
+from curriculum_common.audience_packets import AudiencePacket, AudienceReading
 from curriculum_common.session_records import (
     ModeDecision,
     OperatingMode,
@@ -15,6 +16,7 @@ from curriculum_common.session_records import (
     SessionLog,
     validate_process_log,
 )
+from curriculum_common.outcome_records import validate_outcome_bundle
 
 
 PRIVATE_PORTFOLIO_SCHEMA_VERSION = "private-portfolio/1.0.0"
@@ -99,6 +101,9 @@ def build_private_portfolio(
     log: SessionLog,
     *,
     artifact_versions: Sequence[Mapping[str, Any]] = (),
+    audience_packet: Mapping[str, Any] | None = None,
+    audience_readings: Sequence[Mapping[str, Any]] = (),
+    common_outcomes: Mapping[str, Any] | None = None,
     boundary_disclosure: str = DEFAULT_MOLAB_BOUNDARY_DISCLOSURE,
 ) -> dict[str, Any]:
     """Build a rich user-controlled private download without a research claim."""
@@ -133,6 +138,20 @@ def build_private_portfolio(
             ],
         },
     }
+    if common_outcomes is not None:
+        outcome_issues = validate_outcome_bundle(common_outcomes)
+        if outcome_issues:
+            raise ProjectionError("; ".join(outcome_issues))
+        payload["common_outcomes"] = _clone(dict(common_outcomes))
+    if audience_packet is not None or audience_readings:
+        packet, readings = _load_audience_exchange(
+            audience_packet,
+            audience_readings,
+        )
+        payload["audience_exchange"] = {
+            "packet": packet.to_dict(),
+            "readings": [reading.to_dict() for reading in readings],
+        }
     content_checksum = _checksum(payload)
     payload["portfolio_id"] = f"private-{content_checksum[:24]}"
     payload["checksum_sha256"] = _checksum(payload)
@@ -141,6 +160,55 @@ def build_private_portfolio(
 
 def serialize_private_portfolio(portfolio: Mapping[str, Any]) -> bytes:
     return _canonical_json_bytes(dict(portfolio))
+
+
+def restore_private_audience_exchange(
+    portfolio: Mapping[str, Any],
+) -> tuple[AudiencePacket | None, tuple[AudienceReading, ...]]:
+    """Restore creator-private audience state without changing reveal history."""
+
+    value = portfolio.get("audience_exchange")
+    if value is None:
+        return None, ()
+    if not isinstance(value, Mapping):
+        raise ProjectionError("audience_exchange must be a mapping")
+    if set(value) != {"packet", "readings"}:
+        raise ProjectionError("audience_exchange must contain only packet and readings")
+    packet_value = value["packet"]
+    reading_values = value["readings"]
+    if not isinstance(packet_value, Mapping):
+        raise ProjectionError("audience_exchange.packet must be a mapping")
+    if not isinstance(reading_values, list):
+        raise ProjectionError("audience_exchange.readings must be a list")
+    return _load_audience_exchange(packet_value, reading_values)
+
+
+def _load_audience_exchange(
+    packet_value: Mapping[str, Any] | None,
+    reading_values: Sequence[Mapping[str, Any]],
+) -> tuple[AudiencePacket, tuple[AudienceReading, ...]]:
+    if packet_value is None:
+        raise ProjectionError("audience readings require their presentation packet")
+    try:
+        packet = AudiencePacket.from_mapping(packet_value)
+        readings = tuple(
+            AudienceReading.from_mapping(value, packet=packet)
+            for value in reading_values
+        )
+    except (TypeError, ValueError) as exc:
+        raise ProjectionError(f"invalid private audience exchange: {exc}") from exc
+    for field, values in (
+        ("response_id", [reading.response_id for reading in readings]),
+        ("audience_pseudonym", [reading.audience_pseudonym for reading in readings]),
+        (
+            "respondent_session_pseudonym",
+            [reading.respondent_session_pseudonym for reading in readings],
+        ),
+    ):
+        present = [value for value in values if value is not None]
+        if len(present) != len(set(present)):
+            raise ProjectionError(f"duplicate private audience {field}")
+    return packet, readings
 
 
 @dataclass(frozen=True)
@@ -568,5 +636,6 @@ __all__ = [
     "build_private_portfolio",
     "forbidden_research_paths",
     "project_research",
+    "restore_private_audience_exchange",
     "serialize_private_portfolio",
 ]

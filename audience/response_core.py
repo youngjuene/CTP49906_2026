@@ -27,6 +27,7 @@ from curriculum_common.audience_packets import (  # noqa: E402
     canonical_json_bytes,
     validate_audience_exchange,
 )
+from curriculum_common.json_import import parse_json_object  # noqa: E402
 
 
 DISPLAY_PACKET_FIELDS = frozenset(
@@ -145,37 +146,6 @@ def packet_for_display(packet: AudiencePacket) -> dict[str, Any]:
 
     value = packet.to_dict()
     return {field: value[field] for field in sorted(DISPLAY_PACKET_FIELDS)}
-
-
-def parse_json_object(data: bytes | str, *, max_bytes: int = 1_000_000) -> dict[str, Any]:
-    """Parse one bounded JSON object while rejecting duplicate keys and NaN values."""
-
-    raw = data if isinstance(data, bytes) else data.encode("utf-8")
-    if len(raw) > max_bytes:
-        raise ValueError(f"JSON input exceeds the {max_bytes}-byte limit")
-    try:
-        text = raw.decode("utf-8")
-    except UnicodeDecodeError as exc:
-        raise ValueError("JSON input must be UTF-8") from exc
-
-    def _object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-        result: dict[str, Any] = {}
-        for key, value in pairs:
-            if key in result:
-                raise ValueError(f"duplicate JSON key: {key}")
-            result[key] = value
-        return result
-
-    def _constant(value: str) -> None:
-        raise ValueError(f"non-finite JSON value is not allowed: {value}")
-
-    try:
-        value = json.loads(text, object_pairs_hook=_object, parse_constant=_constant)
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"invalid JSON: {exc.msg}") from exc
-    if not isinstance(value, dict):
-        raise ValueError("input must contain a JSON object")
-    return value
 
 
 def build_reading(

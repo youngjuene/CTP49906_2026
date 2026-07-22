@@ -71,6 +71,15 @@ def test_pre_post_source_has_no_treatment_contamination() -> None:
     assert not re.search(r"\b(?:PRD|FR|AC|WP)[-_ ]?\d+\b", source)
 
 
+def test_creator_imports_use_bounded_duplicate_safe_json_parser() -> None:
+    source = _source()
+
+    assert "from curriculum_common.json_import import parse_json_object" in source
+    assert source.count("parse_json_object(") >= 2
+    assert "json.loads(_audience_value" not in source
+    assert "json.loads(_file.contents" not in source
+
+
 def test_notebook_has_teaching_privacy_and_audience_boundaries() -> None:
     source = _source()
     required_symbols = (

@@ -182,3 +182,27 @@ def test_private_restore_and_audience_reveal_are_explicit() -> None:
     assert "validate_audience_exchange" in source
     assert "Creator and model readings remain hidden" in source
     assert "at least two distinct" in source
+
+
+def test_treatment_uses_shared_common_outcomes_and_preserves_private_audience_state() -> None:
+    source = _source()
+
+    assert "from curriculum_common.outcome_records import" in source
+    assert "OUTCOME_RESPONSE_SCHEMA" in source
+    assert "PRE_OUTCOME_ID" in source
+    assert "POST_OUTCOME_ID" in source
+    assert "build_outcome_bundle" in source
+    assert "get_common_outcomes" in source
+    assert "common_outcomes=get_common_outcomes()" in source
+    assert "audience_packet=_packet" in source
+    assert "audience_readings=[_reading.to_dict() for _reading in _readings]" in source
+    assert "set_audience_exchange((_restored_packet, _restored_readings))" in source
+
+
+def test_treatment_creator_imports_use_bounded_duplicate_safe_json_parser() -> None:
+    source = _source()
+
+    assert "from curriculum_common.json_import import parse_json_object" in source
+    assert source.count("parse_json_object(") >= 3
+    assert "json.loads(_upload.contents.decode" not in source
+    assert "json.loads(\n                _audience_value" not in source

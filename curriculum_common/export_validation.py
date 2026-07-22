@@ -12,10 +12,12 @@ from typing import Any, Iterable, Mapping, Sequence
 
 from curriculum_common.audience_packets import (
     AudiencePacket,
+    AudienceReading,
     ValidationIssue,
     canonical_json_bytes,
     validate_packet_mapping,
 )
+from curriculum_common.outcome_records import validate_outcome_bundle
 
 
 PRIVATE_PORTFOLIO_SCHEMA_VERSION = "private-portfolio/1.0.0"
@@ -129,6 +131,52 @@ def validate_private_portfolio(value: Any) -> ExportValidationReport:
                 "private portfolio reports invalid process history",
             )
         )
+    common_outcomes = mapping.get("common_outcomes")
+    if common_outcomes is not None:
+        if not isinstance(common_outcomes, Mapping):
+            issues.append(
+                ValidationIssue(
+                    "common_outcomes_type",
+                    "common_outcomes",
+                    "common outcomes must be a mapping",
+                )
+            )
+        else:
+            issues.extend(
+                ValidationIssue("common_outcomes", "common_outcomes", message)
+                for message in validate_outcome_bundle(common_outcomes)
+            )
+    audience_exchange = mapping.get("audience_exchange")
+    if audience_exchange is not None:
+        if not isinstance(audience_exchange, Mapping):
+            issues.append(
+                ValidationIssue(
+                    "audience_exchange_type",
+                    "audience_exchange",
+                    "private audience exchange must be a mapping",
+                )
+            )
+        else:
+            try:
+                packet_value = audience_exchange.get("packet")
+                if not isinstance(packet_value, Mapping):
+                    raise ValueError("audience_exchange.packet must be a mapping")
+                packet = AudiencePacket.from_mapping(packet_value)
+                readings = audience_exchange.get("readings")
+                if not isinstance(readings, list):
+                    raise ValueError("audience_exchange.readings must be a list")
+                tuple(
+                    AudienceReading.from_mapping(reading, packet=packet)
+                    for reading in readings
+                )
+            except (TypeError, ValueError) as exc:
+                issues.append(
+                    ValidationIssue(
+                        "audience_exchange",
+                        "audience_exchange",
+                        str(exc),
+                    )
+                )
     issues.extend(_validate_record_links(mapping))
     return _report("private", mapping, issues)
 

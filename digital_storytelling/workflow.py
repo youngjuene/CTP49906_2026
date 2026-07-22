@@ -25,6 +25,13 @@ from curriculum_common.audience_packets import (
     validate_audience_exchange,
 )
 from curriculum_common.export_validation import validate_private_portfolio
+from curriculum_common.outcome_records import (
+    OUTCOME_RESPONSE_SCHEMA,
+    POST_OUTCOME_ID,
+    PRE_OUTCOME_ID,
+    build_outcome_bundle,
+    validate_outcome_bundle,
+)
 from curriculum_common.portfolio_export import (
     build_private_portfolio,
     serialize_private_portfolio,
@@ -40,9 +47,6 @@ from curriculum_common.session_records import new_session, teaching_mode
 
 COMPARISON_ROUTE_ID = "matched-comparison/1.0.0"
 PRIVATE_BUNDLE_SCHEMA = "storytelling-private-bundle/1.0.0"
-OUTCOME_RESPONSE_SCHEMA = "common-outcome-response/1.0.0"
-PRE_OUTCOME_ID = "critical-ai-reasoning-pre/0.1.0-pilot"
-POST_OUTCOME_ID = "critical-ai-reasoning-post/0.1.0-pilot"
 ARTIFACT_RUBRIC_ID = "audiovisual-intentionality-rubric/0.1.0-pilot"
 FLEXIBILITY_RUBRIC_ID = "creative-flexibility-rubric/0.1.0-pilot"
 REPLAY_SCHEMA = "storytelling-replay/1.0.0"
@@ -494,39 +498,6 @@ def require_complete_audience_exchange(
         raise ValueError(detail or "two distinct blinded readings are required")
 
 
-def build_outcome_bundle(
-    *,
-    session_pseudonym: str,
-    language: str,
-    pre_response: Mapping[str, str],
-    post_response: Mapping[str, str],
-) -> dict[str, Any]:
-    """Build condition-neutral common pre/post response data."""
-
-    expected = frozenset({"evidence", "alternative", "limit"})
-    for stage, response in (("pre", pre_response), ("post", post_response)):
-        if set(response) != expected:
-            raise ValueError(f"{stage} response fields must be {sorted(expected)}")
-        if any(not isinstance(value, str) or not value.strip() for value in response.values()):
-            raise ValueError(f"{stage} response fields must contain non-empty text")
-    if language not in CONTENT:
-        raise ValueError("language must be 'en' or 'ko'")
-    return {
-        "schema_version": OUTCOME_RESPONSE_SCHEMA,
-        "classification": "private formative learning response; not research data",
-        "session_pseudonym": _required_text("session_pseudonym", session_pseudonym),
-        "language": language,
-        "administration_order": [PRE_OUTCOME_ID, POST_OUTCOME_ID],
-        "responses": {
-            "pre": {"instrument_id": PRE_OUTCOME_ID, **dict(pre_response)},
-            "post": {"instrument_id": POST_OUTCOME_ID, **dict(post_response)},
-        },
-        "missingness": {"pre": "observed", "post": "observed"},
-        "automatic_student_data_egress": False,
-        "research_ready": False,
-    }
-
-
 def build_private_story_bundle(
     *,
     session_pseudonym: str,
@@ -620,7 +591,7 @@ def validate_private_story_bundle(value: Mapping[str, Any]) -> StoryBundleValida
     if not isinstance(outcomes, Mapping):
         issues.append("common_outcomes must be a mapping")
     else:
-        issues.extend(_validate_outcomes(outcomes))
+        issues.extend(validate_outcome_bundle(outcomes))
     forbidden = _find_forbidden_student_fields(
         value,
         frozenset({"condition_assignment", "allocation", "allocated_arm", "study_arm"}),
@@ -691,25 +662,6 @@ def _portfolio_checksum(portfolio: Mapping[str, Any]) -> str:
     return hashlib.sha256(_canonical_bytes(candidate)).hexdigest()
 
 
-def _validate_outcomes(value: Mapping[str, Any]) -> tuple[str, ...]:
-    issues: list[str] = []
-    if value.get("schema_version") != OUTCOME_RESPONSE_SCHEMA:
-        issues.append("unsupported common outcome schema")
-    if value.get("administration_order") != [PRE_OUTCOME_ID, POST_OUTCOME_ID]:
-        issues.append("common outcome administration order changed")
-    responses = value.get("responses")
-    if not isinstance(responses, Mapping):
-        issues.append("common outcome responses must be a mapping")
-    else:
-        for stage, instrument_id in (("pre", PRE_OUTCOME_ID), ("post", POST_OUTCOME_ID)):
-            response = responses.get(stage)
-            if not isinstance(response, Mapping) or response.get("instrument_id") != instrument_id:
-                issues.append(f"{stage} outcome instrument identifier changed")
-            elif any(not str(response.get(key, "")).strip() for key in ("evidence", "alternative", "limit")):
-                issues.append(f"{stage} outcome response is incomplete")
-    return tuple(issues)
-
-
 def _find_forbidden_student_fields(
     value: Any,
     forbidden: frozenset[str],
@@ -736,6 +688,7 @@ __all__ = [
     "CONTENT",
     "FLEXIBILITY_RUBRIC_ID",
     "MATCHED_DIMENSIONS",
+    "OUTCOME_RESPONSE_SCHEMA",
     "POST_OUTCOME_ID",
     "PRE_OUTCOME_ID",
     "PRIVATE_BUNDLE_SCHEMA",
@@ -756,6 +709,6 @@ __all__ = [
     "serialize_private_story_bundle",
     "utc_now_text",
     "validate_private_story_bundle",
+    "validate_outcome_bundle",
     "validate_replay",
 ]
-
