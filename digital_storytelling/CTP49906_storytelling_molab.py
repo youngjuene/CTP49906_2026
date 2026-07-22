@@ -21,7 +21,13 @@ def _():
 @app.cell
 def _(mo):
     import json
+    from pathlib import Path
+    import sys
     from uuid import uuid4
+
+    _repo_root = Path(__file__).resolve().parents[1]
+    if str(_repo_root) not in sys.path:
+        sys.path.insert(0, str(_repo_root))
 
     from curriculum_common.audience_packets import AudiencePacket, AudienceReading
     from digital_storytelling.workflow import (
@@ -77,9 +83,9 @@ def _(mo):
 @app.cell(hide_code=True)
 def _(mo):
     language_control = mo.ui.dropdown(
-        {"English": "en", "한국어": "ko"},
+        ["en", "ko"],
         value="en",
-        label="Language / 언어",
+        label="Language / 언어 (en = English, ko = 한국어)",
     )
     language_control
     return (language_control,)
