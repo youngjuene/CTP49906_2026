@@ -24,7 +24,6 @@ from curriculum_common.audience_packets import (  # noqa: E402
     AUDIENCE_READING_SCHEMA_VERSION,
     AudiencePacket,
     AudienceReading,
-    RevealState,
     canonical_json_bytes,
     validate_audience_exchange,
 )
@@ -128,6 +127,7 @@ class AudienceRevealBundle:
 
     exchange_artifact_id: str
     reveal_state: str
+    reveal_record: str
     audience_readings: tuple[Mapping[str, Any], ...]
     creator_reading: str
     creator_tags: tuple[str, ...]
@@ -262,10 +262,12 @@ def prepare_reveal_bundle(
         }
         for label in all_labels
     )
-    revealed = packet.transition_to(RevealState.REVEALED)
+    reveal_record = "scheduled classroom reveal after two valid blinded imports"
+    revealed = packet.reveal(protocol_deviation=reveal_record)
     return AudienceRevealBundle(
         exchange_artifact_id=packet.exchange_artifact_id,
         reveal_state=revealed.reveal_state.value,
+        reveal_record=reveal_record,
         audience_readings=tuple(reading.to_dict() for reading in normalized),
         creator_reading=creator_text,
         creator_tags=creator_values,

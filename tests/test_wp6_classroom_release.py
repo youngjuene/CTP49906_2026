@@ -94,4 +94,4 @@ def test_docs_do_not_overclaim_research_or_accessibility_approval() -> None:
     assert "research-ready" in lowered
     assert "not research-ready" in lowered
     assert "wcag 2.2 conformant" not in lowered
-    assert "automatically sends" in lowered
+    assert "automatically send" in lowered

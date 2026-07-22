@@ -174,6 +174,7 @@ class AudienceReadingTests(unittest.TestCase):
         )
         rendered = bundle.to_dict()
         self.assertEqual(rendered["reveal_state"], "revealed")
+        self.assertIn("two valid blinded imports", rendered["reveal_record"])
         self.assertEqual(len(rendered["audience_readings"]), 2)
         self.assertIn("disagreement_matrix", rendered)
         self.assertIn("another reading", rendered["reflection_prompt"].lower())
