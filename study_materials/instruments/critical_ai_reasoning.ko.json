@@ -1,0 +1,22 @@
+{
+  "schema_version": "critical-ai-reasoning-content/1.0.0",
+  "language": "ko",
+  "translation_status": "draft_human_semantic_review_required",
+  "permission_status": "project_authored_candidate_not_research_approved",
+  "administration_order": [
+    "critical-ai-reasoning-pre/0.1.0-pilot",
+    "critical-ai-reasoning-post/0.1.0-pilot"
+  ],
+  "content": {
+    "scenario.shared": "자동 생성 캡션이 그럴듯하지만, 시청각 이야기에서 소리와 이미지가 함께 작동하는 방식을 놓칠 수 있습니다.",
+    "prompt.evidence": "이 캡션을 작품에 대한 충분한 해석으로 신뢰하기 전에 어떤 근거를 확인하시겠습니까?",
+    "prompt.alternative": "캡션의 내용이나 누락을 설명할 수 있는 가능한 대안 설명 하나를 제시하세요.",
+    "prompt.limit": "캡션만으로 확정할 수 없는 주장 하나를 적으세요.",
+    "instruction.pre": "제작 활동 전에 답하세요. 도구 목록 대신 추론 과정을 설명하세요.",
+    "instruction.post": "V2와 관객 교환 후에 답하세요. 근거 기준이 달라졌다면 무엇이 달라졌는지 설명하세요.",
+    "missing.prefer_not": "응답하지 않음",
+    "missing.skipped": "건너뜀",
+    "missing.withdrawn": "철회됨"
+  }
+}
+

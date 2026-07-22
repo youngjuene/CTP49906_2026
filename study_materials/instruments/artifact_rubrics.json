@@ -1,0 +1,66 @@
+{
+  "schema_version": "common-artifact-rubrics/1.0.0",
+  "status": "candidate_not_validated_not_piloted",
+  "condition_independent_scoring": true,
+  "allocation_metadata_visible_to_rater": false,
+  "scale": {
+    "0": "insufficient evidence or explicitly missing",
+    "1": "emerging evidence with substantial ambiguity",
+    "2": "specific evidence with a coherent but limited rationale",
+    "3": "specific, connected evidence with a bounded rationale and acknowledged alternatives"
+  },
+  "rubrics": [
+    {
+      "rubric_id": "audiovisual-intentionality-rubric/0.1.0-pilot",
+      "items": [
+        {
+          "item_id": "intent.sound_image_relation",
+          "prompt": "How specifically do sound and image choices support, complicate, or deliberately resist the stated intention?"
+        },
+        {
+          "item_id": "intent.edit_evidence",
+          "prompt": "How well does the rationale connect source, order, trim, mix, pacing, and accessibility decisions to observable artifact evidence?"
+        },
+        {
+          "item_id": "intent.context",
+          "prompt": "How carefully does the creator locate the reading within audience, cultural, aesthetic, and accessibility context without claiming one universal interpretation?"
+        }
+      ]
+    },
+    {
+      "rubric_id": "creative-flexibility-rubric/0.1.0-pilot",
+      "items": [
+        {
+          "item_id": "flex.rival_account",
+          "prompt": "Does the creator keep a plausible rival reading open rather than treating one reading as automatically correct?"
+        },
+        {
+          "item_id": "flex.evidence_triggered_revision",
+          "prompt": "Does V2 make a traceable revision in response to evidence while preserving a coherent artistic intention?"
+        },
+        {
+          "item_id": "flex.alternative_strategy",
+          "prompt": "Does the creator identify a materially different sequence, sound role, pacing, framing, or accessibility strategy and explain its trade-off?"
+        }
+      ]
+    }
+  ],
+  "missingness": {
+    "required_states": [
+      "observed",
+      "not_observable_from_package",
+      "withdrawn",
+      "technical_failure"
+    ],
+    "empty_score_allowed": false,
+    "reason_required_when_not_observed": true
+  },
+  "reliability_and_adjudication": {
+    "statistic": null,
+    "target": null,
+    "threshold": null,
+    "adjudication_rule": null,
+    "status": "unresolved_pending_methods_approval"
+  }
+}
+
