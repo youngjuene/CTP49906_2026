@@ -1,71 +1,39 @@
-# CTP49906 audiovisual interpretability studio
+# CTP49906 Interpretability Labs
 
-<p align="center"><b>English</b> · <a href="README.ko.md">한국어</a></p>
+Classroom interpretability labs for Qwen2.5-Omni and Qwen3.5: **Logit Lens**, **Attention Knockout**, teacher-forced intervention scoring, and the **Jacobian Lens**. The marimo scripts pair a fixed guided run with a hypothesis-led playground rather than ending at a canned reproduction.
 
-This repository contains an arts-integrated classroom route for making,
-examining, comparing, and revising an audiovisual work. The primary treatment
-notebook is **Counterpoint Lens**; a separate no-GPU audience surface preserves
-blindness during human interpretation. Neutral production, session, audience,
-and export contracts live in `curriculum_common/`.
+## Contents
 
-## Classroom entry points
+- [`avllm_interpretability/`](avllm_interpretability/) — the experiments ([README](avllm_interpretability/README.md)), adapted from [ramaneswaran/avllm_interpretability](https://github.com/ramaneswaran/avllm_interpretability) ([project page](https://ramaneswaran.github.io/avllm_interpretability/))
+- [`jacobian-lens/`](jacobian-lens/) — vendored [anthropics/jacobian-lens](https://github.com/anthropics/jacobian-lens) reference code ([paper](https://transformer-circuits.pub/2026/workspace/index.html))
 
-- [Counterpoint Lens notebook](avllm_interpretability/CTP49906_avllm_molab.py)
-  — guided saved replay plus optional live interpretability investigation.
-- [Blinded audience response](audience/CTP49906_audience_response_molab.py)
-  — validates an allowlisted presentation packet and downloads one independent
-  audience reading without a GPU or model.
-- [English/Korean classroom guidance](study_materials/wp6/README.md) —
-  instructor runbook, student quick-start, worksheet migration, privacy/data
-  dictionary, troubleshooting, replay identity, and visual alternatives.
-- [AVLLM technical and classroom guide](avllm_interpretability/README.md).
-- [Jacobian Lens companion](jacobian-lens/README.md#classroom-marimo-demo).
+## Quick start
 
-## Safe quick start
-
-The required route begins with **Saved course replay**. It uses checked-in
-outputs and does not allocate a GPU or download model weights. Open the treatment
-notebook locally with:
+Requires [uv](https://docs.astral.sh/uv/) and an NVIDIA GPU with ≥24 GB VRAM. The Qwen2.5-Omni-3B weights download from Hugging Face on first run.
 
 ```bash
-uvx --python 3.10 marimo@0.23.14 edit \
-  avllm_interpretability/CTP49906_avllm_molab.py
+cd avllm_interpretability
+uv venv --python 3.10 --seed .venv
+uv pip install --python .venv/bin/python -r requirements.txt
+source .venv/bin/activate
+
+# Logit Lens → logit_lens_audio_token_analysis.csv
+python src/logitlens_experiment.py --model_path Qwen/Qwen2.5-Omni-3B --video_path assets/02321.mp4
+
+# Attention Knockout (rules: source,target,start_layer,end_layer)
+python src/attention_knockout_experiment.py --model_path Qwen/Qwen2.5-Omni-3B --video_path assets/02321.mp4
 ```
 
-Open the blinded audience surface separately:
+Or run both from the classroom marimo notebook [`CTP49906_avllm_molab.py`](avllm_interpretability/CTP49906_avllm_molab.py) — open it in [molab](https://marimo.io/molab) with a GPU attached, or locally with `uvx marimo edit`. Its guidebook (cell tour, knockout catalog, suggested experiments) is in [`avllm_interpretability/README.md`](avllm_interpretability/README.md).
 
-```bash
-uvx --python 3.10 marimo@0.23.14 run \
-  audience/CTP49906_audience_response_molab.py
-```
+The companion [`CTP49906_jlens_molab.py`](jacobian-lens/CTP49906_jlens_molab.py) first compares the course reference Qwen3.5-4B Jacobian lens with the vanilla logit lens, then exposes prompt offset, layers, top-k, slice, filtering, and lens-estimator choices in a submit-gated research playground before an architecture-transfer synthesis. See the [`jacobian-lens` classroom guide](jacobian-lens/README.md#classroom-marimo-demo).
 
-Teaching mode is the default and fail-safe mode. The notebooks do not
-automatically send student artifacts, process records, or audience responses to
-an instructor. A local private download or permission-valid blinded packet is
-created only after the user activates its control.
+## Classroom release guidance
 
-## Replay and release status
-
-[The replay manifest](study_materials/wp6/replay_manifest.json) publishes the
-immutable model revision, coded stimulus checksum, artifact hashes, and exact
-GPU generation command. The committed pack is a candidate teaching replay; this
-CPU-only change verifies its bytes but does not claim to have regenerated the
-GPU outputs.
-
-The software and materials are **not research-ready**. Institutional governance,
-licensed-stimulus release, instrument quality, comparison fidelity, audience
-validity, accessibility/localization review, immutable course tagging, and pilot
-thresholds remain accountable human gates.
-
-## Development checks
-
-```bash
-python3.10 -m py_compile audience/*.py curriculum_common/*.py
-uvx --python 3.10 marimo@0.23.14 check --strict \
-  audience/CTP49906_audience_response_molab.py
-PYTHONPATH=. uvx --python 3.10 pytest -q tests
-uvx --python 3.10 ruff check audience curriculum_common tests
-```
-
-The live AVLLM path has additional CUDA/model dependencies documented in
-[avllm_interpretability/README.md](avllm_interpretability/README.md).
+The WP-6 bilingual instructor, student, privacy, troubleshooting, and worksheet
+migration materials are in [`study_materials/wp6/`](study_materials/wp6/). The
+blinded audience response surface is [`audience/CTP49906_audience_response_molab.py`](audience/CTP49906_audience_response_molab.py);
+its saved replay and accessibility alternatives are checksum-bound in the WP-6
+release manifest. These materials describe a teaching-only candidate release;
+human accessibility, localization, licensing, and research-governance review
+remain open.
