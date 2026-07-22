@@ -10,9 +10,6 @@ import sys
 
 import pytest
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
-
 from curriculum_common.audience_packets import (
     AUDIENCE_READING_SCHEMA_VERSION,
     AUDIENCE_SHARING_PERMISSION,
@@ -36,6 +33,7 @@ from digital_storytelling.workflow import (
     validate_replay,
 )
 
+ROOT = Path(__file__).resolve().parents[1]
 NOW = "2026-07-22T00:00:00Z"
 
 
