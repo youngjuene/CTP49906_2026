@@ -8,10 +8,14 @@ import sys
 import tempfile
 import unittest
 
-from audience.CTP49906_audience_response_molab import (
+from audience.response_core import (
+    AUDIENCE_CONTENT,
+    CLASSROOM_MINIMUM_NOTICE,
     DISPLAY_PACKET_FIELDS,
     build_reading,
     packet_for_display,
+    parse_json_object,
+    prepare_reveal_bundle,
 )
 from curriculum_common.audience_packets import (
     AUDIENCE_SHARING_PERMISSION,
@@ -27,6 +31,7 @@ from curriculum_common.audience_packets import (
 
 
 FIXTURES = Path(__file__).parent / "fixtures" / "audience_export"
+CORE = Path(__file__).parents[1] / "audience" / "response_core.py"
 SURFACE = Path(__file__).parents[1] / "audience" / "CTP49906_audience_response_molab.py"
 
 
@@ -144,13 +149,61 @@ class AudienceReadingTests(unittest.TestCase):
         self.assertEqual(reading.permission_scope, AUDIENCE_SHARING_PERMISSION)
         self.assertEqual(reading.exchange_artifact_id, self.packet.exchange_artifact_id)
 
+    def test_json_import_rejects_duplicate_keys_and_non_objects(self) -> None:
+        with self.assertRaisesRegex(ValueError, "duplicate JSON key"):
+            parse_json_object(b'{"response_id":"a","response_id":"b"}')
+        with self.assertRaisesRegex(ValueError, "JSON object"):
+            parse_json_object(b"[]")
+
+    def test_reveal_requires_complete_blinded_exchange(self) -> None:
+        with self.assertRaisesRegex(ValueError, "two distinct valid blinded readings"):
+            prepare_reveal_bundle(
+                self.packet,
+                [self.reading_1],
+                creator_reading="The sound suggests anticipation.",
+                creator_tags=["anticipation"],
+                model_labels=["music", "motion"],
+            )
+
+        bundle = prepare_reveal_bundle(
+            self.packet,
+            [self.reading_1, self.reading_2],
+            creator_reading="The sound suggests anticipation.",
+            creator_tags=["anticipation"],
+            model_labels=["music", "motion"],
+        )
+        rendered = bundle.to_dict()
+        self.assertEqual(rendered["reveal_state"], "revealed")
+        self.assertEqual(len(rendered["audience_readings"]), 2)
+        self.assertIn("disagreement_matrix", rendered)
+        self.assertIn("another reading", rendered["reflection_prompt"].lower())
+        self.assertIn("classroom minimum", CLASSROOM_MINIMUM_NOTICE.lower())
+        self.assertNotIn("research sample", CLASSROOM_MINIMUM_NOTICE.lower())
+
+    def test_audience_content_has_english_korean_key_parity(self) -> None:
+        self.assertEqual(set(AUDIENCE_CONTENT), {"en", "ko"})
+        self.assertEqual(set(AUDIENCE_CONTENT["en"]), set(AUDIENCE_CONTENT["ko"]))
+        self.assertTrue(all(AUDIENCE_CONTENT["en"].values()))
+        self.assertTrue(all(AUDIENCE_CONTENT["ko"].values()))
+
+    def test_surface_is_strict_marimo_shaped_and_gpu_free(self) -> None:
+        source = SURFACE.read_text(encoding="utf-8")
+        self.assertIn("import marimo", source)
+        self.assertIn("app = marimo.App", source)
+        self.assertIn("mo.ui.file", source)
+        self.assertIn(".form(", source)
+        self.assertIn("mo.download", source)
+        self.assertNotIn("import torch", source)
+        self.assertNotIn("import transformers", source)
+        self.assertNotIn("avllm_interpretability", source)
+
     def test_gpu_free_cli_round_trip(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             output = Path(temp_dir) / "reading.json"
             result = subprocess.run(
                 [
                     sys.executable,
-                    str(SURFACE),
+                    str(CORE),
                     "--packet",
                     str(FIXTURES / "packet.json"),
                     "--response",
