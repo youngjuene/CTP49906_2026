@@ -2,10 +2,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-import sys
-
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
 
 from digital_storytelling.workflow import (
     ARTIFACT_RUBRIC_ID,
@@ -14,6 +10,7 @@ from digital_storytelling.workflow import (
     PRE_OUTCOME_ID,
 )
 
+ROOT = Path(__file__).resolve().parents[1]
 INSTRUMENTS = ROOT / "study_materials" / "instruments"
 
 

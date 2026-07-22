@@ -3,14 +3,11 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 import re
-import sys
-
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
 
 from digital_storytelling.workflow import CONTENT, ROUTE_MANIFEST, ROUTE_STAGES
 
 
+ROOT = Path(__file__).resolve().parents[1]
 NOTEBOOK = ROOT / "digital_storytelling" / "CTP49906_storytelling_molab.py"
 
 
@@ -83,8 +80,8 @@ def test_notebook_has_teaching_privacy_and_audience_boundaries() -> None:
         'version_label="V2"',
         "parent_artifact_id=_first.artifact_id",
         "permission_confirmed",
-        "two or more distinct",
-        "automatic",
+        "audience_complete",
+        "COMPARISON_ROUTE_ID",
     )
     for symbol in required_symbols:
         assert symbol in source
