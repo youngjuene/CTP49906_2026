@@ -31,6 +31,8 @@ def test_comparison_surface_has_inward_only_model_free_imports() -> None:
         "__future__",
         "json",
         "marimo",
+        "pathlib",
+        "sys",
         "uuid",
         "curriculum_common",
         "digital_storytelling",
