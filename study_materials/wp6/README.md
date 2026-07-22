@@ -1,6 +1,6 @@
 # Classroom release guidance
 
-**Content version:** `classroom-guidance/1.0.0`  
+**Content version:** `classroom-guidance/1.0.0`
 **Release status:** candidate teaching materials; **not research-ready**
 
 This directory is the English/Korean operational companion for the classroom

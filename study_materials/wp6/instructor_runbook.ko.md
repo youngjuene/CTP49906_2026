@@ -1,7 +1,7 @@
 # 교수자 운영 안내
 
-**문서 ID:** `instructor-runbook/1.0.0`  
-**대상:** 수업 진행자  
+**문서 ID:** `instructor-runbook/1.0.0`
+**대상:** 수업 진행자
 **상태:** 수업 리허설용이며 research-ready가 아님
 
 ## 수업 전

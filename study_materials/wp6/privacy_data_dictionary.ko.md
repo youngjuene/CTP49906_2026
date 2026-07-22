@@ -1,6 +1,6 @@
 # 개인정보 및 데이터 사전
 
-**문서 ID:** `privacy-data-dictionary/1.0.0`  
+**문서 ID:** `privacy-data-dictionary/1.0.0`
 **기본 모드:** 수업
 
 ## 경계와 권한

@@ -1,7 +1,7 @@
 # Instructor runbook
 
-**Document ID:** `instructor-runbook/1.0.0`  
-**Audience:** classroom facilitators  
+**Document ID:** `instructor-runbook/1.0.0`
+**Audience:** classroom facilitators
 **Status:** teaching rehearsal; not research-ready
 
 ## Before class

@@ -1,6 +1,6 @@
 # Privacy and data dictionary
 
-**Document ID:** `privacy-data-dictionary/1.0.0`  
+**Document ID:** `privacy-data-dictionary/1.0.0`
 **Default mode:** Teaching
 
 ## Boundaries and permissions
