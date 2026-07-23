@@ -1,0 +1,22 @@
+{
+  "schema_version": "critical-ai-reasoning-content/1.0.0",
+  "language": "en",
+  "translation_status": "source_draft_human_review_required",
+  "permission_status": "project_authored_candidate_not_research_approved",
+  "administration_order": [
+    "critical-ai-reasoning-pre/0.1.0-pilot",
+    "critical-ai-reasoning-post/0.1.0-pilot"
+  ],
+  "content": {
+    "scenario.shared": "An automated caption sounds plausible, but it may miss how sound and image work together in the audiovisual story.",
+    "prompt.evidence": "What evidence would you seek before trusting the caption as an adequate reading of the work?",
+    "prompt.alternative": "Give one plausible alternative explanation for the caption or its omissions.",
+    "prompt.limit": "Name one claim the caption alone cannot establish.",
+    "instruction.pre": "Answer before the production activity. Explain your reasoning rather than listing tools.",
+    "instruction.post": "Answer after the V2 and audience exchange. Explain what changed in your evidence standard, if anything.",
+    "missing.prefer_not": "Prefer not to answer",
+    "missing.skipped": "Skipped",
+    "missing.withdrawn": "Withdrawn"
+  }
+}
+

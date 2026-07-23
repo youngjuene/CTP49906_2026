@@ -1,0 +1,23 @@
+{
+  "schema_version": "audience-reading/1.0.0",
+  "response_id": "response-00000000-0000-4000-8000-000000000002",
+  "exchange_artifact_id": "exchange-00000000-0000-4000-8000-000000000001",
+  "audience_pseudonym": "audience-beta",
+  "respondent_session_pseudonym": "audience-session-beta",
+  "local_created_at_utc": "2026-07-21T09:01:00Z",
+  "event_index": 1,
+  "elapsed_ms": 61000,
+  "blindness_attestation": true,
+  "permission_scope": "classroom_or_audience_sharing",
+  "open_interpretation": "The sound and image diverge, making the scene feel unsettled.",
+  "sound_image_relation": "expressive divergence",
+  "shared_tags": [
+    "repetition"
+  ],
+  "self_described_tags": [
+    "unsettled"
+  ],
+  "accessibility_barriers": "No barrier noticed in this presentation.",
+  "confidence_or_ambiguity": "low confidence because the ending is open",
+  "withdrawn": false
+}

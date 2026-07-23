@@ -1,0 +1,13 @@
+{
+  "logit_caption": "In the video, you can hear the sound of a motorcycle engine revving up and down.",
+  "baseline_text": "The video shows a herd of cows grazing in a lush green field with mountains in the background. A man is seen walking among the cows, possibly tending to",
+  "knockout_text": "The video shows a person riding a bicycle on a road. The person is wearing a helmet and appears to be pedaling at a steady pace. The background is",
+  "knockout_rules": [
+    [
+      "generated",
+      "video",
+      0,
+      36
+    ]
+  ]
+}

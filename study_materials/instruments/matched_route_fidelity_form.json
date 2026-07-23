@@ -1,0 +1,60 @@
+{
+  "schema_version": "matched-route-fidelity/1.0.0",
+  "form_version": "matched-route-fidelity/0.1.0-pilot",
+  "audience": "instructor_or_authorized_observer_only",
+  "student_portfolio_member": false,
+  "research_ready": false,
+  "surface_code_allowed_values": [
+    "treatment",
+    "comparison"
+  ],
+  "required_observation_fields": [
+    "observation_id",
+    "session_pseudonym",
+    "observer_pseudonym",
+    "surface_code",
+    "route_id",
+    "local_observed_at_utc",
+    "brief_version",
+    "stage_order",
+    "stage_elapsed_ms",
+    "hardware_access",
+    "source_pool_version",
+    "editor_name_version",
+    "export_preset_version",
+    "accessibility_supports",
+    "facilitator_contact_events",
+    "assistance_events",
+    "audience_exchange_completed",
+    "common_pre_task_status",
+    "v1_status",
+    "v2_status",
+    "common_post_task_status",
+    "disruptions",
+    "deviations",
+    "completion_state"
+  ],
+  "matched_dimensions": [
+    "brief",
+    "activity_map",
+    "time",
+    "hardware",
+    "source_budget",
+    "editor_export",
+    "process",
+    "help_contact",
+    "audience",
+    "outcomes",
+    "accessibility",
+    "cognitive_demand"
+  ],
+  "deviation_contract": {
+    "append_only": true,
+    "silent_repair_permitted": false,
+    "criticality_threshold": null,
+    "exclusion_rule": null,
+    "status": "thresholds_unresolved_pending_pilot_and_methods_approval"
+  },
+  "two_audience_readings_semantics": "minimum classroom activity only; never research sample-size justification"
+}
+

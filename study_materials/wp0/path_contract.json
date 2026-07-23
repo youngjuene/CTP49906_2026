@@ -1,0 +1,67 @@
+{
+  "schema_version": "wp0.path-contract/1.0.0",
+  "contract_status": "frozen",
+  "frozen_at_utc": "2026-07-21T08:11:28Z",
+  "implementation_status": "not_started_by_wp0",
+  "paths": [
+    {
+      "path_id": "path.curriculum-common",
+      "path": "curriculum_common/",
+      "kind": "python_package_root",
+      "owner": "neutral_shared_contract_lane",
+      "boundary": "Treatment-neutral production, append-only session, audience-packet, and portfolio-projection contracts. It must not import avllm_interpretability internals."
+    },
+    {
+      "path_id": "path.comparison-surface",
+      "path": "digital_storytelling/CTP49906_storytelling_molab.py",
+      "kind": "student_surface",
+      "owner": "matched_comparison_lane",
+      "boundary": "Production-matched comparison surface. It must not import treatment-only modules or expose logit-lens, layer-probe, attention-knockout, or internal-ablation content before post-measure completion."
+    },
+    {
+      "path_id": "path.audience-surface",
+      "path": "audience/CTP49906_audience_response_molab.py",
+      "kind": "student_surface",
+      "owner": "blind_audience_lane",
+      "boundary": "GPU-free blinded response surface. It consumes only the permission-valid presentation envelope and cannot receive creator intention or model output before reveal."
+    },
+    {
+      "path_id": "path.study-materials",
+      "path": "study_materials/",
+      "kind": "protocol_and_course_material_root",
+      "owner": "study_protocol_and_course_materials_lane",
+      "boundary": "Versioned protocol-facing documents, instruments, rater/fidelity materials, accessibility/localization evidence, and WP-0 gates. Human approvals remain external artifacts referenced from this root."
+    }
+  ],
+  "related_fixed_path": {
+    "path_id": "path.treatment-surface",
+    "path": "avllm_interpretability/CTP49906_avllm_molab.py",
+    "owner": "single_wp4_integration_owner",
+    "wp0_edit_policy": "prohibited"
+  },
+  "atomic_rename_rule": {
+    "renames_are_atomic": true,
+    "required_same_change_set": [
+      "this path contract and the immutable course release profile",
+      "treatment and comparison route manifests",
+      "audience handoff references",
+      "static import/contamination checks",
+      "all tests and instructor/student launch documentation that name the old path"
+    ],
+    "partial_alias_policy": "forbidden unless a separately approved, time-bounded migration contract preserves one canonical path",
+    "approval_required": [
+      "treatment owner",
+      "comparison owner",
+      "audience owner",
+      "verification owner"
+    ]
+  },
+  "dependency_direction": [
+    "treatment_surface -> curriculum_common",
+    "comparison_surface -> curriculum_common",
+    "audience_surface -> curriculum_common audience packet schema",
+    "treatment_surface -/-> comparison_surface",
+    "comparison_surface -/-> treatment_surface",
+    "curriculum_common -/-> avllm_interpretability"
+  ]
+}

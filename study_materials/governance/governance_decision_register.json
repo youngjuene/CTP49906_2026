@@ -1,0 +1,557 @@
+{
+  "schema_version": "g011-governance-decision-register/1.0.0",
+  "state": "G011_WAITING_FOR_HUMAN_DECISIONS",
+  "g011_complete": false,
+  "research_mode": "disabled",
+  "classroom_ready_claim": false,
+  "research_ready_claim": false,
+  "readiness_status": {
+    "classroom_release": {
+      "status": "WAITING_FOR_HUMAN_DECISIONS",
+      "human_group": "A",
+      "external_classroom_technical_gate_required": true
+    },
+    "research_readiness": {
+      "status": "DISABLED_WAITING_FOR_HUMAN_DECISIONS",
+      "confirmed_classroom_readiness_required": true,
+      "human_group": "B",
+      "external_research_technical_gates_required": true
+    }
+  },
+  "allowed_outcomes": [
+    "APPROVED",
+    "REJECTED",
+    "CONDITIONAL"
+  ],
+  "readiness_model": {
+    "classroom_release": "Group A may support classroom release only after every Group A human decision is completed with a release-permitting outcome and all conditions satisfied, and the external classroom technical gate passes.",
+    "research_readiness": "Research readiness requires confirmed classroom readiness, every Group B human decision completed with a research-permitting outcome and all conditions satisfied, and the external research gate passes."
+  },
+  "decisions": [
+    {
+      "decision_id": "A-T01",
+      "decision_name": "teaching-only/ethics determination",
+      "group": "A_CLASSROOM",
+      "status": "UNRESOLVED",
+      "accountable_approver": null,
+      "role_or_authority": null,
+      "scope": null,
+      "decision_date": null,
+      "outcome": null,
+      "conditions": null,
+      "evidence_path": null,
+      "evidence_sha256": null,
+      "expiry_date": null,
+      "revisit_trigger": null,
+      "required_authority": "Institutional teaching/ethics authority",
+      "required_scope": "Determine whether the planned activity is teaching-only and whether ethics review or an exemption determination is required.",
+      "required_evidence": [
+        "Written determination from the authorized institutional teaching/ethics body",
+        "Defined permitted classroom use and any restrictions",
+        "Record reference or signed decision"
+      ],
+      "default_revisit_triggers": [
+        "Material change to the approved scope, materials, systems, population, or procedure",
+        "New legal, ethical, institutional, licensing, accessibility, privacy, security, or safety requirement",
+        "Evidence expires, is withdrawn, is superseded, or no longer matches the implemented state",
+        "Incident, complaint, adverse event, audit finding, or previously unknown risk relevant to this decision"
+      ],
+      "legacy_governance_ids": [
+        "GOV-01"
+      ]
+    },
+    {
+      "decision_id": "A-T02",
+      "decision_name": "privacy-security-storage-deletion-retention",
+      "group": "A_CLASSROOM",
+      "status": "UNRESOLVED",
+      "accountable_approver": null,
+      "role_or_authority": null,
+      "scope": null,
+      "decision_date": null,
+      "outcome": null,
+      "conditions": null,
+      "evidence_path": null,
+      "evidence_sha256": null,
+      "expiry_date": null,
+      "revisit_trigger": null,
+      "required_authority": "Institutional privacy, information-security, and records authority",
+      "required_scope": "Approve privacy, security, storage locations, access controls, deletion procedures, and retention periods for classroom use.",
+      "required_evidence": [
+        "Privacy/security review covering data flows and systems",
+        "Approved storage, access, deletion, and retention controls",
+        "Record reference or signed decision"
+      ],
+      "default_revisit_triggers": [
+        "Material change to the approved scope, materials, systems, population, or procedure",
+        "New legal, ethical, institutional, licensing, accessibility, privacy, security, or safety requirement",
+        "Evidence expires, is withdrawn, is superseded, or no longer matches the implemented state",
+        "Incident, complaint, adverse event, audit finding, or previously unknown risk relevant to this decision"
+      ],
+      "legacy_governance_ids": [
+        "GOV-03"
+      ]
+    },
+    {
+      "decision_id": "A-T03",
+      "decision_name": "media rights and institutional model-license fit",
+      "group": "A_CLASSROOM",
+      "status": "UNRESOLVED",
+      "accountable_approver": null,
+      "role_or_authority": null,
+      "scope": null,
+      "decision_date": null,
+      "outcome": null,
+      "conditions": null,
+      "evidence_path": null,
+      "evidence_sha256": null,
+      "expiry_date": null,
+      "revisit_trigger": null,
+      "required_authority": "Institutional legal, copyright, procurement, or licensing authority",
+      "required_scope": "Confirm media rights and institutional model/license terms permit the intended classroom production and use.",
+      "required_evidence": [
+        "Rights inventory and license/terms review",
+        "Institutional model-license fit determination",
+        "Record reference or signed decision"
+      ],
+      "default_revisit_triggers": [
+        "Material change to the approved scope, materials, systems, population, or procedure",
+        "New legal, ethical, institutional, licensing, accessibility, privacy, security, or safety requirement",
+        "Evidence expires, is withdrawn, is superseded, or no longer matches the implemented state",
+        "Incident, complaint, adverse event, audit finding, or previously unknown risk relevant to this decision"
+      ],
+      "legacy_governance_ids": [
+        "GOV-06"
+      ]
+    },
+    {
+      "decision_id": "A-T04",
+      "decision_name": "accessibility and assistive-technology review",
+      "group": "A_CLASSROOM",
+      "status": "UNRESOLVED",
+      "accountable_approver": null,
+      "role_or_authority": null,
+      "scope": null,
+      "decision_date": null,
+      "outcome": null,
+      "conditions": null,
+      "evidence_path": null,
+      "evidence_sha256": null,
+      "expiry_date": null,
+      "revisit_trigger": null,
+      "required_authority": "Institutional accessibility or disability-services authority",
+      "required_scope": "Approve accessibility provisions and compatibility with relevant assistive technologies for classroom release.",
+      "required_evidence": [
+        "Accessibility review against applicable institutional requirements",
+        "Assistive-technology test or accommodation plan",
+        "Record reference or signed decision"
+      ],
+      "default_revisit_triggers": [
+        "Material change to the approved scope, materials, systems, population, or procedure",
+        "New legal, ethical, institutional, licensing, accessibility, privacy, security, or safety requirement",
+        "Evidence expires, is withdrawn, is superseded, or no longer matches the implemented state",
+        "Incident, complaint, adverse event, audit finding, or previously unknown risk relevant to this decision"
+      ],
+      "legacy_governance_ids": [
+        "GOV-08"
+      ]
+    },
+    {
+      "decision_id": "A-T05",
+      "decision_name": "English/Korean localization review",
+      "group": "A_CLASSROOM",
+      "status": "UNRESOLVED",
+      "accountable_approver": null,
+      "role_or_authority": null,
+      "scope": null,
+      "decision_date": null,
+      "outcome": null,
+      "conditions": null,
+      "evidence_path": null,
+      "evidence_sha256": null,
+      "expiry_date": null,
+      "revisit_trigger": null,
+      "required_authority": "Authorized bilingual localization reviewer",
+      "required_scope": "Approve the accuracy, cultural appropriateness, and functional equivalence of English and Korean classroom materials.",
+      "required_evidence": [
+        "Side-by-side English/Korean review",
+        "Documented corrections and equivalence assessment",
+        "Record reference or signed decision"
+      ],
+      "default_revisit_triggers": [
+        "Material change to the approved scope, materials, systems, population, or procedure",
+        "New legal, ethical, institutional, licensing, accessibility, privacy, security, or safety requirement",
+        "Evidence expires, is withdrawn, is superseded, or no longer matches the implemented state",
+        "Incident, complaint, adverse event, audit finding, or previously unknown risk relevant to this decision"
+      ],
+      "legacy_governance_ids": [
+        "GOV-08"
+      ]
+    },
+    {
+      "decision_id": "A-T06",
+      "decision_name": "arts-pedagogy and instructor usability",
+      "group": "A_CLASSROOM",
+      "status": "UNRESOLVED",
+      "accountable_approver": null,
+      "role_or_authority": null,
+      "scope": null,
+      "decision_date": null,
+      "outcome": null,
+      "conditions": null,
+      "evidence_path": null,
+      "evidence_sha256": null,
+      "expiry_date": null,
+      "revisit_trigger": null,
+      "required_authority": "Authorized arts-pedagogy and instructor-usability reviewer",
+      "required_scope": "Approve pedagogical suitability and instructor usability for the intended arts-teaching context.",
+      "required_evidence": [
+        "Arts-pedagogy review",
+        "Instructor workflow/usability review",
+        "Record reference or signed decision"
+      ],
+      "default_revisit_triggers": [
+        "Material change to the approved scope, materials, systems, population, or procedure",
+        "New legal, ethical, institutional, licensing, accessibility, privacy, security, or safety requirement",
+        "Evidence expires, is withdrawn, is superseded, or no longer matches the implemented state",
+        "Incident, complaint, adverse event, audit finding, or previously unknown risk relevant to this decision"
+      ],
+      "legacy_governance_ids": [
+        "GOV-07"
+      ]
+    },
+    {
+      "decision_id": "A-T07",
+      "decision_name": "matched-arm production fidelity",
+      "group": "A_CLASSROOM",
+      "status": "UNRESOLVED",
+      "accountable_approver": null,
+      "role_or_authority": null,
+      "scope": null,
+      "decision_date": null,
+      "outcome": null,
+      "conditions": null,
+      "evidence_path": null,
+      "evidence_sha256": null,
+      "expiry_date": null,
+      "revisit_trigger": null,
+      "required_authority": "Authorized instructional-production or study-design reviewer",
+      "required_scope": "Confirm matched-arm materials meet the required production-fidelity standard without claiming research validity.",
+      "required_evidence": [
+        "Matched-arm asset comparison",
+        "Documented fidelity criteria and discrepancies",
+        "Record reference or signed decision"
+      ],
+      "default_revisit_triggers": [
+        "Material change to the approved scope, materials, systems, population, or procedure",
+        "New legal, ethical, institutional, licensing, accessibility, privacy, security, or safety requirement",
+        "Evidence expires, is withdrawn, is superseded, or no longer matches the implemented state",
+        "Incident, complaint, adverse event, audit finding, or previously unknown risk relevant to this decision"
+      ],
+      "legacy_governance_ids": [
+        "GOV-07"
+      ]
+    },
+    {
+      "decision_id": "A-T08",
+      "decision_name": "classroom release owner and incident response",
+      "group": "A_CLASSROOM",
+      "status": "UNRESOLVED",
+      "accountable_approver": null,
+      "role_or_authority": null,
+      "scope": null,
+      "decision_date": null,
+      "outcome": null,
+      "conditions": null,
+      "evidence_path": null,
+      "evidence_sha256": null,
+      "expiry_date": null,
+      "revisit_trigger": null,
+      "required_authority": "Authorized classroom release owner and incident-response authority",
+      "required_scope": "Name the accountable classroom release owner and approve incident reporting, containment, escalation, and withdrawal procedures.",
+      "required_evidence": [
+        "Named release owner",
+        "Classroom incident-response and withdrawal procedure",
+        "Record reference or signed decision"
+      ],
+      "default_revisit_triggers": [
+        "Material change to the approved scope, materials, systems, population, or procedure",
+        "New legal, ethical, institutional, licensing, accessibility, privacy, security, or safety requirement",
+        "Evidence expires, is withdrawn, is superseded, or no longer matches the implemented state",
+        "Incident, complaint, adverse event, audit finding, or previously unknown risk relevant to this decision"
+      ],
+      "legacy_governance_ids": [
+        "GOV-03",
+        "GOV-12"
+      ]
+    },
+    {
+      "decision_id": "B-R01",
+      "decision_name": "IRB/equivalent",
+      "group": "B_RESEARCH",
+      "status": "UNRESOLVED",
+      "accountable_approver": null,
+      "role_or_authority": null,
+      "scope": null,
+      "decision_date": null,
+      "outcome": null,
+      "conditions": null,
+      "evidence_path": null,
+      "evidence_sha256": null,
+      "expiry_date": null,
+      "revisit_trigger": null,
+      "required_authority": "IRB or equivalent authorized research-ethics body",
+      "required_scope": "Approve, exempt, or otherwise issue the required formal determination for the proposed research.",
+      "required_evidence": [
+        "Research protocol and supporting materials submitted to the proper body",
+        "Formal IRB/equivalent determination",
+        "Record reference or signed decision"
+      ],
+      "default_revisit_triggers": [
+        "Material change to the approved scope, materials, systems, population, or procedure",
+        "New legal, ethical, institutional, licensing, accessibility, privacy, security, or safety requirement",
+        "Evidence expires, is withdrawn, is superseded, or no longer matches the implemented state",
+        "Incident, complaint, adverse event, audit finding, or previously unknown risk relevant to this decision",
+        "Any protocol amendment or departure affecting the research determination or analysis"
+      ],
+      "legacy_governance_ids": [
+        "GOV-01"
+      ]
+    },
+    {
+      "decision_id": "B-R02",
+      "decision_name": "consent-assent-withdrawal",
+      "group": "B_RESEARCH",
+      "status": "UNRESOLVED",
+      "accountable_approver": null,
+      "role_or_authority": null,
+      "scope": null,
+      "decision_date": null,
+      "outcome": null,
+      "conditions": null,
+      "evidence_path": null,
+      "evidence_sha256": null,
+      "expiry_date": null,
+      "revisit_trigger": null,
+      "required_authority": "IRB/equivalent and authorized consent-process owner",
+      "required_scope": "Approve consent, assent where applicable, and withdrawal language and procedures.",
+      "required_evidence": [
+        "Consent/assent materials and process",
+        "Withdrawal and data-disposition procedure",
+        "Record reference or signed decision"
+      ],
+      "default_revisit_triggers": [
+        "Material change to the approved scope, materials, systems, population, or procedure",
+        "New legal, ethical, institutional, licensing, accessibility, privacy, security, or safety requirement",
+        "Evidence expires, is withdrawn, is superseded, or no longer matches the implemented state",
+        "Incident, complaint, adverse event, audit finding, or previously unknown risk relevant to this decision",
+        "Any protocol amendment or departure affecting the research determination or analysis"
+      ],
+      "legacy_governance_ids": [
+        "GOV-02"
+      ]
+    },
+    {
+      "decision_id": "B-R03",
+      "decision_name": "instruments and translation/adaptation permissions",
+      "group": "B_RESEARCH",
+      "status": "UNRESOLVED",
+      "accountable_approver": null,
+      "role_or_authority": null,
+      "scope": null,
+      "decision_date": null,
+      "outcome": null,
+      "conditions": null,
+      "evidence_path": null,
+      "evidence_sha256": null,
+      "expiry_date": null,
+      "revisit_trigger": null,
+      "required_authority": "Instrument rights holders and authorized research-methods/localization reviewers",
+      "required_scope": "Confirm permission to use, translate, adapt, and administer every research instrument.",
+      "required_evidence": [
+        "Instrument inventory and provenance",
+        "Written use/translation/adaptation permissions",
+        "Record reference or signed decision"
+      ],
+      "default_revisit_triggers": [
+        "Material change to the approved scope, materials, systems, population, or procedure",
+        "New legal, ethical, institutional, licensing, accessibility, privacy, security, or safety requirement",
+        "Evidence expires, is withdrawn, is superseded, or no longer matches the implemented state",
+        "Incident, complaint, adverse event, audit finding, or previously unknown risk relevant to this decision",
+        "Any protocol amendment or departure affecting the research determination or analysis"
+      ],
+      "legacy_governance_ids": [
+        "GOV-04"
+      ]
+    },
+    {
+      "decision_id": "B-R04",
+      "decision_name": "allocation-estimands-sample-size-power",
+      "group": "B_RESEARCH",
+      "status": "UNRESOLVED",
+      "accountable_approver": null,
+      "role_or_authority": null,
+      "scope": null,
+      "decision_date": null,
+      "outcome": null,
+      "conditions": null,
+      "evidence_path": null,
+      "evidence_sha256": null,
+      "expiry_date": null,
+      "revisit_trigger": null,
+      "required_authority": "Authorized statistical or research-design approver",
+      "required_scope": "Approve allocation, estimands, sample-size assumptions, and power or precision justification.",
+      "required_evidence": [
+        "Statistical analysis/design plan",
+        "Sample-size and power/precision rationale",
+        "Record reference or signed decision"
+      ],
+      "default_revisit_triggers": [
+        "Material change to the approved scope, materials, systems, population, or procedure",
+        "New legal, ethical, institutional, licensing, accessibility, privacy, security, or safety requirement",
+        "Evidence expires, is withdrawn, is superseded, or no longer matches the implemented state",
+        "Incident, complaint, adverse event, audit finding, or previously unknown risk relevant to this decision",
+        "Any protocol amendment or departure affecting the research determination or analysis"
+      ],
+      "legacy_governance_ids": [
+        "GOV-05"
+      ]
+    },
+    {
+      "decision_id": "B-R05",
+      "decision_name": "rater training-reliability-adjudication",
+      "group": "B_RESEARCH",
+      "status": "UNRESOLVED",
+      "accountable_approver": null,
+      "role_or_authority": null,
+      "scope": null,
+      "decision_date": null,
+      "outcome": null,
+      "conditions": null,
+      "evidence_path": null,
+      "evidence_sha256": null,
+      "expiry_date": null,
+      "revisit_trigger": null,
+      "required_authority": "Authorized measurement or research-quality approver",
+      "required_scope": "Approve rater training, reliability thresholds, monitoring, and adjudication procedures.",
+      "required_evidence": [
+        "Rater manual and training plan",
+        "Reliability and adjudication specification",
+        "Record reference or signed decision"
+      ],
+      "default_revisit_triggers": [
+        "Material change to the approved scope, materials, systems, population, or procedure",
+        "New legal, ethical, institutional, licensing, accessibility, privacy, security, or safety requirement",
+        "Evidence expires, is withdrawn, is superseded, or no longer matches the implemented state",
+        "Incident, complaint, adverse event, audit finding, or previously unknown risk relevant to this decision",
+        "Any protocol amendment or departure affecting the research determination or analysis"
+      ],
+      "legacy_governance_ids": [
+        "GOV-05"
+      ]
+    },
+    {
+      "decision_id": "B-R06",
+      "decision_name": "audience recruitment/data handling",
+      "group": "B_RESEARCH",
+      "status": "UNRESOLVED",
+      "accountable_approver": null,
+      "role_or_authority": null,
+      "scope": null,
+      "decision_date": null,
+      "outcome": null,
+      "conditions": null,
+      "evidence_path": null,
+      "evidence_sha256": null,
+      "expiry_date": null,
+      "revisit_trigger": null,
+      "required_authority": "IRB/equivalent plus authorized privacy/data-governance authority",
+      "required_scope": "Approve audience recruitment and all associated research-data handling.",
+      "required_evidence": [
+        "Recruitment materials and sampling channels",
+        "Research data-flow, access, storage, retention, and deletion plan",
+        "Record reference or signed decision"
+      ],
+      "default_revisit_triggers": [
+        "Material change to the approved scope, materials, systems, population, or procedure",
+        "New legal, ethical, institutional, licensing, accessibility, privacy, security, or safety requirement",
+        "Evidence expires, is withdrawn, is superseded, or no longer matches the implemented state",
+        "Incident, complaint, adverse event, audit finding, or previously unknown risk relevant to this decision",
+        "Any protocol amendment or departure affecting the research determination or analysis"
+      ],
+      "legacy_governance_ids": [
+        "GOV-03",
+        "GOV-09"
+      ]
+    },
+    {
+      "decision_id": "B-R07",
+      "decision_name": "missing-data/analysis",
+      "group": "B_RESEARCH",
+      "status": "UNRESOLVED",
+      "accountable_approver": null,
+      "role_or_authority": null,
+      "scope": null,
+      "decision_date": null,
+      "outcome": null,
+      "conditions": null,
+      "evidence_path": null,
+      "evidence_sha256": null,
+      "expiry_date": null,
+      "revisit_trigger": null,
+      "required_authority": "Authorized statistical analysis approver",
+      "required_scope": "Approve missing-data handling and the complete analysis plan.",
+      "required_evidence": [
+        "Prespecified analysis plan",
+        "Missing-data assumptions, diagnostics, and handling rules",
+        "Record reference or signed decision"
+      ],
+      "default_revisit_triggers": [
+        "Material change to the approved scope, materials, systems, population, or procedure",
+        "New legal, ethical, institutional, licensing, accessibility, privacy, security, or safety requirement",
+        "Evidence expires, is withdrawn, is superseded, or no longer matches the implemented state",
+        "Incident, complaint, adverse event, audit finding, or previously unknown risk relevant to this decision",
+        "Any protocol amendment or departure affecting the research determination or analysis"
+      ],
+      "legacy_governance_ids": [
+        "GOV-04",
+        "GOV-05"
+      ]
+    },
+    {
+      "decision_id": "B-R08",
+      "decision_name": "publication-quotation-sharing-reuse permissions",
+      "group": "B_RESEARCH",
+      "status": "UNRESOLVED",
+      "accountable_approver": null,
+      "role_or_authority": null,
+      "scope": null,
+      "decision_date": null,
+      "outcome": null,
+      "conditions": null,
+      "evidence_path": null,
+      "evidence_sha256": null,
+      "expiry_date": null,
+      "revisit_trigger": null,
+      "required_authority": "Authorized legal, ethics, privacy, and publication/data-sharing authorities as applicable",
+      "required_scope": "Approve publication, quotation, sharing, archiving, and reuse permissions and limitations.",
+      "required_evidence": [
+        "Publication and quotation plan",
+        "Data/material sharing, archiving, and reuse plan",
+        "Record reference or signed decision"
+      ],
+      "default_revisit_triggers": [
+        "Material change to the approved scope, materials, systems, population, or procedure",
+        "New legal, ethical, institutional, licensing, accessibility, privacy, security, or safety requirement",
+        "Evidence expires, is withdrawn, is superseded, or no longer matches the implemented state",
+        "Incident, complaint, adverse event, audit finding, or previously unknown risk relevant to this decision",
+        "Any protocol amendment or departure affecting the research determination or analysis"
+      ],
+      "legacy_governance_ids": [
+        "GOV-02",
+        "GOV-03",
+        "GOV-06"
+      ]
+    }
+  ]
+}

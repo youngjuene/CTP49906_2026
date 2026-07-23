@@ -1,0 +1,22 @@
+{
+  "example": {
+    "accessibility_alternative": "Text summary: a repeated sound joins three still-image story beats.",
+    "alternative_sequence": [
+      "interruption",
+      "arrival",
+      "return"
+    ],
+    "sound_role": "the recurring sound marks a change in viewpoint",
+    "story_beats": [
+      "arrival",
+      "interruption",
+      "return"
+    ]
+  },
+  "generator": "python -m digital_storytelling.generate_replay",
+  "payload_sha256": "3b1f139487df124fc8abf8ff0dc7aa0de0dde08ffcfa2a539e01fd3fa1adfbd2",
+  "provenance": "saved classroom replay; teaching-only example",
+  "route_id": "matched-comparison/1.0.0",
+  "runtime": "cpu_only_no_gpu_no_model_packages",
+  "schema_version": "storytelling-replay/1.0.0"
+}

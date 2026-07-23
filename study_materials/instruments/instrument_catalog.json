@@ -1,0 +1,86 @@
+{
+  "catalog_schema_version": "common-instrument-catalog/1.0.0",
+  "catalog_version": "common-instruments/0.1.0-pilot",
+  "status": "candidate_not_validated_not_piloted_not_research_approved",
+  "condition_independent_scoring": true,
+  "student_assignment_fields_permitted": false,
+  "administration_order": [
+    "critical-ai-reasoning-pre/0.1.0-pilot",
+    "artifact-v1/submission",
+    "audience-exchange/classroom-minimum-two",
+    "artifact-v2/submission",
+    "critical-ai-reasoning-post/0.1.0-pilot"
+  ],
+  "instruments": [
+    {
+      "instrument_id": "critical-ai-reasoning-pre/0.1.0-pilot",
+      "construct_label": "critical AI reasoning candidate",
+      "provenance": "locally authored scenario candidate derived from the approved classroom PRD; no external validated scale claimed",
+      "adaptation_permission": "project-authored draft; institutional and participant-use review unresolved",
+      "administration": "before production activity and before any condition-specific learning material",
+      "scoring": "three analytic dimensions scored from the common rater guide; no automated final score",
+      "missingness": "observed, skipped, withdrawn, or not_administered; empty text is not silently scored",
+      "rater_training": "required rehearsal with anchor cases; not yet completed",
+      "reliability": "target/statistic/threshold unresolved pending methods approval",
+      "adjudication": "procedure unresolved pending methods approval",
+      "translation_status": "English and Korean content keys aligned; qualified semantic review unresolved",
+      "pilot_status": "not_piloted",
+      "research_use": "not_approved"
+    },
+    {
+      "instrument_id": "critical-ai-reasoning-post/0.1.0-pilot",
+      "construct_label": "critical AI reasoning candidate",
+      "provenance": "parallel locally authored post-task candidate using the same analytic dimensions",
+      "adaptation_permission": "project-authored draft; institutional and participant-use review unresolved",
+      "administration": "after V2 and the classroom audience exchange",
+      "scoring": "same three analytic dimensions and missingness rules as the pre-task",
+      "missingness": "observed, skipped, withdrawn, or not_administered; empty text is not silently scored",
+      "rater_training": "required rehearsal with anchor cases; not yet completed",
+      "reliability": "target/statistic/threshold unresolved pending methods approval",
+      "adjudication": "procedure unresolved pending methods approval",
+      "translation_status": "English and Korean content keys aligned; qualified semantic review unresolved",
+      "pilot_status": "not_piloted",
+      "research_use": "not_approved"
+    },
+    {
+      "instrument_id": "audiovisual-intentionality-rubric/0.1.0-pilot",
+      "construct_label": "audiovisual intentionality candidate",
+      "provenance": "locally authored artifact-and-rationale rubric candidate",
+      "adaptation_permission": "project-authored draft; arts-educator and methods review unresolved",
+      "administration": "blinded scoring of V1/V2 artifact and rationale package",
+      "scoring": "item-level ordinal ratings; no surface or allocation adjustment",
+      "missingness": "item-level missingness and reason required",
+      "rater_training": "required calibration on non-student anchors; not yet completed",
+      "reliability": "statistic and threshold unresolved",
+      "adjudication": "independent first ratings; exact resolution rule unresolved",
+      "translation_status": "rater-facing terminology translation review unresolved",
+      "pilot_status": "not_piloted",
+      "research_use": "not_approved"
+    },
+    {
+      "instrument_id": "creative-flexibility-rubric/0.1.0-pilot",
+      "construct_label": "creative flexibility candidate",
+      "provenance": "locally authored process-and-artifact rubric candidate",
+      "adaptation_permission": "project-authored draft; construct review unresolved",
+      "administration": "blinded scoring of linked V1/V2 evidence without allocation metadata",
+      "scoring": "item-level ordinal ratings; no agreement-with-system criterion",
+      "missingness": "item-level missingness and reason required",
+      "rater_training": "required calibration on non-student anchors; not yet completed",
+      "reliability": "statistic and threshold unresolved",
+      "adjudication": "independent first ratings; exact resolution rule unresolved",
+      "translation_status": "rater-facing terminology translation review unresolved",
+      "pilot_status": "not_piloted",
+      "research_use": "not_approved"
+    }
+  ],
+  "human_gates": {
+    "ethics": "unresolved",
+    "instrument_quality": "unresolved",
+    "arts_education": "unresolved",
+    "accessibility": "unresolved",
+    "localization": "unresolved",
+    "rater_training": "unresolved",
+    "reliability_and_adjudication": "unresolved"
+  }
+}
+

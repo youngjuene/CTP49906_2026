@@ -1,0 +1,32 @@
+{
+  "schema_version": "classroom-content-manifest/1.0.0",
+  "content_version": "classroom-guidance/1.0.0",
+  "status": "candidate_only",
+  "documents": {
+    "instructor_runbook": {
+      "en": "instructor_runbook.en.md",
+      "ko": "instructor_runbook.ko.md"
+    },
+    "student_quick_start": {
+      "en": "student_quick_start.en.md",
+      "ko": "student_quick_start.ko.md"
+    },
+    "worksheet_migration": {
+      "en": "worksheet_migration.en.md",
+      "ko": "worksheet_migration.ko.md"
+    },
+    "privacy_data_dictionary": {
+      "en": "privacy_data_dictionary.en.md",
+      "ko": "privacy_data_dictionary.ko.md"
+    },
+    "troubleshooting": {
+      "en": "troubleshooting.en.md",
+      "ko": "troubleshooting.ko.md"
+    }
+  },
+  "human_review": {
+    "accessibility": "UNRESOLVED",
+    "localization": "UNRESOLVED",
+    "research_release": "UNRESOLVED"
+  }
+}
