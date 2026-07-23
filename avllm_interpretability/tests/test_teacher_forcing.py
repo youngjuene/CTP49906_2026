@@ -23,7 +23,7 @@ from src.attention_knockout_experiment import (  # noqa: E402
     TOKEN_TYPE_MAP, BlockAttentionHook, block_attention,
 )
 from src.teacher_forcing import (  # noqa: E402
-    build_answer_token_types, caption_logprobs, delta_logprobs,
+    answer_distribution_summaries, build_answer_token_types, caption_logprobs, delta_logprobs,
     group_tokens_into_words, render_delta_strip, teacher_forced_delta,
 )
 
@@ -82,6 +82,20 @@ def test_delta_sign_convention():
     assert bool((d < 0).all())  # belief dropped -> negative
 
 
+def test_answer_distribution_summaries_are_teacher_forced_and_compact():
+    logits = torch.zeros(1, 4, 5)
+    logits[0, 1] = torch.tensor([0.0, 0.0, 4.0, 0.0, 0.0])
+    logits[0, 2] = torch.tensor([0.0, 0.0, 0.0, 4.0, 0.0])
+    ids = torch.tensor([[0, 1, 2, 3]])
+    result = answer_distribution_summaries(logits, ids, prompt_len=2, top_k=2)
+
+    assert result["measurement_kind"] == "teacher_forced_answer_distribution_dispersion"
+    assert "uncalibrated proxy" in result["caveat"].lower()
+    assert [row["target_token_id"] for row in result["positions"]] == [2, 3]
+    assert all("logits" not in row["distribution"] for row in result["positions"])
+    assert all(len(row["distribution"]["top_tokens"]) == 2 for row in result["positions"])
+
+
 def test_strip_puts_belief_drop_on_the_hot_side():
     html = render_delta_strip(["a", " piano"], torch.tensor([0.01, -3.0]))
     norm = matplotlib.colors.TwoSlopeNorm(vmin=-3.0, vcenter=0.0, vmax=3.0)
@@ -138,6 +152,43 @@ def test_answer_source_does_not_leak_to_other_query_types():
     assert out[0, 1] == NEG and out[4, 1] == 0  # only query_text rows blocked
 
 
+def test_capture_requests_weights_only_on_selected_attention_modules():
+    class _Attention(torch.nn.Module):
+        def forward(self, hidden, output_attentions=False):
+            weights = torch.ones(1, 1, 1, 1) if output_attentions else None
+            return hidden, weights, None
+
+    class _Layer(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.self_attn = _Attention()
+
+    class _Model:
+        device = torch.device("cpu")
+
+        def __init__(self):
+            self.thinker = type("Thinker", (), {})()
+            self.thinker.model = type("Backbone", (), {})()
+            self.thinker.model.layers = [_Layer(), _Layer()]
+
+    model = _Model()
+    hidden = torch.zeros(1, 1, 2)
+    with block_attention(
+        model,
+        [],
+        ["query_text"],
+        1,
+        track_attention=True,
+        capture_layer_range=(0, 1),
+    ) as captured:
+        selected = model.thinker.model.layers[0].self_attn(hidden)
+        unselected = model.thinker.model.layers[1].self_attn(hidden)
+        assert selected[1] is not None
+        assert unselected[1] is None
+    assert len(captured[0]) == 1
+    assert model.thinker.model.layers[0].self_attn(hidden)[1] is None
+
+
 def test_teacher_forced_delta_plumbing_with_a_fake_model():
     class _Thinker:
         def generate(self, input_ids=None, max_new_tokens=8, do_sample=None, **kw):
@@ -160,7 +211,12 @@ def test_teacher_forced_delta_plumbing_with_a_fake_model():
     assert res["caption_ids"].tolist() == [[2, 3, 2]]
     assert res["caption_tokens"] == [" piano", " plays", " piano"]
     assert res["delta_total"] == 0.0  # rules=[] -> baseline == knockout
+    assert res["delta_mean"] == 0.0
     assert res["delta"].shape[0] == 3
+    assert res["baseline_distribution"]["measurement_kind"] == (
+        "teacher_forced_answer_distribution_dispersion"
+    )
+    assert res["knockout_distribution"] == res["baseline_distribution"]
 
 
 if __name__ == "__main__":

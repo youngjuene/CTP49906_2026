@@ -9,9 +9,7 @@ from contextlib import contextmanager
 from transformers import Qwen2_5OmniForConditionalGeneration, Qwen2_5OmniProcessor
 from qwen_omni_utils import process_mm_info
 import argparse
-import os
 import time
-import json
 
 def format_time(seconds):
     """Convert seconds to a readable format"""
@@ -168,6 +166,21 @@ def attention_hook_fn(layer_idx: int, storage_dict: dict):
     return hook
 
 
+def force_attention_output_hook(module, args, kwargs):
+    """Request weights only on layers captured by our forward hook.
+
+    Passing ``output_attentions=True`` to ``generate`` makes Transformers retain
+    every layer's attention for every decoding step in its return object. On a
+    24 GB classroom GPU that can OOM even though this lab only needs two layers.
+    A per-module pre-hook keeps the model-level flag off: the decoder discards
+    the weights immediately, while ``attention_hook_fn`` copies just the selected
+    layers to CPU.
+    """
+
+    kwargs["output_attentions"] = True
+    return args, kwargs
+
+
 # --- 4. The Context Manager to Apply All Hooks ---
 
 @contextmanager
@@ -184,6 +197,7 @@ def block_attention(model: torch.nn.Module,
     """
     
     knockout_hook_handles = []
+    capture_flag_handles = []
     capture_hook_handles = []
     attention_storage = defaultdict(list)
     
@@ -266,8 +280,12 @@ def block_attention(model: torch.nn.Module,
 
             # --- Part 2: Register Capture Hook ---
             if track_attention and (capture_start <= i < capture_end):
+                flag_handle = layer.self_attn.register_forward_pre_hook(
+                    force_attention_output_hook, with_kwargs=True
+                )
                 capture_hook = attention_hook_fn(i, attention_storage)
                 handle = layer.self_attn.register_forward_hook(capture_hook)
+                capture_flag_handles.append(flag_handle)
                 capture_hook_handles.append(handle)
                 num_capture_hooks += 1
         
@@ -283,6 +301,8 @@ def block_attention(model: torch.nn.Module,
     finally:
         # 4. Clean up all hooks
         for handle in knockout_hook_handles:
+            handle.remove()
+        for handle in capture_flag_handles:
             handle.remove()
         for handle in capture_hook_handles:
             handle.remove()
@@ -330,10 +350,14 @@ def create_token_type_mapping(input_ids: torch.Tensor, config) -> List[str]:
     # Assumes batch size is 1
     for token_id in input_ids[0]:
         tid = token_id.item()
-        if tid == config.audio_token_index: token_types.append("audio")
-        elif tid == config.image_token_index: token_types.append("image") 
-        elif tid == config.video_token_index: token_types.append("video")
-        else: token_types.append("query_text")
+        if tid == config.audio_token_index:
+            token_types.append("audio")
+        elif tid == config.image_token_index:
+            token_types.append("image")
+        elif tid == config.video_token_index:
+            token_types.append("video")
+        else:
+            token_types.append("query_text")
     return token_types
 
 # --- 6. Main Execution Block ---
@@ -478,7 +502,9 @@ if __name__ == "__main__":
             return_dict_in_generate=True,
         ).sequences
 
-    generated_text = processor.batch_decode(output_ids, skip_special_tokens=True)[0]
+    generated_text = processor.batch_decode(
+        output_ids[:, original_input_len:], skip_special_tokens=True
+    )[0]
     
     print("\n--- Results ---")
     print(f"Video Path: {VIDEO_PATH}")

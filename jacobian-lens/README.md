@@ -37,26 +37,35 @@ prompt.*
 pip install -e .
 ```
 
-### GPU notebook demo
+### Classroom marimo demo
 
-[`CTP49906_jlens.ipynb`](CTP49906_jlens.ipynb) is a self-contained GPU 1 demo
-of the released Qwen3.5-4B lens. On a clean CUDA machine, create the project
-environment from the repository root:
+[`CTP49906_jlens_molab.py`](CTP49906_jlens_molab.py) is the classroom path. It
+is a guided demo followed by a submit-gated research playground, an architecture
+synthesis challenge, and an optional fitting appendix:
+
+- compare vanilla and Jacobian readouts at the final prompt position;
+- inspect target rank, top-k overlap, and Jensen–Shannon divergence against the
+  model's own final-layer distribution;
+- vary the prompt, offset from the end, layer sample, top-k, slice window,
+  layer stride, and word-like display filter;
+- record a falsifiable prediction before each run and look deliberately for
+  prompts where the simpler vanilla lens wins;
+- optionally fit a smaller 100-prompt lens in the advanced appendix, then bring
+  it back to the same held-out playground.
+
+Open it in [molab](https://marimo.io/molab) with a GPU attached, or locally on a
+CUDA machine:
 
 ```bash
-uv venv --python 3.10 --seed .venv
-source .venv/bin/activate
-pip install 'torch==2.6.0+cu124' --index-url https://download.pytorch.org/whl/cu124
-pip install -e . jupyter ipykernel
-python -m ipykernel install --sys-prefix --name jlens --display-name 'Python (jlens)'
-CUDA_VISIBLE_DEVICES=1 jupyter lab
+uvx marimo edit jacobian-lens/CTP49906_jlens_molab.py
 ```
 
-Use a CUDA PyTorch build compatible with your NVIDIA driver; `cu124` is the
-configuration validated for this demo. The first run downloads the public
-model and lens from Hugging Face. The notebook first visualizes the released
-lens, then loads a locally produced 100-prompt lens from
-`artifacts/walkthrough-qwen3.5-4b-gpu1/jacobian_lens.pt` when available.
+The setup cell preserves molab's GPU-matched PyTorch build, installs the text
+dependencies, clones this repository, and downloads immutable model/lens
+revisions on first run. The guided demo uses the course reference lens fitted
+on 1,000 WikiText prompts; no fitting occurs unless the appendix button is clicked. A
+local checkout is used as-is; before publishing to molab, change `REPO_REF`
+from `main` to the immutable course-release tag.
 Generated checkpoints and fitted lenses are intentionally not versioned.
 
 ## Usage
@@ -74,8 +83,8 @@ model = jlens.from_hf(hf, tok)
 
 lens = jlens.JacobianLens.from_pretrained("org/lens-repo", filename="model/lens.pt")
 lens_logits, model_logits, _ = lens.apply(
-    model, "Fact: The currency used in the country shaped like a boot is",
-    positions=[-2])
+    model, "Fact: The currency used in the country shaped like a boot is the",
+    positions=[-1])  # final prompt token -> distribution over its continuation
 for layer, logits in sorted(lens_logits.items()):
     print(layer, [tok.decode([t]) for t in logits[0].topk(5).indices])
 ```

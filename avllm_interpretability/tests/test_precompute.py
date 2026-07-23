@@ -20,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # -> avllm_interpr
 
 from src.precompute import (  # noqa: E402
     DEFAULT_MODALITY_ORDER, StubModel, load_precompute, save_precompute,
-    summarize_attention,
+    summarize_attention, validate_precompute_meta,
 )
 
 
@@ -44,18 +44,56 @@ def test_summarize_attention_none_when_empty():
     assert summarize_attention({}, ["audio"]) is None
 
 
+def test_summarize_attention_uses_all_snapshots_for_every_modality():
+    # Prefill has no generated key; the decode snapshot does. Every modality
+    # must still use the same two-snapshot denominator, preserving unit mass.
+    prefill = torch.tensor([[[[0.2, 0.3, 0.5]]]])
+    decode = torch.tensor([[[[0.1, 0.2, 0.3, 0.4]]]])
+    layers, order, matrix = summarize_attention(
+        {4: [prefill, decode]}, ["query_text", "audio", "video"]
+    )
+    assert layers == [4]
+    row = dict(zip(order, matrix[0]))
+    assert abs(row["query_text"] - 0.15) < 1e-6
+    assert abs(row["audio"] - 0.25) < 1e-6
+    assert abs(row["video"] - 0.40) < 1e-6
+    assert abs(row["generated"] - 0.20) < 1e-6
+    assert abs(sum(matrix[0]) - 1.0) < 1e-6
+
+
+def test_summarize_attention_can_isolate_generated_query_steps():
+    prefill = torch.tensor([[[[0.2, 0.3, 0.5]]]])
+    # Make the prefill recognizably multi-query; decode has exactly one query.
+    prefill = prefill.expand(1, 1, 3, 3).clone()
+    decode = torch.tensor([[[[0.1, 0.2, 0.3, 0.4]]]])
+    _, order, matrix = summarize_attention(
+        {4: [prefill, decode]},
+        ["query_text", "audio", "video"],
+        decode_only=True,
+    )
+    row = dict(zip(order, matrix[0]))
+    assert abs(row["query_text"] - 0.1) < 1e-6
+    assert abs(row["audio"] - 0.2) < 1e-6
+    assert abs(row["video"] - 0.3) < 1e-6
+    assert abs(row["generated"] - 0.4) < 1e-6
+    assert abs(sum(matrix[0]) - 1.0) < 1e-6
+
+
 def test_save_load_round_trip():
     with tempfile.TemporaryDirectory() as td:
         src_csv = Path(td) / "src.csv"
         src_csv.write_text("Token_Position,Token_Type,Layer_0\n3,audio,piano\n", encoding="utf-8")
         out = Path(td) / "precomputed"
         summary = ([0, 1], DEFAULT_MODALITY_ORDER, [[0.1, 0.8, 0.1, 0.0, 0.0], [0.2, 0.2, 0.5, 0.0, 0.1]])
+        baseline_summary = ([0, 1], DEFAULT_MODALITY_ORDER, [[0.2, 0.7, 0.1, 0.0, 0.0], [0.3, 0.2, 0.4, 0.0, 0.1]])
         save_precompute(
             out, logit_csv_src=src_csv, logit_caption="a person plays the piano",
             baseline_text="baseline cap", knockout_text="knockout cap",
             knockout_rules=[("generated", "video", 0, 36)], attention_summary=summary,
             attention_token_types=["query_text", "audio"],
             meta={"clip": "02321.mp4", "n_layers": 36},
+            baseline_attention_summary=baseline_summary,
+            knockout_attention_summary=summary,
         )
         loaded = load_precompute(out)
         assert loaded["logit_caption"] == "a person plays the piano"
@@ -64,6 +102,8 @@ def test_save_load_round_trip():
         assert loaded["knockout_rules"] == [["generated", "video", 0, 36]]
         assert loaded["attention_summary"][0] == [0, 1]
         assert loaded["attention_summary"][2][0] == [0.1, 0.8, 0.1, 0.0, 0.0]
+        assert loaded["knockout_attention_summary"] == loaded["attention_summary"]
+        assert loaded["baseline_attention_summary"][2][0] == [0.2, 0.7, 0.1, 0.0, 0.0]
         assert loaded["attention_token_types"] == ["query_text", "audio"]
         assert loaded["meta"]["n_layers"] == 36
         # the CSV was copied under the canonical name and is readable
@@ -86,6 +126,89 @@ def test_save_precompute_handles_csv_already_in_place():
         )
         assert csv_in_place.exists()
         assert load_precompute(out)["attention_summary"] is None
+
+
+def test_load_precompute_accepts_legacy_single_attention_schema():
+    with tempfile.TemporaryDirectory() as td:
+        out = Path(td)
+        (out / "logit_lens_audio_token_analysis.csv").write_text(
+            "Token_Position,Token_Type,Layer_0\n3,audio,x\n", encoding="utf-8"
+        )
+        (out / "captions.json").write_text(json.dumps({
+            "logit_caption": "l", "baseline_text": "b", "knockout_text": "k",
+            "knockout_rules": [],
+        }), encoding="utf-8")
+        (out / "attention_summary.json").write_text(json.dumps({
+            "layers": [0], "modalities": ["audio"], "matrix": [[0.5]],
+            "token_types": ["audio"],
+        }), encoding="utf-8")
+        (out / "meta.json").write_text("{}", encoding="utf-8")
+        loaded = load_precompute(out)
+        assert loaded["baseline_attention_summary"] is None
+        assert loaded["knockout_attention_summary"] == ([0], ["audio"], [[0.5]])
+        assert loaded["probe_distributions"]["status"] == "legacy_argmax_only"
+        assert loaded["probe_distributions"]["uncertainty"] == "not_measured"
+
+
+def test_versioned_probe_distributions_round_trip_without_fabrication():
+    with tempfile.TemporaryDirectory() as td:
+        out = Path(td) / "precomputed"
+        src_csv = Path(td) / "source.csv"
+        src_csv.write_text(
+            "Token_Position,Token_Type,Layer_0\n1,audio,tok-1\n",
+            encoding="utf-8",
+        )
+        distributions = {
+            "schema_version": "probe-result/1.0.0",
+            "measurement_kind": "raw_probe_score_dispersion",
+            "caveat": "Raw probe score dispersion; not calibrated.",
+            "token_layout_fingerprint": "layout-a",
+            "metric_version": {"schema_version": "probe-metric/1.0.0"},
+            "summaries": [],
+        }
+        save_precompute(
+            out,
+            logit_csv_src=src_csv,
+            logit_caption="caption",
+            baseline_text="baseline",
+            knockout_text="knockout",
+            knockout_rules=[],
+            attention_summary=None,
+            attention_token_types=[],
+            meta={"condition_code": "original", "manipulation": "baseline"},
+            probe_distributions=distributions,
+            cache_identity={"schema_version": "analysis-cache/1.0.0", "key": "a" * 64},
+        )
+        loaded = load_precompute(out)
+        assert loaded["probe_distributions"] == distributions
+        assert loaded["cache_identity"]["key"] == "a" * 64
+        assert loaded["meta"]["precompute_schema_version"] == "avllm-precompute/3.0.0"
+
+
+def test_committed_classroom_replay_pack_is_complete():
+    """Guard the break-glass class path against an artifacts-only README."""
+
+    precomputed = Path(__file__).resolve().parents[1] / "precomputed"
+    loaded = load_precompute(precomputed)
+    assert loaded["meta"]["n_layers"] == 36
+    assert len(loaded["meta"]["model_revision"]) == 40
+    assert loaded["meta"]["max_new_tokens"] == 32
+    assert loaded["meta"]["attention_capture_layers"] == [0, 2]
+    assert loaded["logit_csv"].stat().st_size > 0
+    assert loaded["logit_caption"]
+    assert loaded["baseline_text"] and loaded["knockout_text"]
+    assert loaded["baseline_attention_summary"] is not None
+    assert loaded["knockout_attention_summary"] is not None
+
+
+def test_precompute_metadata_mismatch_fails_loudly():
+    meta = {"clip": "fixed.mp4", "nframes": 8}
+    assert validate_precompute_meta(meta, clip="fixed.mp4", nframes=8)
+    try:
+        validate_precompute_meta(meta, clip="other.mp4", nframes=16)
+        raise AssertionError("expected metadata mismatch to fail")
+    except ValueError as exc:
+        assert "clip" in str(exc) and "nframes" in str(exc) and "Regenerate" in str(exc)
 
 
 def test_load_precompute_fails_loud_when_missing():
