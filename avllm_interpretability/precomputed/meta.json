@@ -1,0 +1,23 @@
+{
+  "clip": "02321.mp4",
+  "nframes": 8,
+  "n_layers": 36,
+  "logit_prompt": "Describe what you hear in the video",
+  "attention_prompt": "Describe what you see and hear in the video",
+  "knockout_rules": [
+    [
+      "generated",
+      "video",
+      0,
+      36
+    ]
+  ],
+  "max_new_tokens": 32,
+  "attention_capture_layers": [
+    0,
+    2
+  ],
+  "model": "Qwen/Qwen2.5-Omni-3B",
+  "model_revision": "f75b40e3da2003cdd6e1829b1f420ca70797c34e",
+  "generated_at": "2026-07-20T16:28:35Z"
+}
