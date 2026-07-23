@@ -237,20 +237,27 @@ def _(mo):
 
     Edit these to point at your own video or change the intervention. On molab's
     large GPU you can safely raise `NFRAMES`.
+
+    The parameters are split across three cells *by re-run cost* (marimo re-runs
+    every cell downstream of an edit): the model id — editing it reloads the
+    models; the paths; and the **knobs** — prompts, rules, frames. Tweak the knob
+    cell freely: it re-runs the experiments against the already-loaded models
+    (seconds), never the model loads themselves.
     """)
     return
 
 
 @app.cell
+def _():
+    # Own cell on purpose: nothing but a genuine model change should ever
+    # invalidate the loader cells below.
+    MODEL_PATH = "Qwen/Qwen2.5-Omni-3B"
+    return (MODEL_PATH,)
+
+
+@app.cell
 def _(PROJECT_DIR):
     VIDEO_PATH = PROJECT_DIR / "assets" / "02321.mp4"
-    MODEL_PATH = "Qwen/Qwen2.5-Omni-3B"
-    NFRAMES = 8
-    LOGIT_PROMPT = "Describe what you hear in the video"
-    ATTENTION_PROMPT = "Describe what you see and hear in the video"
-    KNOCKOUT_RULES = [("generated", "video", 0, 36)]  # block generated→video, all 36 thinker layers
-    MAX_NEW_TOKENS = 32
-    ATTENTION_CAPTURE_LAYERS = (0, 2)
 
     RESULTS_DIR = PROJECT_DIR / "notebook_results"
     RESULTS_DIR.mkdir(exist_ok=True)
@@ -258,16 +265,25 @@ def _(PROJECT_DIR):
 
     assert VIDEO_PATH.is_file(), f"video not found: {VIDEO_PATH}"
     print("video:", VIDEO_PATH)
+    return LOGIT_CSV_PATH, VIDEO_PATH
+
+
+@app.cell
+def _():
+    # The knobs — cheap to tweak: re-runs the experiments, not the model loads.
+    NFRAMES = 8
+    LOGIT_PROMPT = "Describe what you hear in the video"
+    ATTENTION_PROMPT = "Describe what you see and hear in the video"
+    KNOCKOUT_RULES = [("generated", "video", 0, 36)]  # block generated→video, all 36 thinker layers
+    MAX_NEW_TOKENS = 32
+    ATTENTION_CAPTURE_LAYERS = (0, 2)
     return (
         ATTENTION_CAPTURE_LAYERS,
         ATTENTION_PROMPT,
         KNOCKOUT_RULES,
-        LOGIT_CSV_PATH,
         LOGIT_PROMPT,
         MAX_NEW_TOKENS,
-        MODEL_PATH,
         NFRAMES,
-        VIDEO_PATH,
     )
 
 
@@ -294,7 +310,7 @@ def _(mo):
 
 
 @app.cell
-def _(DEVICE, MODEL_PATH, NFRAMES, PROJECT_DIR, VIDEO_PATH):
+def _(DEVICE, MODEL_PATH, PROJECT_DIR):
     import csv
     from collections import Counter
 
@@ -327,10 +343,12 @@ def _(DEVICE, MODEL_PATH, NFRAMES, PROJECT_DIR, VIDEO_PATH):
         _proc = Qwen2_5OmniProcessor.from_pretrained(MODEL_PATH)
         return _model, _proc
 
-    def prepare_video_inputs(model, processor, prompt, token_mapping_fn):
+    # video_path/nframes are arguments, not closures: this cell must depend only
+    # on the model constants, or a knob tweak would cascade into the loaders.
+    def prepare_video_inputs(model, processor, prompt, token_mapping_fn, video_path, nframes):
         _conv = [{"role": "user", "content": [
             {"type": "text", "text": prompt},
-            {"type": "video", "video": str(VIDEO_PATH), "nframes": NFRAMES},
+            {"type": "video", "video": str(video_path), "nframes": nframes},
         ]}]
         _text = processor.apply_chat_template(_conv, add_generation_prompt=True, tokenize=False)
         _audios, _images, _videos = process_mm_info(_conv, use_audio_in_video=True)
@@ -359,6 +377,56 @@ def _(DEVICE, MODEL_PATH, NFRAMES, PROJECT_DIR, VIDEO_PATH):
     )
 
 
+@app.cell
+def _(USE_PRECOMPUTED, load_model_and_processor, mo):
+    # Dedicated loader cell: depends only on the model constants, so tweaking
+    # prompts/rules/frames re-runs the experiments against this already-loaded
+    # instance instead of reloading ~7 GB of weights.
+    if USE_PRECOMPUTED:
+        logit_model, logit_processor = None, None
+    else:
+        with mo.status.spinner(title="Loading Qwen2.5-Omni-3B (SDPA, first run downloads ~8 GB)…"):
+            logit_model, logit_processor = load_model_and_processor("sdpa")
+    return logit_model, logit_processor
+
+
+@app.cell
+def _(PRECOMPUTED_DIR, USE_PRECOMPUTED, load_model_and_processor, mo):
+    # Dedicated loader cell for the eager model (knockout hooks + both
+    # playgrounds). In precomputed mode a layer-count stub stands in so the
+    # playground forms can render; it cannot compute, and the forms fail loudly
+    # if submitted.
+    if USE_PRECOMPUTED:
+        from src.precompute import StubModel as _StubModel
+        from src.precompute import load_precompute as _stub_pre
+
+        attention_model = _StubModel(_stub_pre(PRECOMPUTED_DIR)["meta"].get("n_layers", 36))
+        attention_processor = None
+    else:
+        with mo.status.spinner(title="Loading Qwen2.5-Omni-3B (eager attention)…"):
+            attention_model, attention_processor = load_model_and_processor("eager")
+    return attention_model, attention_processor
+
+
+@app.cell
+def _(attention_model):
+    # Submit-to-submit caches for the two playground forms, keyed on
+    # (clip name, clip bytes, nframes, prompt): "encode" holds prepared inputs +
+    # token types, "caption" holds greedy caption ids for teacher forcing — so a
+    # layer-band sweep re-encodes and re-captions nothing after the first ▶.
+    # Depending on attention_model flushes them whenever the model is reloaded.
+    _ = attention_model
+    playground_caches = {"encode": {}, "caption": {}}
+
+    def cache_put(cache, key, value, keep=4):
+        cache[key] = value
+        while len(cache) > keep:  # bound GPU-resident entries; FIFO eviction
+            cache.pop(next(iter(cache)))
+        return value
+
+    return cache_put, playground_caches
+
+
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
@@ -374,12 +442,15 @@ def _(
     LOGIT_CSV_PATH,
     LOGIT_PROMPT,
     MAX_NEW_TOKENS,
+    NFRAMES,
     PRECOMPUTED_DIR,
     USE_PRECOMPUTED,
+    VIDEO_PATH,
     analyze_and_save_audio_logits_to_csv,
     clear_logit_lens_hooks,
     create_token_type_mapping,
-    load_model_and_processor,
+    logit_model,
+    logit_processor,
     mo,
     prepare_video_inputs,
     register_logit_lens_hooks,
@@ -395,10 +466,9 @@ def _(
             mo.md(f"**Generated caption:**\n\n> {_pre['logit_caption']}"),
         ])
     else:
-        with mo.status.spinner(title="Loading Qwen2.5-Omni-3B (SDPA, first run downloads ~8 GB)…"):
-            logit_model, logit_processor = load_model_and_processor("sdpa")
         logit_inputs, logit_token_types = prepare_video_inputs(
-            logit_model, logit_processor, LOGIT_PROMPT, create_token_type_mapping
+            logit_model, logit_processor, LOGIT_PROMPT, create_token_type_mapping,
+            VIDEO_PATH, NFRAMES,
         )
 
         register_logit_lens_hooks(logit_model)
@@ -490,17 +560,19 @@ def _(
     ATTENTION_PROMPT,
     KNOCKOUT_RULES,
     MAX_NEW_TOKENS,
+    NFRAMES,
     PRECOMPUTED_DIR,
     USE_PRECOMPUTED,
+    VIDEO_PATH,
+    attention_model,
+    attention_processor,
     block_attention,
     create_attention_token_mapping,
-    load_model_and_processor,
     mo,
     prepare_video_inputs,
     torch,
 ):
     if USE_PRECOMPUTED:
-        from src.precompute import StubModel as _StubModel
         from src.precompute import load_precompute as _load_pre
 
         _pre = _load_pre(PRECOMPUTED_DIR)
@@ -508,11 +580,6 @@ def _(
         knockout_text = _pre["knockout_text"]
         attention_summary = _pre["attention_summary"]
         attention_token_types = _pre["attention_token_types"]
-        # Stand-in so the playground / teacher-forcing forms can read the layer
-        # count without a GPU; it cannot run the model (those sections fail loudly
-        # if submitted while replaying from cache).
-        attention_model = _StubModel(_pre["meta"].get("n_layers", 36))
-        attention_processor = None
         attention_inputs = None
         attention_baseline_ids = None
         _ko_rules = _pre["knockout_rules"]
@@ -520,10 +587,9 @@ def _(
     else:
         from src.precompute import summarize_attention as _summarize_attention
 
-        with mo.status.spinner(title="Loading Qwen2.5-Omni-3B (eager attention)…"):
-            attention_model, attention_processor = load_model_and_processor("eager")
         attention_inputs, attention_token_types = prepare_video_inputs(
-            attention_model, attention_processor, ATTENTION_PROMPT, create_attention_token_mapping
+            attention_model, attention_processor, ATTENTION_PROMPT, create_attention_token_mapping,
+            VIDEO_PATH, NFRAMES,
         )
 
         with mo.status.spinner(title="Baseline generation…"):
@@ -574,8 +640,6 @@ def _(
     return (
         attention_baseline_ids,
         attention_inputs,
-        attention_model,
-        attention_processor,
         attention_summary,
         attention_token_types,
         knockout_text,
@@ -835,12 +899,14 @@ def _(
     attention_model,
     attention_processor,
     block_attention,
+    cache_put,
     clear_logit_lens_hooks,
     create_attention_token_mapping,
     csv,
     ko_controls,
     mo,
     np,
+    playground_caches,
     plt,
     register_logit_lens_hooks,
     torch,
@@ -915,6 +981,11 @@ def _(
     _compare = bool(_p["compare"])
 
     def _prep(video_path, nframes, prompt):
+        # Encoding (video decode + feature extraction) dominates a submit when
+        # only the rule/layer band changed — cache it across ▶ presses.
+        _key = (video_path.name, video_path.stat().st_size, nframes, prompt)
+        if _key in playground_caches["encode"]:
+            return playground_caches["encode"][_key]
         _conv = [{"role": "user", "content": [
             {"type": "text", "text": prompt},
             {"type": "video", "video": str(video_path), "nframes": nframes},
@@ -931,7 +1002,7 @@ def _(
         _types = create_attention_token_mapping(
             _inp["input_ids"], attention_model.config.thinker_config
         )
-        return _inp, _types
+        return cache_put(playground_caches["encode"], _key, (_inp, _types))
 
     def _diversity(csv_path):
         # Reproduce the "diversity by layer" logic: per layer, count distinct decoded
@@ -1166,9 +1237,11 @@ def _(
     VIDEO_PATH,
     attention_model,
     attention_processor,
+    cache_put,
     create_attention_token_mapping,
     mo,
     np,
+    playground_caches,
     tf_controls,
 ):
     from pathlib import Path as _Path
@@ -1201,6 +1274,11 @@ def _(
     _tf_rules = [("answer", _tp["target"], _tf_lo, _tf_hi)]
 
     def _tf_prep(video_path, nframes, prompt):
+        # Shared encode cache with the 🎛️ section: a layer-band or target sweep
+        # on the same clip/prompt re-encodes nothing after the first ▶.
+        _key = (video_path.name, video_path.stat().st_size, nframes, prompt)
+        if _key in playground_caches["encode"]:
+            return playground_caches["encode"][_key]
         _conv = [{"role": "user", "content": [
             {"type": "text", "text": prompt},
             {"type": "video", "video": str(video_path), "nframes": nframes},
@@ -1217,15 +1295,25 @@ def _(
         _types = create_attention_token_mapping(
             _inp["input_ids"], attention_model.config.thinker_config
         )
-        return _inp, _types
+        return cache_put(playground_caches["encode"], _key, (_inp, _types))
 
     _tf_out = None
     try:
+        # Caption cache (the F1 spec's "cached keyed on (clip, prompt, nframes)"):
+        # the greedy caption depends only on the encoded inputs, so a rule/layer
+        # sweep reuses C instead of regenerating it every submit.
+        _tf_cap_key = (_tf_video.name, _tf_video.stat().st_size, _tf_nframes, _tf_prompt)
+        _tf_cached_c = playground_caches["caption"].get(_tf_cap_key)
         with mo.status.spinner(
-            title=f"Teacher forcing · {_tf_nframes} frames · {_tf_video.name}…"
+            title=f"Teacher forcing · {_tf_nframes} frames · {_tf_video.name}"
+            + (" · caption cached…" if _tf_cached_c is not None else "…")
         ):
             _tf_inp, _tf_types = _tf_prep(_tf_video, _tf_nframes, _tf_prompt)
-            _tf_res = _tfd(attention_model, attention_processor, _tf_inp, _tf_types, _tf_rules)
+            _tf_res = _tfd(
+                attention_model, attention_processor, _tf_inp, _tf_types, _tf_rules,
+                cached_caption_ids=_tf_cached_c,
+            )
+            cache_put(playground_caches["caption"], _tf_cap_key, _tf_res["caption_ids"])
     except Exception as _e:  # noqa: BLE001 — surface any failure in-notebook
         _tf_out = mo.callout(
             mo.md(f"**Run failed** — `{type(_e).__name__}: {_e}`"), kind="danger"
