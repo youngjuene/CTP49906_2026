@@ -1,5 +1,5 @@
 # /// script
-# requires-python = ">=3.10"
+# requires-python = ">=3.11"
 # dependencies = [
 #     "marimo",
 #     "numpy",
@@ -9,6 +9,7 @@
 #     "transformers==4.52.0",
 #     "accelerate==1.14.0",
 #     "qwen-omni-utils==0.0.9",
+#     "wigglystuff==0.5.21",
 # ]
 # ///
 
@@ -100,6 +101,9 @@ def _(mo):
         ("accelerate", "accelerate", "1.14.0", "accelerate==1.14.0"),
         ("qwen_omni_utils", "qwen-omni-utils", None, "qwen-omni-utils==0.0.9"),
         ("av", "av", None, "av"),  # PyAV — backs the video-decode shim below
+        # anywidget-based classroom widgets (layer scrubber, caption diff,
+        # Δ threshold). 0.5.15+ needs Python >= 3.11 — molab qualifies.
+        ("wigglystuff", "wigglystuff", "0.5.21", "wigglystuff==0.5.21"),
     ])
 
     def _ensure_video_reader():
@@ -546,6 +550,101 @@ def _(Counter, USE_PRECOMPUTED, csv, logit_csv_written, mo, np, plt):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
+    ## 🎞️ Interactive: scrub the logit lens layer by layer
+
+    The diversity bars above aggregate away *what* the model is predicting. This
+    scrubber replays the same CSV one layer at a time: each chip is one
+    audio-token position, showing the token its layer output decodes to (a raw
+    probe — see the caveat in the logit-lens code). Drag the slider, or press
+    **▶** to sweep the layers, and watch early-layer noise crystallize into the
+    final prediction — a chip turns green once it already matches the final
+    layer's token.
+
+    This is a pure re-render of the CSV written above: no GPU, and it works in
+    `USE_PRECOMPUTED` replay mode.
+    """)
+    return
+
+
+@app.cell
+def _(csv, logit_csv_written, mo):
+    from wigglystuff import PlaySlider as _PlaySlider
+
+    # One parse for both scrubber cells: rows = audio positions, cols = layers.
+    if logit_csv_written.is_file():
+        with open(logit_csv_written, newline="", encoding="utf-8") as _fh:
+            _all_rows = list(csv.reader(_fh))
+    else:
+        _all_rows = []
+    scrub_layer_names = _all_rows[0][2:] if _all_rows else []
+    scrub_positions = [int(_r[0]) for _r in _all_rows[1:]]
+    scrub_preds = [_r[2:] for _r in _all_rows[1:]]
+    mo.stop(
+        not scrub_preds,
+        mo.callout(
+            mo.md("**Nothing to scrub** — the logit-lens run above wrote no audio-token rows."),
+            kind="warn",
+        ),
+    )
+
+    scrub_layer = mo.ui.anywidget(_PlaySlider(
+        value=0.0,
+        min_value=0.0,
+        max_value=float(len(scrub_layer_names) - 1),
+        step=1.0,
+        interval_ms=400,
+        loop=True,
+        width=460,
+    ))
+    mo.hstack([mo.md("**Thinker layer**"), scrub_layer], justify="start", gap=1)
+    return scrub_layer, scrub_layer_names, scrub_positions, scrub_preds
+
+
+@app.cell
+def _(Counter, mo, scrub_layer, scrub_layer_names, scrub_positions, scrub_preds):
+    _n_layers = len(scrub_layer_names)
+    _k = max(0, min(int(scrub_layer.value.get("value", 0)), _n_layers - 1))
+    _cur = [_p[_k] for _p in scrub_preds]
+    _final = [_p[-1] for _p in scrub_preds]
+    _n = len(_cur)
+    _locked = sum(1 for _c, _f in zip(_cur, _final) if _c == _f)
+    _top_tok, _top_count = Counter(_cur).most_common(1)[0]
+
+    def _esc(_s):
+        return (
+            _s.replace("&", "&amp;").replace("<", "&lt;")
+            .replace(">", "&gt;").replace('"', "&quot;")
+        )
+
+    _chips = []
+    for _pos, _c, _f in zip(scrub_positions, _cur, _final):
+        _bg, _fg = ("#54A24B", "white") if _c == _f else ("#ECECEC", "#333")
+        _tip = f"audio position {_pos} · here: {_c!r} · final layer: {_f!r}"
+        _chips.append(
+            f'<span title="{_esc(_tip)}" style="background:{_bg};color:{_fg};'
+            f'padding:2px 6px;margin:2px;border-radius:3px;display:inline-block">'
+            f'{_esc(_c).replace(" ", "&nbsp;") or "·"}</span>'
+        )
+
+    mo.vstack([
+        mo.md(
+            f"**{scrub_layer_names[_k].replace('_', ' ')}** / {_n_layers - 1} &nbsp;·&nbsp; "
+            f"{len(set(_cur))} unique predictions across {_n} audio positions &nbsp;·&nbsp; "
+            f"most common <code>{_esc(_top_tok.strip()) or '·'}</code> ({_top_count}/{_n}) "
+            f"&nbsp;·&nbsp; **{_locked}/{_n}** match the final layer (green)"
+        ),
+        mo.Html(
+            "<div style='font-family:monospace;font-size:13px;line-height:2.2'>"
+            + "".join(_chips)
+            + "</div>"
+        ),
+    ])
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
     ## Attention Knockout
 
     `KNOCKOUT_RULES` are `(source_type, target_type, start_layer, end_layer)` tuples.
@@ -628,13 +727,18 @@ def _(
         _ko_rules = KNOCKOUT_RULES
         _ko_banner = None
 
-    _ko_cmp = mo.hstack(
-        [
-            mo.vstack([mo.md("**Baseline**"), mo.md(baseline_text)]),
-            mo.vstack([mo.md(f"**Knockout** `{_ko_rules}`"), mo.md(knockout_text)]),
-        ],
-        widths="equal",
-    )
+    from wigglystuff import TextCompare as _TextCompare
+
+    _ko_cmp = mo.vstack([
+        mo.md(
+            f"**Baseline** (left) vs **knockout** `{_ko_rules}` (right) — shared "
+            "phrases highlight on hover; **unhighlighted text is where the "
+            "knockout changed the caption**."
+        ),
+        mo.ui.anywidget(_TextCompare(
+            text_a=baseline_text, text_b=knockout_text, min_match_words=2
+        )),
+    ])
     _ko_display = mo.vstack([_ko_banner, _ko_cmp]) if _ko_banner is not None else _ko_cmp
     _ko_display
     return (
@@ -726,7 +830,6 @@ def _(
             kind="warn",
         )
     else:
-        from src.teacher_forcing import render_delta_strip as _w9_strip
         from src.teacher_forcing import teacher_forced_delta as _w9_tfd
 
         # Mirror the params-cell intervention with `answer` as the source: the
@@ -774,15 +877,56 @@ def _(
                         bordered=True,
                     ),
                 ], widths="equal", gap=1),
-                mo.md("###### Per-token Δ log-likelihood (hover a word for its tokens' nats)"),
-                mo.Html(
-                    "<div style='line-height:2.1;font-family:monospace;font-size:15px'>"
-                    + _w9_strip(w9_tf_result["caption_tokens"], _w9_delta)
-                    + "</div>"
-                ),
             ])
     _w9_out
     return (w9_tf_result,)
+
+
+@app.cell
+def _(mo, w9_tf_result):
+    # Skipped quietly in USE_PRECOMPUTED mode / after a scoring failure.
+    mo.stop(w9_tf_result is None)
+    from wigglystuff import TangleSlider as _W9Tangle
+
+    _w9_vals = [float(_x) for _x in w9_tf_result["delta"].detach().cpu().float().tolist()]
+    w9_threshold = mo.ui.anywidget(_W9Tangle(
+        amount=0.5,
+        min_value=0.0,
+        max_value=max(1.0, round(-min(_w9_vals + [0.0]) + 0.05, 2)),
+        step=0.05,
+        digits=2,
+        suffix=" nats",
+    ))
+    mo.md(
+        "###### Per-token Δ log-likelihood (hover a word for its tokens' nats)\n\n"
+        f"Outline every word that lost more than {w9_threshold} — "
+        "**drag the dotted number** to move the threshold; the strip below "
+        "updates instantly (no model pass)."
+    )
+    return (w9_threshold,)
+
+
+@app.cell
+def _(mo, w9_threshold, w9_tf_result):
+    from src.teacher_forcing import group_tokens_into_words as _w9_group
+    from src.teacher_forcing import render_delta_strip as _w9_strip
+
+    _delta = [float(_x) for _x in w9_tf_result["delta"].detach().cpu().float().tolist()]
+    _th = abs(float(w9_threshold.value.get("amount", 0.5)))
+    _words = _w9_group(w9_tf_result["caption_tokens"], _delta)
+    _hit = [_w for _w in _words if _w[1] < -_th]
+    mo.vstack([
+        mo.Html(
+            "<div style='line-height:2.1;font-family:monospace;font-size:15px'>"
+            + _w9_strip(w9_tf_result["caption_tokens"], _delta, highlight_below=_th)
+            + "</div>"
+        ),
+        mo.md(
+            f"**{len(_hit)}/{len(_words)}** words outlined below −{_th:.2f} nats — together "
+            f"Δ = {sum(_w[1] for _w in _hit):+.2f} of the total {w9_tf_result['delta_total']:+.2f}."
+        ),
+    ])
+    return
 
 
 @app.cell(hide_code=True)
@@ -1248,7 +1392,6 @@ def _(
 
     from qwen_omni_utils import process_mm_info as _tf_mm_info
 
-    from src.teacher_forcing import render_delta_strip as _render_strip
     from src.teacher_forcing import teacher_forced_delta as _tfd
 
     _tp = tf_controls.value
@@ -1297,6 +1440,7 @@ def _(
         )
         return cache_put(playground_caches["encode"], _key, (_inp, _types))
 
+    tf_result = None
     _tf_out = None
     try:
         # Caption cache (the F1 spec's "cached keyed on (clip, prompt, nframes)"):
@@ -1314,6 +1458,7 @@ def _(
                 cached_caption_ids=_tf_cached_c,
             )
             cache_put(playground_caches["caption"], _tf_cap_key, _tf_res["caption_ids"])
+            tf_result = _tf_res
     except Exception as _e:  # noqa: BLE001 — surface any failure in-notebook
         _tf_out = mo.callout(
             mo.md(f"**Run failed** — `{type(_e).__name__}: {_e}`"), kind="danger"
@@ -1346,21 +1491,68 @@ def _(
                 bordered=True,
             ),
         ]
-        _tf_rows = [
-            {"pos": _i, "token": _t, "Δ log-lik": round(_d, 3)}
-            for _i, (_t, _d) in enumerate(zip(_tf_toks, _tf_delta))
-        ]
         _tf_out = mo.vstack([
             mo.md(
                 f"**Video** `{_tf_video.name}` &nbsp;·&nbsp; **Frames** {_tf_nframes} "
                 f"&nbsp;·&nbsp; **Prompt** _{_tf_prompt}_ &nbsp;·&nbsp; **Knockout** {_tf_rule_txt}"
             ),
             mo.hstack(_tf_stats, widths="equal", gap=1),
-            mo.md("###### Per-token Δ log-likelihood (hot = believed less after the knockout; hover a word for its tokens' nats)"),
-            mo.Html(f"<div style='line-height:2.1;font-family:monospace;font-size:15px'>{_render_strip(_tf_toks, _tf_delta)}</div>"),
-            mo.ui.table(_tf_rows, selection=None, pagination=True, page_size=16),
         ])
     _tf_out
+    return (tf_result,)
+
+
+@app.cell
+def _(mo, tf_result):
+    # No output until the form above has produced a result (and skipped after a
+    # failed run) — mirrors the W9 threshold cells.
+    mo.stop(tf_result is None)
+    from wigglystuff import TangleSlider as _TfTangle
+
+    _tf_vals = [float(_x) for _x in tf_result["delta"].detach().cpu().float().tolist()]
+    tf_threshold = mo.ui.anywidget(_TfTangle(
+        amount=0.5,
+        min_value=0.0,
+        max_value=max(1.0, round(-min(_tf_vals + [0.0]) + 0.05, 2)),
+        step=0.05,
+        digits=2,
+        suffix=" nats",
+    ))
+    mo.md(
+        "###### Per-token Δ log-likelihood (hot = believed less after the knockout; "
+        "hover a word for its tokens' nats)\n\n"
+        f"Outline every word that lost more than {tf_threshold} — "
+        "**drag the dotted number**; only this strip re-renders, never the model."
+    )
+    return (tf_threshold,)
+
+
+@app.cell
+def _(mo, tf_result, tf_threshold):
+    from src.teacher_forcing import group_tokens_into_words as _tf_group
+    from src.teacher_forcing import render_delta_strip as _tf_strip
+
+    _delta = [float(_x) for _x in tf_result["delta"].detach().cpu().float().tolist()]
+    _toks = tf_result["caption_tokens"]
+    _th = abs(float(tf_threshold.value.get("amount", 0.5)))
+    _words = _tf_group(_toks, _delta)
+    _hit = [_w for _w in _words if _w[1] < -_th]
+    _rows = [
+        {"pos": _i, "token": _t, "Δ log-lik": round(_d, 3)}
+        for _i, (_t, _d) in enumerate(zip(_toks, _delta))
+    ]
+    mo.vstack([
+        mo.Html(
+            "<div style='line-height:2.1;font-family:monospace;font-size:15px'>"
+            + _tf_strip(_toks, _delta, highlight_below=_th)
+            + "</div>"
+        ),
+        mo.md(
+            f"**{len(_hit)}/{len(_words)}** words outlined below −{_th:.2f} nats — together "
+            f"Δ = {sum(_w[1] for _w in _hit):+.2f} of the total {tf_result['delta_total']:+.2f}."
+        ),
+        mo.ui.table(_rows, selection=None, pagination=True, page_size=16),
+    ])
     return
 
 

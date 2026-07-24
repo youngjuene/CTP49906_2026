@@ -145,7 +145,9 @@ def group_tokens_into_words(caption_tokens, delta):
     return [tuple(w) for w in words]
 
 
-def render_delta_strip(caption_tokens, delta, cmap_name="RdBu", word_level=True):
+def render_delta_strip(
+    caption_tokens, delta, cmap_name="RdBu", word_level=True, highlight_below=None
+):
     """Colored caption strip: word-level display, token-level values (F2).
 
     Diverging scale centered at 0. Convention is pinned to `delta = knockout -
@@ -158,6 +160,11 @@ def render_delta_strip(caption_tokens, delta, cmap_name="RdBu", word_level=True)
     delta and its hover shows the sum plus the per-token breakdown when the word
     has several pieces. Pass `word_level=False` for the raw one-span-per-token
     view.
+
+    `highlight_below`, when set to a threshold `t >= 0`, outlines every display
+    unit whose delta is strictly below `-t` -- an outline (not a color change)
+    so the diverging background scale stays readable underneath. The notebook's
+    draggable threshold drives this.
     """
     import matplotlib
 
@@ -187,9 +194,11 @@ def render_delta_strip(caption_tokens, delta, cmap_name="RdBu", word_level=True)
         if pieces:
             title += " (" + ", ".join(f"{_esc(p.strip()) or '·'}: {v:+.2f}" for p, v in pieces) + ")"
         shown = _esc(text).replace(" ", "&nbsp;") or "&nbsp;"
+        flagged = highlight_below is not None and val < -abs(highlight_below)
+        outline = "outline:2px solid #333;outline-offset:1px;" if flagged else ""
         spans.append(
             f'<span title="{title}" '
-            f'style="background:{bg};padding:1px 2px;border-radius:2px">{shown}</span>'
+            f'style="background:{bg};{outline}padding:1px 2px;border-radius:2px">{shown}</span>'
         )
     return "".join(spans)
 

@@ -126,6 +126,23 @@ def test_strip_word_level_display_with_token_hover():
     assert ">ophone</span>" in raw
 
 
+def test_strip_highlight_below_outlines_only_big_drops():
+    html = render_delta_strip(
+        ["a", " sax", "ophone", " plays"],
+        torch.tensor([0.0, -2.0, -1.0, -0.2]),
+        highlight_below=0.5,
+    )
+    # ' saxophone' (summed Δ=-3.0) is outlined; 'a' (0.0) and ' plays' (-0.2) are not
+    assert html.count("outline:2px solid") == 1
+    outlined = [s for s in html.split("<span") if "outline:2px solid" in s]
+    assert "saxophone" in outlined[0]
+    # strictly below -t: a word at exactly -t stays plain
+    at_threshold = render_delta_strip(["a"], torch.tensor([-0.5]), highlight_below=0.5)
+    assert "outline" not in at_threshold
+    # default (no threshold) stays outline-free — backward compatible
+    assert "outline" not in render_delta_strip(["a"], torch.tensor([-9.0]))
+
+
 def test_answer_to_audio_masks_exactly_the_right_cells():
     types = ["query_text", "audio", "audio", "video", "answer", "answer"]
     numeric = torch.tensor([TOKEN_TYPE_MAP[t] for t in types])
