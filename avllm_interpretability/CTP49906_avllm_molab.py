@@ -567,7 +567,7 @@ def _(mo):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(csv, logit_csv_written, mo):
     # One parse for both scrubber cells: rows = audio positions, cols = layers.
     if logit_csv_written.is_file():
