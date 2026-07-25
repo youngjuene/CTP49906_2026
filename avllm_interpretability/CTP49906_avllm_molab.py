@@ -555,21 +555,20 @@ def _(mo):
     The diversity bars above aggregate away *what* the model is predicting. This
     scrubber replays the same CSV one layer at a time: each chip is one
     audio-token position, showing the token its layer output decodes to (a raw
-    probe — see the caveat in the logit-lens code). Drag the slider, or press
-    **▶** to sweep the layers, and watch early-layer noise crystallize into the
-    final prediction — a chip turns green once it already matches the final
-    layer's token.
+    probe — see the caveat in the logit-lens code). **Drag the slider** (or type
+    a layer index) and watch early-layer noise crystallize into the final
+    prediction — a chip turns green once it already matches the final layer's
+    token.
 
     This is a pure re-render of the CSV written above: no GPU, and it works in
-    `USE_PRECOMPUTED` replay mode.
+    `USE_PRECOMPUTED` replay mode. Take it slowly — layer 0 → 35 by hand is the
+    point; there is no autoplay to fight with.
     """)
     return
 
 
 @app.cell
 def _(csv, logit_csv_written, mo):
-    from wigglystuff import PlaySlider as _PlaySlider
-
     # One parse for both scrubber cells: rows = audio positions, cols = layers.
     if logit_csv_written.is_file():
         with open(logit_csv_written, newline="", encoding="utf-8") as _fh:
@@ -587,23 +586,27 @@ def _(csv, logit_csv_written, mo):
         ),
     )
 
-    scrub_layer = mo.ui.anywidget(_PlaySlider(
-        value=0.0,
-        min_value=0.0,
-        max_value=float(len(scrub_layer_names) - 1),
-        step=1.0,
-        interval_ms=400,
-        loop=True,
-        width=460,
-    ))
-    mo.hstack([mo.md("**Thinker layer**"), scrub_layer], justify="start", gap=1)
+    # marimo's own slider rather than an anywidget one: this cell's consumer
+    # re-renders a few hundred chips per change, and an autoplaying anywidget
+    # cannot tell its own echoed value from a stale one under that latency.
+    scrub_layer = mo.ui.slider(
+        start=0,
+        stop=max(1, len(scrub_layer_names) - 1),
+        step=1,
+        value=0,
+        label="**Thinker layer**",
+        show_value=True,
+        include_input=True,
+        full_width=True,
+    )
+    scrub_layer
     return scrub_layer, scrub_layer_names, scrub_positions, scrub_preds
 
 
 @app.cell
 def _(Counter, mo, scrub_layer, scrub_layer_names, scrub_positions, scrub_preds):
     _n_layers = len(scrub_layer_names)
-    _k = max(0, min(int(scrub_layer.value.get("value", 0)), _n_layers - 1))
+    _k = max(0, min(int(scrub_layer.value), _n_layers - 1))
     _cur = [_p[_k] for _p in scrub_preds]
     _final = [_p[-1] for _p in scrub_preds]
     _n = len(_cur)
@@ -733,7 +736,8 @@ def _(
         mo.md(
             f"**Baseline** (left) vs **knockout** `{_ko_rules}` (right) — shared "
             "phrases highlight on hover; **unhighlighted text is where the "
-            "knockout changed the caption**."
+            "knockout changed the caption**. This is one fixed layer band; the "
+            "🎚️ section below sweeps the band interactively."
         ),
         mo.ui.anywidget(_TextCompare(
             text_a=baseline_text, text_b=knockout_text, min_match_words=2
@@ -786,6 +790,163 @@ def _(attention_summary, mo, np, plt):
         _fig.colorbar(_im, ax=_ax, label="Attention mass")
         _out = _fig
     _out
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## 🎚️ Interactive: which layer band carries the pathway?
+
+    The comparison above is a **single** knockout — one modality, one fixed layer
+    band (all 36 layers). Blocking everywhere tells you *that* a pathway matters,
+    not *where* it is used. This section sweeps the band: pick a target modality
+    and a layer window, regenerate, and see how the caption drifts from the
+    baseline.
+
+    Try `[0, 12)` vs `[12, 24)` vs `[24, 36)` against the same target. A band
+    whose caption stays identical to the baseline is a band where that pathway
+    is not carrying the description — narrowing "the model uses video" down to
+    "the model uses video *here*".
+
+    Each ▶ runs one greedy generation on the already-encoded clip (a few
+    seconds); the baseline is reused, never regenerated. Both captions are shown
+    **answer-only** — the shared prompt is stripped so the diff is about the
+    model's words, not the instruction.
+    """)
+    return
+
+
+@app.cell
+def _(KNOCKOUT_RULES, attention_model, mo):
+    _band_layers = len(attention_model.thinker.model.layers)
+    _band_targets = ["video", "audio", "image", "query_text"]
+    _band_default = KNOCKOUT_RULES[0][1] if KNOCKOUT_RULES else "video"
+    band_controls = mo.md(
+        "Forbid **generated** tokens from attending to {target} "
+        "across thinker layers {layers}\n\n"
+        f"(`end` is exclusive; this thinker has **{_band_layers}** layers. The clip, "
+        "prompt, and frame count stay as set in the parameters cell.)"
+    ).batch(
+        target=mo.ui.dropdown(
+            _band_targets,
+            value=_band_default if _band_default in _band_targets else "video",
+        ),
+        layers=mo.ui.range_slider(
+            0, _band_layers, step=1, value=[0, _band_layers // 3], show_value=True
+        ),
+    ).form(submit_button_label="▶ Regenerate with this band", bordered=True)
+    band_controls
+    return (band_controls,)
+
+
+@app.cell
+def _(
+    MAX_NEW_TOKENS,
+    USE_PRECOMPUTED,
+    attention_baseline_ids,
+    attention_inputs,
+    attention_model,
+    attention_processor,
+    attention_token_types,
+    band_controls,
+    block_attention,
+    mo,
+    torch,
+):
+    import difflib as _difflib
+
+    from wigglystuff import TextCompare as _BandCompare
+
+    _bp = band_controls.value
+    mo.stop(
+        _bp is None,
+        mo.callout(
+            mo.md("Pick a target and a layer band, then press **▶ Regenerate with this band**."),
+            kind="info",
+        ),
+    )
+    mo.stop(
+        USE_PRECOMPUTED or attention_inputs is None,
+        mo.callout(
+            mo.md(
+                "**This sweep needs the live model** — it regenerates a caption per "
+                "band, so it is skipped while `USE_PRECOMPUTED=True`."
+            ),
+            kind="warn",
+        ),
+    )
+
+    _lo, _hi = int(_bp["layers"][0]), int(_bp["layers"][1])
+    _band_rules = [("generated", _bp["target"], _lo, _hi)]
+    _plen = attention_inputs["input_ids"].shape[1]
+    # Answer-only text: slicing off the shared prompt keeps the diff focused on
+    # the generated words (the prompt would otherwise dominate as one big match).
+    _base_ans = attention_processor.batch_decode(
+        attention_baseline_ids[:, _plen:],
+        skip_special_tokens=True,
+        clean_up_tokenization_spaces=False,
+    )[0]
+
+    _band_out = None
+    try:
+        with mo.status.spinner(
+            title=f"Knockout generation · generated→{_bp['target']} [{_lo},{_hi})…"
+        ):
+            with block_attention(
+                attention_model, _band_rules, attention_token_types,
+                len(attention_token_types), track_attention=False,
+            ):
+                with torch.no_grad():
+                    _band_ids = attention_model.thinker.generate(
+                        **attention_inputs, max_new_tokens=MAX_NEW_TOKENS, do_sample=False,
+                    )
+        _band_ans = attention_processor.batch_decode(
+            _band_ids[:, _plen:], skip_special_tokens=True, clean_up_tokenization_spaces=False
+        )[0]
+    except Exception as _e:  # noqa: BLE001 — surface any run failure in-notebook
+        _band_out = mo.callout(
+            mo.md(f"**Run failed** — `{type(_e).__name__}: {_e}`"), kind="danger"
+        )
+
+    if _band_out is None:
+        _ratio = _difflib.SequenceMatcher(
+            None, _base_ans.split(), _band_ans.split()
+        ).ratio()
+        _unchanged = _band_ans.strip() == _base_ans.strip()
+        _band_out = mo.vstack([
+            mo.md(
+                f"**Knockout** `generated→{_bp['target']}` **[{_lo}, {_hi})** "
+                f"&nbsp;·&nbsp; {_hi - _lo} of "
+                f"{len(attention_model.thinker.model.layers)} layers blocked"
+            ),
+            mo.hstack([
+                mo.stat(
+                    value=f"{_ratio:.0%}",
+                    label="Caption similarity to baseline",
+                    caption="word-level; 100% = this band changed nothing",
+                    direction="increase" if _ratio > 0.99 else "decrease",
+                    bordered=True,
+                ),
+                mo.stat(
+                    value="unchanged" if _unchanged else "changed",
+                    label="Effect of this band",
+                    caption=(
+                        "the pathway is not carried here"
+                        if _unchanged else "blocking here moved the caption"
+                    ),
+                    bordered=True,
+                ),
+            ], widths="equal", gap=1),
+            mo.md(
+                "**Baseline** (left) vs **this band** (right) — shared phrases "
+                "highlight on hover; **unhighlighted text is what this band changed**."
+            ),
+            mo.ui.anywidget(_BandCompare(
+                text_a=_base_ans, text_b=_band_ans, min_match_words=2
+            )),
+        ])
+    _band_out
     return
 
 
@@ -886,22 +1047,21 @@ def _(
 def _(mo, w9_tf_result):
     # Skipped quietly in USE_PRECOMPUTED mode / after a scoring failure.
     mo.stop(w9_tf_result is None)
+    from src.teacher_forcing import threshold_slider_params as _w9_params
     from wigglystuff import TangleSlider as _W9Tangle
 
-    _w9_vals = [float(_x) for _x in w9_tf_result["delta"].detach().cpu().float().tolist()]
+    # Bounds/step/default derived from this caption's own drops, so the drag
+    # spans the range in ~300 px and starts with a meaningful set outlined.
     w9_threshold = mo.ui.anywidget(_W9Tangle(
-        amount=0.5,
-        min_value=0.0,
-        max_value=max(1.0, round(-min(_w9_vals + [0.0]) + 0.05, 2)),
-        step=0.05,
-        digits=2,
         suffix=" nats",
+        **_w9_params(w9_tf_result["caption_tokens"], w9_tf_result["delta"]),
     ))
     mo.md(
         "###### Per-token Δ log-likelihood (hover a word for its tokens' nats)\n\n"
-        f"Outline every word that lost more than {w9_threshold} — "
-        "**drag the dotted number** to move the threshold; the strip below "
-        "updates instantly (no model pass)."
+        f"Show only the words that lost more than {w9_threshold} — "
+        "**drag the underlined number sideways** (or click it and type). Words "
+        "past the threshold turn **bold with an outline**; the rest fade out, so "
+        "the strip visibly re-sorts as you drag. Nothing here touches the model."
     )
     return (w9_threshold,)
 
@@ -912,9 +1072,14 @@ def _(mo, w9_threshold, w9_tf_result):
     from src.teacher_forcing import render_delta_strip as _w9_strip
 
     _delta = [float(_x) for _x in w9_tf_result["delta"].detach().cpu().float().tolist()]
-    _th = abs(float(w9_threshold.value.get("amount", 0.5)))
+    _th = abs(float(w9_threshold.value.get("amount", 0.0)))
     _words = _w9_group(w9_tf_result["caption_tokens"], _delta)
     _hit = [_w for _w in _words if _w[1] < -_th]
+    _share = (
+        100.0 * sum(_w[1] for _w in _hit) / w9_tf_result["delta_total"]
+        if w9_tf_result["delta_total"]
+        else 0.0
+    )
     mo.vstack([
         mo.Html(
             "<div style='line-height:2.1;font-family:monospace;font-size:15px'>"
@@ -922,8 +1087,9 @@ def _(mo, w9_threshold, w9_tf_result):
             + "</div>"
         ),
         mo.md(
-            f"**{len(_hit)}/{len(_words)}** words outlined below −{_th:.2f} nats — together "
-            f"Δ = {sum(_w[1] for _w in _hit):+.2f} of the total {w9_tf_result['delta_total']:+.2f}."
+            f"**{len(_hit)}/{len(_words)}** words drop more than −{_th:.2f} nats — together "
+            f"Δ = {sum(_w[1] for _w in _hit):+.2f} nats, **{_share:.0f}%** of the total "
+            f"{w9_tf_result['delta_total']:+.2f}."
         ),
     ])
     return
@@ -1507,22 +1673,19 @@ def _(mo, tf_result):
     # No output until the form above has produced a result (and skipped after a
     # failed run) — mirrors the W9 threshold cells.
     mo.stop(tf_result is None)
+    from src.teacher_forcing import threshold_slider_params as _tf_params
     from wigglystuff import TangleSlider as _TfTangle
 
-    _tf_vals = [float(_x) for _x in tf_result["delta"].detach().cpu().float().tolist()]
     tf_threshold = mo.ui.anywidget(_TfTangle(
-        amount=0.5,
-        min_value=0.0,
-        max_value=max(1.0, round(-min(_tf_vals + [0.0]) + 0.05, 2)),
-        step=0.05,
-        digits=2,
         suffix=" nats",
+        **_tf_params(tf_result["caption_tokens"], tf_result["delta"]),
     ))
     mo.md(
         "###### Per-token Δ log-likelihood (hot = believed less after the knockout; "
         "hover a word for its tokens' nats)\n\n"
-        f"Outline every word that lost more than {tf_threshold} — "
-        "**drag the dotted number**; only this strip re-renders, never the model."
+        f"Show only the words that lost more than {tf_threshold} — "
+        "**drag the underlined number sideways** (or click it and type). Only this "
+        "strip re-renders, never the model."
     )
     return (tf_threshold,)
 
@@ -1534,9 +1697,14 @@ def _(mo, tf_result, tf_threshold):
 
     _delta = [float(_x) for _x in tf_result["delta"].detach().cpu().float().tolist()]
     _toks = tf_result["caption_tokens"]
-    _th = abs(float(tf_threshold.value.get("amount", 0.5)))
+    _th = abs(float(tf_threshold.value.get("amount", 0.0)))
     _words = _tf_group(_toks, _delta)
     _hit = [_w for _w in _words if _w[1] < -_th]
+    _share = (
+        100.0 * sum(_w[1] for _w in _hit) / tf_result["delta_total"]
+        if tf_result["delta_total"]
+        else 0.0
+    )
     _rows = [
         {"pos": _i, "token": _t, "Δ log-lik": round(_d, 3)}
         for _i, (_t, _d) in enumerate(zip(_toks, _delta))
@@ -1548,8 +1716,9 @@ def _(mo, tf_result, tf_threshold):
             + "</div>"
         ),
         mo.md(
-            f"**{len(_hit)}/{len(_words)}** words outlined below −{_th:.2f} nats — together "
-            f"Δ = {sum(_w[1] for _w in _hit):+.2f} of the total {tf_result['delta_total']:+.2f}."
+            f"**{len(_hit)}/{len(_words)}** words drop more than −{_th:.2f} nats — together "
+            f"Δ = {sum(_w[1] for _w in _hit):+.2f} nats, **{_share:.0f}%** of the total "
+            f"{tf_result['delta_total']:+.2f}."
         ),
         mo.ui.table(_rows, selection=None, pagination=True, page_size=16),
     ])

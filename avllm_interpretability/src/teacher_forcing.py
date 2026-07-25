@@ -161,10 +161,12 @@ def render_delta_strip(
     has several pieces. Pass `word_level=False` for the raw one-span-per-token
     view.
 
-    `highlight_below`, when set to a threshold `t >= 0`, outlines every display
-    unit whose delta is strictly below `-t` -- an outline (not a color change)
-    so the diverging background scale stays readable underneath. The notebook's
-    draggable threshold drives this.
+    `highlight_below`, when set to a threshold `t >= 0`, splits the strip in
+    two: units below `-t` are outlined and bolded, everything else is dimmed.
+    Both halves change together so dragging the threshold produces an obvious
+    visual sweep (an outline alone is too subtle to read while dragging). The
+    diverging background scale is preserved underneath either way, and passing
+    `None` (the default) renders the plain strip.
     """
     import matplotlib
 
@@ -194,13 +196,65 @@ def render_delta_strip(
         if pieces:
             title += " (" + ", ".join(f"{_esc(p.strip()) or '·'}: {v:+.2f}" for p, v in pieces) + ")"
         shown = _esc(text).replace(" ", "&nbsp;") or "&nbsp;"
-        flagged = highlight_below is not None and val < -abs(highlight_below)
-        outline = "outline:2px solid #333;outline-offset:1px;" if flagged else ""
+        if highlight_below is None:
+            emphasis = ""
+        elif val < -abs(highlight_below):
+            emphasis = "outline:2px solid #333;outline-offset:1px;font-weight:700;"
+        else:
+            emphasis = "opacity:0.3;"
         spans.append(
             f'<span title="{title}" '
-            f'style="background:{bg};{outline}padding:1px 2px;border-radius:2px">{shown}</span>'
+            f'style="background:{bg};{emphasis}padding:1px 2px;border-radius:2px">{shown}</span>'
         )
     return "".join(spans)
+
+
+def threshold_slider_params(caption_tokens, delta, target_fraction=0.25):
+    """Data-driven settings for the notebook's draggable Δ threshold.
+
+    The Tangle slider moves by `floor(drag_px / pixels_per_step) * step`, so a
+    hardcoded `step` makes the control feel dead whenever the caption's actual
+    drops are much larger than it (thousands of pixels to cross the range) and
+    twitchy when they are much smaller. A fixed default `amount` has the same
+    problem: sitting above the worst drop, it outlines nothing at any threshold
+    the user is likely to try, which reads as "the widget does nothing".
+
+    So both are derived from the data: `max_value` tracks the worst word-level
+    drop, `step` divides the range into ~100 drag steps (~300 px end to end at
+    `pixels_per_step=3`), and the default `amount` is the quantile that starts
+    the strip with roughly `target_fraction` of the dropped words outlined.
+
+    Returns a dict ready to splat into `TangleSlider(**params)`.
+    """
+    words = group_tokens_into_words(caption_tokens, [float(x) for x in delta])
+    drops = sorted(-w[1] for w in words if w[1] < 0)  # positive magnitudes
+    worst = drops[-1] if drops else 0.0
+    max_value = max(0.1, round(worst * 1.05, 2))
+    # ~100 steps across the range, at whatever precision that needs: a fixed
+    # 2-decimal step would collapse a small-Δ caption's whole range into a few
+    # steps (30 px of drag end to end), making the control twitchy.
+    raw_step = max_value / 100.0
+    digits = 2
+    while raw_step < 10 ** -digits and digits < 4:
+        digits += 1
+    step = round(raw_step, digits)
+    if drops:
+        # Aim to start with the worst `target_fraction` of dropped words shown,
+        # then sit one step *below* that drop: the strip's test is strict
+        # (`val < -t`), so landing exactly on a drop would show nothing.
+        n_target = max(1, round(len(drops) * target_fraction))
+        amount = round(max(0.0, drops[len(drops) - n_target] - step), digits)
+    else:
+        # Nothing dropped: start at 0 so any negative delta still stands out.
+        amount = 0.0
+    return {
+        "amount": amount,
+        "min_value": 0.0,
+        "max_value": max_value,
+        "step": step,
+        "pixels_per_step": 3,
+        "digits": digits,
+    }
 
 
 def teacher_forced_delta(

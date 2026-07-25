@@ -25,6 +25,7 @@ from src.attention_knockout_experiment import (  # noqa: E402
 from src.teacher_forcing import (  # noqa: E402
     answer_distribution_summaries, build_answer_token_types, caption_logprobs, delta_logprobs,
     group_tokens_into_words, render_delta_strip, teacher_forced_delta,
+    threshold_slider_params,
 )
 
 NEG = torch.finfo(torch.float32).min
@@ -126,21 +127,54 @@ def test_strip_word_level_display_with_token_hover():
     assert ">ophone</span>" in raw
 
 
-def test_strip_highlight_below_outlines_only_big_drops():
+def test_strip_highlight_below_splits_emphasis_from_dimming():
     html = render_delta_strip(
         ["a", " sax", "ophone", " plays"],
         torch.tensor([0.0, -2.0, -1.0, -0.2]),
         highlight_below=0.5,
     )
-    # ' saxophone' (summed Δ=-3.0) is outlined; 'a' (0.0) and ' plays' (-0.2) are not
+    # ' saxophone' (summed Δ=-3.0) is emphasized; 'a' (0.0) and ' plays' (-0.2) dim.
     assert html.count("outline:2px solid") == 1
+    assert html.count("opacity:0.3") == 2
     outlined = [s for s in html.split("<span") if "outline:2px solid" in s]
-    assert "saxophone" in outlined[0]
-    # strictly below -t: a word at exactly -t stays plain
+    assert "saxophone" in outlined[0] and "font-weight:700" in outlined[0]
+    # strictly below -t: a word at exactly -t is dimmed, not emphasized
     at_threshold = render_delta_strip(["a"], torch.tensor([-0.5]), highlight_below=0.5)
-    assert "outline" not in at_threshold
-    # default (no threshold) stays outline-free — backward compatible
-    assert "outline" not in render_delta_strip(["a"], torch.tensor([-9.0]))
+    assert "outline" not in at_threshold and "opacity:0.3" in at_threshold
+    # default (no threshold) touches neither — backward compatible
+    plain = render_delta_strip(["a"], torch.tensor([-9.0]))
+    assert "outline" not in plain and "opacity" not in plain
+
+
+def test_threshold_params_scale_to_the_captions_own_drops():
+    toks = ["a", " b", " c", " d"]
+    # Worst word-level drop is 20 nats -> the range must reach it, and the step
+    # must divide the range into ~100 drag steps (a fixed 0.05 would need
+    # thousands of pixels to cross).
+    big = threshold_slider_params(toks, torch.tensor([-1.0, -5.0, -20.0, 0.2]))
+    assert big["max_value"] >= 20.0
+    assert big["min_value"] == 0.0 and big["pixels_per_step"] == 3
+    # The default outlines something rather than sitting above every drop.
+    assert 0.0 < big["amount"] <= big["max_value"]
+    words = group_tokens_into_words(toks, [-1.0, -5.0, -20.0, 0.2])
+    assert any(w[1] < -big["amount"] for w in words)
+    # Tiny drops: a hardcoded 0.5 default would outline nothing at all here.
+    small = threshold_slider_params(toks, torch.tensor([-0.01, -0.02, -0.03, 0.0]))
+    assert small["amount"] < 0.5
+    assert any(
+        w[1] < -small["amount"] for w in group_tokens_into_words(toks, [-0.01, -0.02, -0.03, 0.0])
+    )
+    # No drops at all: degrade to 0.0 instead of dividing by zero.
+    flat = threshold_slider_params(toks, torch.tensor([0.0, 0.1, 0.2, 0.3]))
+    assert flat["amount"] == 0.0 and flat["max_value"] > 0.0 and flat["step"] > 0.0
+    # Whatever the scale, crossing the range must stay a comfortable drag: the
+    # Tangle moves by floor(px / pixels_per_step) * step, so span in pixels is
+    # (max/step) * pixels_per_step. Both a fixed step and a fixed precision
+    # break this at one end or the other.
+    for params in (big, small, flat):
+        span_px = params["max_value"] / params["step"] * params["pixels_per_step"]
+        assert 150 <= span_px <= 450, (params, span_px)
+        assert params["step"] >= 10 ** -params["digits"], params  # step is visible at this precision
 
 
 def test_answer_to_audio_masks_exactly_the_right_cells():
