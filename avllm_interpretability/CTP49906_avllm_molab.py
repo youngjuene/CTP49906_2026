@@ -589,6 +589,10 @@ def _(csv, logit_csv_written, mo):
     # marimo's own slider rather than an anywidget one: this cell's consumer
     # re-renders a few hundred chips per change, and an autoplaying anywidget
     # cannot tell its own echoed value from a stale one under that latency.
+    #
+    # Defined here but rendered by the cell below, stacked with the readout it
+    # drives: marimo forbids reading `.value` in the cell that creates the
+    # element, so this cell deliberately has no output of its own.
     scrub_layer = mo.ui.slider(
         start=0,
         stop=max(1, len(scrub_layer_names) - 1),
@@ -599,7 +603,6 @@ def _(csv, logit_csv_written, mo):
         include_input=True,
         full_width=True,
     )
-    scrub_layer
     return scrub_layer, scrub_layer_names, scrub_positions, scrub_preds
 
 
@@ -629,7 +632,10 @@ def _(Counter, mo, scrub_layer, scrub_layer_names, scrub_positions, scrub_preds)
             f'{_esc(_c).replace(" ", "&nbsp;") or "·"}</span>'
         )
 
+    # Control and readout in one output block, so dragging the slider does not
+    # make the eye travel to a separate cell to read the effect.
     mo.vstack([
+        scrub_layer,
         mo.md(
             f"**{scrub_layer_names[_k].replace('_', ' ')}** / {_n_layers - 1} &nbsp;·&nbsp; "
             f"{len(set(_cur))} unique predictions across {_n} audio positions &nbsp;·&nbsp; "
@@ -641,7 +647,7 @@ def _(Counter, mo, scrub_layer, scrub_layer_names, scrub_positions, scrub_preds)
             + "".join(_chips)
             + "</div>"
         ),
-    ])
+    ], gap=0.5)
     return
 
 
