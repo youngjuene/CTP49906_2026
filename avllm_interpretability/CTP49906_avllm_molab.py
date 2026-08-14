@@ -102,6 +102,14 @@ def _(mo):
         ("accelerate", "accelerate", "1.14.0", "accelerate==1.14.0"),
         ("qwen_omni_utils", "qwen-omni-utils", None, "qwen-omni-utils==0.0.9"),
         ("av", "av", None, "av"),  # PyAV — backs the video-decode shim below
+        # qwen-omni-utils 0.0.9 imports these at module scope but declares
+        # neither: `audioread` (used for real, via audioread.ffdec) is missing
+        # from its metadata entirely, and `librosa` is declared but absent on any
+        # kernel where its dependency set was not resolved. Both are listed here
+        # so the common case is fixed deterministically rather than by the
+        # import-repair loop below.
+        ("audioread", "audioread", None, "audioread"),
+        ("librosa", "librosa", None, "librosa"),
         # anywidget-based classroom widgets (caption diff, Δ threshold).
         # 0.5.15+ needs Python >= 3.11 — molab qualifies.
         ("wigglystuff", "wigglystuff", "0.5.21", "wigglystuff==0.5.21"),
@@ -167,6 +175,46 @@ def _(mo):
         print("patched torchvision.io.read_video (PyAV shim) for molab compatibility")
 
     _ensure_video_reader()
+
+    def _ensure_importable(module, attempts=4):
+        # `find_spec` above only proves a package is on disk, not that it
+        # imports. qwen-omni-utils 0.0.9 imports `audioread`, `numpy`, `torch`,
+        # `torchvision` and `torchcodec` at module scope while declaring none of
+        # them, so a kernel whose dependency set was resolved differently has the
+        # package present and unimportable — and the failure surfaces as a
+        # ModuleNotFoundError deep inside a later cell, long after setup claimed
+        # success.
+        #
+        # So import it here and install whatever it actually asks for. Bounded,
+        # and every install is printed: this repairs a broken environment, it
+        # does not paper over one.
+        for _ in range(attempts):
+            try:
+                importlib.import_module(module)
+                return
+            except ModuleNotFoundError as _exc:
+                _missing = (_exc.name or "").split(".")[0]
+                if not _missing or _missing == module:
+                    raise
+                if _missing.startswith("torch"):
+                    # Never reinstall torch/torchvision: molab ships a build
+                    # matched to its GPU, and replacing it yields an unrunnable
+                    # one. Fail with the reason instead.
+                    raise ModuleNotFoundError(
+                        f"{module} needs {_missing!r}, which is missing. Refusing "
+                        "to pip-install it: molab's torch build is GPU-matched and "
+                        "reinstalling would replace it. Attach a GPU runtime that "
+                        "provides it."
+                    ) from _exc
+                print(f"{module} needs {_missing!r} (undeclared) — installing it")
+                with mo.status.spinner(title=f"Installing {_missing} for {module}…"):
+                    subprocess.run(
+                        [sys.executable, "-m", "pip", "install", _missing], check=True
+                    )
+                importlib.invalidate_caches()
+        importlib.import_module(module)  # last try; let it raise if still broken
+
+    _ensure_importable("qwen_omni_utils")
 
     # The experiment code (src/) and sample video live under the
     # `avllm_interpretability/` subdirectory of this repo. If the clone already

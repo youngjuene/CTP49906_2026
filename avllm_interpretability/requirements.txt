@@ -7,6 +7,13 @@
 
 # Model + multimodal input
 qwen_omni_utils==0.0.9
+# qwen-omni-utils 0.0.9 imports `audioread` at module scope (and uses it, via
+# audioread.ffdec) without declaring it, and declares `librosa` — which is
+# absent on any environment whose dependency set was resolved differently.
+# Without both, `from qwen_omni_utils import process_mm_info` raises
+# ModuleNotFoundError.
+audioread
+librosa
 accelerate==1.14.0
 torch==2.6.0+cu124
 torchvision==0.21.0+cu124
