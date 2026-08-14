@@ -206,14 +206,31 @@ def _(mo):
 
 
 @app.cell
-def _(OUTPUT_ROOT):
+def _():
+    # Model / revision pairs this notebook has actually been validated against.
+    # The reference lens is fitted for one specific residual basis, so changing
+    # the model without a matching lens does not produce a worse readout — it
+    # produces a meaningless one. Editing MODEL_NAME to something not in this
+    # table used to start a multi-gigabyte download and then fail on the pinned
+    # revision hash; now it stops here, before the download.
+    VALIDATED_MODELS = {
+        # model id: (immutable HF revision, lens file fitted for it)
+        "Qwen/Qwen3.5-4B": (
+            "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+            "qwen3.5-4b/jlens/Salesforce-wikitext/Qwen3.5-4B_jacobian_lens_n1000.pt",
+        ),
+    }
+
     MODEL_NAME = "Qwen/Qwen3.5-4B"
-    # Immutable Hugging Face revisions validated for this class notebook.
-    MODEL_REVISION = "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a"
+    assert MODEL_NAME in VALIDATED_MODELS, (
+        f"{MODEL_NAME!r} has no validated revision or reference lens in this "
+        f"notebook. Known: {sorted(VALIDATED_MODELS)}. Pointing this at another "
+        "model needs a lens fitted for that model too — see Appendix A; a lens "
+        "from a different model will load happily and read out nonsense."
+    )
+    MODEL_REVISION, LENS_FILE = VALIDATED_MODELS[MODEL_NAME]
     LENS_REPO = "neuronpedia/jacobian-lens"
     LENS_REVISION = "16a01f309fcec900fdcec3f4cd5b64f3d00e4d5a"
-    LENS_FILE = "qwen3.5-4b/jlens/Salesforce-wikitext/Qwen3.5-4B_jacobian_lens_n1000.pt"
-    LOCAL_FITTED_LENS = OUTPUT_ROOT / "jacobian_lens.pt"
     print({
         "model": MODEL_NAME,
         "model_revision": MODEL_REVISION[:12],
@@ -224,7 +241,6 @@ def _(OUTPUT_ROOT):
         LENS_FILE,
         LENS_REPO,
         LENS_REVISION,
-        LOCAL_FITTED_LENS,
         MODEL_NAME,
         MODEL_REVISION,
     )
@@ -282,6 +298,46 @@ def _(LENS_FILE, LENS_REPO, LENS_REVISION, jlens, mo):
         f"layers · `n_prompts={lens.n_prompts}`."
     )
     return (lens,)
+
+
+@app.cell(hide_code=True)
+def _(mo, model, tokenizer, torch):
+    # `mask_display=True` needs a vocab-wide mask built by decoding every token id
+    # in a Python loop, memoised per kernel inside jlens.vis. Built lazily it lands
+    # on whichever slice a student submits first — and route 4 asks them to toggle
+    # exactly that checkbox, so the first slice of a session is dearer than every
+    # later one for a reason that has nothing to do with the setting being
+    # compared. Pay it here instead, where it is labelled as a one-off and cannot
+    # be mistaken for the cost of a lens.
+    from jlens.vis import _meaningful_token_mask
+
+    # The cache key is (tokenizer, vocab_size), and `vocab_size` inside
+    # `compute_slice` is the *unembedding* width read off real logits — not
+    # `len(tokenizer)`, which is smaller (the unembedding is padded). Warming with
+    # the wrong number would build the mask twice and cache neither usefully, so
+    # take the width from one cheap matmul on a zero residual.
+    with torch.no_grad():
+        _probe = model.unembed(
+            torch.zeros(
+                1, model.d_model,
+                device=next(model.layers[0].parameters()).device,
+                dtype=next(model.layers[0].parameters()).dtype,
+            )
+        )
+    VOCAB_SIZE = int(_probe.shape[-1])
+
+    with mo.status.spinner(
+        title=f"Indexing {VOCAB_SIZE:,} tokens for word-like display (one time)…"
+    ):
+        _mask = _meaningful_token_mask(tokenizer, VOCAB_SIZE, _probe.device)
+    mo.md(
+        f"**Vocabulary indexed:** {int(_mask.sum()):,} of {VOCAB_SIZE:,} tokens are "
+        "word-like. Slices now cost the same whether it is your first or your tenth.\n\n"
+        f"Note the width: ranks below are against **{VOCAB_SIZE:,}** columns, so "
+        f"chance is rank ≈ **{VOCAB_SIZE // 2:,}** — not `len(tokenizer)` = "
+        f"{len(tokenizer):,}, which is a different number."
+    )
+    return
 
 
 @app.cell(hide_code=True)
@@ -446,6 +502,25 @@ def _(mo):
     return
 
 
+@app.cell(hide_code=True)
+def _(JLENS_DIR):
+    import gzip as _gzip
+    import json as _json
+
+    # The English-gloss file ships in the repo (assets/), not the installed
+    # package, so it is optional; slices render fine without it. Loaded in its own
+    # cell so *both* the guided slice and the playground slice can use it — the
+    # playground one was silently dropping it, which is exactly where investigation
+    # route 3 sends students (Korean and other non-English prompts).
+    _gloss_path = JLENS_DIR / "assets" / "qwen_gloss.json.gz"
+    token_gloss = (
+        {int(k): v for k, v in _json.load(_gzip.open(_gloss_path)).items()}
+        if _gloss_path.exists()
+        else None
+    )
+    return (token_gloss,)
+
+
 @app.cell
 def _(mo):
     from jlens.examples import EXAMPLES
@@ -471,10 +546,7 @@ def _(mo):
 
 
 @app.cell(hide_code=True)
-def _(EXAMPLES, JLENS_DIR, example_controls, lens, mo, model, tokenizer):
-    import gzip
-    import json
-
+def _(EXAMPLES, example_controls, lens, mo, model, token_gloss, tokenizer):
     from jlens import vis
     from jlens.examples import resolve_prompt
     from jlens.vis import build_page, compute_slice
@@ -509,12 +581,29 @@ def _(EXAMPLES, JLENS_DIR, example_controls, lens, mo, model, tokenizer):
     _example = next(e for e in EXAMPLES if e.slug == _cfg["example"])
     _prompt = resolve_prompt(_example, tokenizer)
 
-    # The English-gloss file ships in the repo (assets/), not the installed
-    # package, so it is optional; the slice renders fine without it.
-    _gloss = None
-    _gloss_path = JLENS_DIR / "assets" / "qwen_gloss.json.gz"
-    if _gloss_path.exists():
-        _gloss = {int(k): v for k, v in json.load(gzip.open(_gloss_path)).items()}
+    # `compute_slice` truncates at max_seq_len=512 and says nothing. The longest
+    # bundled example is several times that, so the window lands on positions
+    # nowhere near the decision point the example exists to show — labelled with
+    # absolute indices that look entirely reasonable.
+    _MAX_SEQ = 512
+    _full_len = len(tokenizer(_prompt).input_ids)
+    _win = int(_cfg["last_n_tokens"])
+    _trunc = (
+        mo.callout(
+            mo.md(
+                f"**“{_example.section}” is truncated for this slice.** It tokenizes "
+                f"to **{_full_len}** tokens; only the first **{_MAX_SEQ}** are used, "
+                f"and the view then shows the last **{_win}** of *those* — positions "
+                f"{_MAX_SEQ - _win}–{_MAX_SEQ - 1}, not the end of the text. If the "
+                "part of this example you care about sits later, it is not on screen."
+            ),
+            kind="warn",
+        )
+        if _full_len > _MAX_SEQ
+        else None
+    )
+
+    _gloss = token_gloss
 
     with mo.status.spinner(title=f"Computing slice for “{_example.section}”…"):
         _slice = compute_slice(
@@ -530,7 +619,19 @@ def _(EXAMPLES, JLENS_DIR, example_controls, lens, mo, model, tokenizer):
             _slice,
             _prompt,
             title=_example.section,
-            description=_example.description,
+            # Name the lens on the page. This guided slice always uses the
+            # *course reference* lens — it sits above §3.1, so it is not affected
+            # by the lens picker there. Without saying so, a student who has just
+            # fitted their own lens will scroll up, see this picture, and file it
+            # under their fit: a plausible-but-wrong attribution manufactured by
+            # the notebook itself.
+            description=(
+                f"{_example.description}  —  course reference lens "
+                f"(n_prompts={lens.n_prompts}); the lens picker in §3.1 does not "
+                f"affect this slice. Layer stride {int(_cfg['layer_stride'])}, "
+                f"last {int(_cfg['last_n_tokens'])} positions, word-like display "
+                f"{'on' if _cfg['mask_display'] else 'off'}."
+            ),
             alt_token=_gloss,
         )
 
@@ -542,18 +643,36 @@ def _(EXAMPLES, JLENS_DIR, example_controls, lens, mo, model, tokenizer):
     # render it.
     _download = mo.download(
         _page.encode(),
-        filename=f"slice_{_example.slug}.html",
+        filename=(
+            f"slice_{_example.slug}"
+            f"_{int(_cfg['layer_stride'])}stride"
+            f"_{int(_cfg['last_n_tokens'])}win"
+            f"_{'masked' if _cfg['mask_display'] else 'raw'}.html"
+        ),
         mimetype="text/html",
         label="⬇ Download this slice, then open it in a new browser tab",
     )
-    mo.vstack([
+    # No unconditional `mo.iframe` here any more. molab renders cell output inside
+    # a locked-down iframe that will not run this page's inlined scripts, so the
+    # inline view came up as a 660 px blank rectangle — shipped as the *default*
+    # view of the notebook's only real instrument, which reads as "it's broken".
+    # On the blackmail example that blank box also carried a multi-megabyte
+    # srcdoc. Local marimo and Jupyter do render it, so it stays available behind
+    # a box you tick on purpose.
+    mo.vstack([_c for _c in (
+        _trunc,
         mo.md(
-            f"**{_example.section}** — interactive slice. If the view below is "
-            "blank, use the download button above (molab blocks scripted iframes)."
+            f"**{_example.section}** — interactive slice. **Download it and open "
+            "the file in a new browser tab**; that is the real, interactive view. "
+            "The inline preview below is off by default because molab blocks "
+            "scripted iframes (it works in local marimo / Jupyter)."
         ),
         _download,
-        mo.iframe(_page, height="660px"),
-    ])
+        mo.accordion({
+            "Try the inline preview (blank in molab, works locally)":
+                mo.iframe(_page, height="660px")
+        }),
+    ) if _c is not None])
     return
 
 
@@ -581,8 +700,18 @@ def _(mo):
        and off. Can the two views invite different narratives from identical
        ranks?
     5. **Compare estimators.** After Appendix A, repeat a prompt with the course
-       reference lens and your 100-prompt fit. Which differences look like
-       architecture, and which look like estimation noise?
+       reference lens and your own fit. Fit **25** prompts and **100** and compare
+       all three: which differences look like architecture, and which look like
+       estimation noise? The form below keeps your prompt and prediction when you
+       switch lens, so this is one variable moving.
+    6. **Run the negative control.** Select **Scrambled-layer control** in §3.1 —
+       the reference lens with each layer's transport swapped for another
+       layer's. It costs nothing and refits nothing. If a deliberately mismatched
+       transport still emits fluent, on-topic candidates, then fluency is not
+       evidence that a readout is faithful, and any claim you make from the
+       candidate lists alone is unsupported. If instead it collapses to junk,
+       that is also a result — say which of the two you got before reading the
+       rank columns.
 
     Before ▶, write a prediction that could be wrong. Afterward ask: *what
     alternate mechanism could produce the same table, and what next run would
@@ -595,74 +724,149 @@ def _(mo):
 
 @app.cell(hide_code=True)
 def _(mo):
-    lens_upload = mo.ui.file(
-        filetypes=[".pt"],
-        kind="button",
-        max_size=2_000_000_000,
-        label="⬆ Upload a jacobian_lens.pt (used by 'Uploaded lens file' below)",
+    # Both controls live inside a form. Ungated, changing the dropdown or picking
+    # a file *immediately* ran `JacobianLens.load()` — an 812 MB `torch.load` on
+    # one click, with no way to change your mind. Nothing here touches the disk
+    # until ▶.
+    lens_form = mo.md(
+        "**Lens source** {source}\n\n"
+        "For **Student-fitted lens** — which of your fits: {fit_size}\n\n"
+        "Only for **Uploaded lens file** — a `jacobian_lens.pt` you downloaded from "
+        "a previous session:\n\n"
+        "{upload}\n\n"
+        "The **scrambled control** is the reference lens with each layer's transport "
+        "swapped for a different layer's. It is a *negative control*: if a mismatched "
+        "transport still emits fluent, on-topic words, then fluency is not evidence "
+        "that the readout is faithful. Costs no GPU and nothing is refitted."
+    ).batch(
+        source=mo.ui.dropdown(
+            options={
+                "Course reference lens": "reference",
+                "Scrambled-layer control": "scrambled",
+                "Student-fitted lens": "fitted",
+                "Uploaded lens file": "uploaded",
+            },
+            value="Course reference lens",
+        ),
+        # Options are the constant fit sizes, NOT the file list: keeping this
+        # cell's only ref as `mo` is what stops the form being re-minted (and its
+        # value reset to None) the moment a fit completes. Sizes that do not exist
+        # yet fall back with a message.
+        fit_size=mo.ui.dropdown(
+            options={"newest fit": 0, "25 prompts": 25, "50 prompts": 50,
+                     "100 prompts": 100},
+            value="newest fit",
+        ),
+        upload=mo.ui.file(filetypes=[".pt"], kind="button", max_size=2_000_000_000),
+    ).form(
+        submit_button_label="Load this lens",
+        bordered=True,
     )
-    lens_upload
-    return (lens_upload,)
-
-
-@app.cell(hide_code=True)
-def _(mo):
-    pg_source = mo.ui.dropdown(
-        options={
-            "Course reference lens": "reference",
-            "Student-fitted lens": "fitted",
-            "Uploaded lens file": "uploaded",
-        },
-        value="Course reference lens",
-        label="Lens source (loaded once, then reused across submits)",
-    )
-    pg_source
-    return (pg_source,)
+    lens_form
+    return (lens_form,)
 
 
 @app.cell(hide_code=True)
 def _(
-    LOCAL_FITTED_LENS,
+    MODEL_NAME,
     OUTPUT_ROOT,
-    fitted_lens_version,
+    fitted_lens_files,
     jlens,
     lens,
-    lens_upload,
+    lens_form,
     mo,
     model,
-    pg_source,
 ):
-    # Reload only when the source, upload, or student-fitted file changes. Prompt
-    # edits and repeated submits reuse the already-loaded lens.
-    _ = fitted_lens_version
+    # Loads only on ▶. Prompt edits and repeated playground submits reuse the
+    # already-loaded lens.
+    _sel = lens_form.value
+    _choice = _sel["source"] if _sel else "reference"
     _load_error = None
+    _load_warning = None
     active_lens = None
     active_lens_label = ""
     try:
-        if pg_source.value == "uploaded":
-            if not lens_upload.value:
-                _load_error = "Select an uploaded `.pt` file, or choose another lens source."
-            else:
-                _p = OUTPUT_ROOT / "uploaded_lens.pt"
-                _p.write_bytes(lens_upload.value[0].contents)
-                with mo.status.spinner(title="Loading uploaded lens (once)…"):
-                    active_lens = jlens.JacobianLens.load(str(_p))
-                active_lens_label = f"uploaded · {lens_upload.value[0].name}"
-        elif pg_source.value == "fitted":
-            if not LOCAL_FITTED_LENS.exists():
-                _load_error = (
-                    "No student-fitted lens exists in this session. Run Appendix A, "
-                    "then return here."
+        if _choice == "uploaded":
+            if not _sel or not _sel["upload"]:
+                _load_warning = (
+                    "**Uploaded lens file** is selected but no file was chosen — "
+                    "falling back to the course reference lens."
                 )
             else:
-                with mo.status.spinner(title="Loading the student-fitted lens (once)…"):
-                    active_lens = jlens.JacobianLens.load(str(LOCAL_FITTED_LENS))
-                active_lens_label = "student-fitted lens"
-        else:
-            active_lens = lens
-            active_lens_label = "course reference lens · 1,000 prompts"
+                _p = OUTPUT_ROOT / "uploaded_lens.pt"
+                _p.write_bytes(_sel["upload"][0].contents)
+                with mo.status.spinner(title="Loading uploaded lens (once)…"):
+                    active_lens = jlens.JacobianLens.load(str(_p))
+                active_lens_label = f"uploaded · {_sel['upload'][0].name}"
+                # Shape compatibility is not identity. Any lens fitted for any
+                # other model of the same residual width loads cleanly and then
+                # produces confident, fluent, meaningless readouts — and upload is
+                # the only way to carry a fit across sessions, so it is the path
+                # students will actually use.
+                _meta_model = getattr(active_lens, "fitted_for_model", None)
+                if _meta_model is None:
+                    _load_warning = (
+                        f"`{_sel['upload'][0].name}` records no model identity, so "
+                        "there is no way to check it was fitted for "
+                        f"`{MODEL_NAME}`. Shape compatibility is not identity — "
+                        "treat any agreement it reports as unverified."
+                    )
+                elif _meta_model != MODEL_NAME:
+                    _load_error = (
+                        f"that lens was fitted for `{_meta_model}`, not `{MODEL_NAME}`. "
+                        "The residual bases are unrelated; the readout would be fluent "
+                        "and meaningless."
+                    )
+                    active_lens = None
+        elif _choice == "scrambled":
+            # The negative control. `JacobianLens.__init__` takes a plain
+            # {layer: J} dict, so shifting each layer's transport to a different
+            # layer's costs no GPU and refits nothing.
+            _src = lens.source_layers
+            _shift = max(1, len(_src) // 2)
+            active_lens = jlens.JacobianLens(
+                {
+                    _l: lens.jacobians[_src[(_i + _shift) % len(_src)]]
+                    for _i, _l in enumerate(_src)
+                },
+                n_prompts=lens.n_prompts,
+                d_model=lens.d_model,
+            )
+            active_lens_label = (
+                f"scrambled-layer CONTROL · each J_l replaced by J of the layer "
+                f"{_shift} positions away"
+            )
+        elif _choice == "fitted":
+            if not fitted_lens_files:
+                # Not `mo.stop`: cancelling here killed the form, the results and
+                # the slice download all at once, and the recovery action was 250
+                # lines further down.
+                _load_warning = (
+                    "No student-fitted lens exists in this session yet — run "
+                    "**Appendix A** at the bottom of the notebook, then come back "
+                    "and press ▶ again. Using the course reference lens meanwhile."
+                )
+            else:
+                _want = int((_sel or {}).get("fit_size") or 0)
+                if _want:
+                    _match = [_f for _f in fitted_lens_files
+                              if _f.name == f"jacobian_lens_n{_want}.pt"]
+                    if not _match:
+                        _load_warning = (
+                            f"No {_want}-prompt fit on disk "
+                            f"(have: {', '.join(_f.name for _f in fitted_lens_files)}). "
+                            "Using your newest fit instead."
+                        )
+                _pick = _match[0] if _want and _match else fitted_lens_files[-1]
+                with mo.status.spinner(title=f"Loading {_pick.name} (once)…"):
+                    active_lens = jlens.JacobianLens.load(str(_pick))
+                active_lens_label = f"student-fitted · {_pick.name}"
     except Exception as _e:
         _load_error = f"{type(_e).__name__}: {_e}"
+
+    if active_lens is None and _load_error is None:
+        active_lens = lens
+        active_lens_label = "course reference lens · 1,000 prompts"
 
     if active_lens is not None:
         if active_lens.d_model != lens.d_model:
@@ -682,41 +886,65 @@ def _(
         _load_error is not None,
         mo.callout(mo.md(f"**Lens unavailable or incompatible** — {_load_error}"), kind="danger"),
     )
+    mo.vstack([
+        mo.callout(mo.md(_load_warning), kind="warn") if _load_warning else mo.md(""),
+        mo.md(f"**Active lens:** {active_lens_label} · `n_prompts={active_lens.n_prompts}`"),
+    ])
     return active_lens, active_lens_label
 
 
 @app.cell(hide_code=True)
-def _(active_lens, active_lens_label, demo_layers, mo):
-    _default_layers = [
-        _layer for _layer in demo_layers if _layer in active_lens.source_layers
-    ]
-    if not _default_layers:
-        _default_layers = [active_lens.source_layers[-1]]
+def _(demo_layers, lens, mo, model):
+    # Options come from the *reference* lens, not the active one. marimo mints a
+    # fresh id for any UI element whose defining cell re-runs, so depending on
+    # `active_lens` here meant that switching lens source — the whole point of
+    # investigation route 5 — wiped the prompt, the hypothesis and the result you
+    # were about to compare against, all at once. The layer sets are checked
+    # against the active lens in the result cell instead, where a mismatch can be
+    # explained rather than silently erasing the form.
+    # `demo_layers` is built in §2.1 by indexing into `lens.source_layers`, so it
+    # is a subset by construction. Filtering it again was load-bearing when this
+    # cell selected against `active_lens`; after the switch to `lens` it only
+    # implied the two sets could disagree.
+    _default_layers = list(demo_layers)
 
     def _validate(_value):
-        if not _value or not _value["prompt"].strip():
+        # `.get` throughout: a batch's value is a partial dict until the frontend
+        # has pushed state for every child, so indexing directly raises KeyError
+        # on the first render rather than validating.
+        if not _value or not (_value.get("prompt") or "").strip():
             return "Enter a non-empty prompt."
-        if not _value["hypothesis"].strip():
+        if not (_value.get("hypothesis") or "").strip():
             return "Write a falsifiable prediction before running."
-        if not _value["layers"]:
+        if not _value.get("layers"):
             return "Select at least one fitted layer."
         return None
 
     _template = (
         "### 3.2 State a prediction and choose variables\n\n"
-        f"**Active lens:** {active_lens_label} (`n_prompts={active_lens.n_prompts}`)\n\n"
-        "*The initial controls reproduce the guided comparison; after that, change one variable at a time.*\n\n"
+        "*The initial controls reproduce the guided comparison; after that, change one "
+        "variable at a time. This form keeps its contents when you switch lens source "
+        "above — that is what makes route 5 runnable.*\n\n"
+        "*Cost: the numeric comparison is ~2 s. Ticking the slice adds ~10–30 s — "
+        "the same for your first slice as your tenth, since the vocabulary was "
+        "indexed once in §1.4. Appendix A is 5–20 min depending on the size you "
+        "pick.*\n\n"
         "**Prediction before ▶** — name a layer/position trend that could be wrong:\n\n"
         "{hypothesis}\n\n"
         "**Prompt** {prompt}\n\n"
-        "Probe **{position_from_end} token(s) from the end** "
+        f"Probe **{{position_from_end}} token(s) from the end** "
         "(1 = final prompt token, whose residual predicts the unseen continuation).\n\n"
-        "**Fitted layers** {layers}\n\n"
+        f"**Fitted layers** {{layers}} — this model has **{model.n_layers}** layers and "
+        f"the reference lens fits **{len(lens.source_layers)}** of them "
+        f"(`{lens.source_layers[0]}`–`{lens.source_layers[-1]}`). Layer *l* is counted "
+        "from the embedding, so depth fraction = *l* / "
+        f"{model.n_layers}.\n\n"
         "Compare top **{top_k}** candidates.\n\n"
         "---\n\n"
         "**Also build a downloadable slice** {make_slice}\n\n"
         "Slice layer stride {slice_stride} · last positions {slice_window} · "
-        "word-like display {mask_display}"
+        "word-like display {mask_display} *(these three do nothing unless the box "
+        "above is ticked)*"
     )
     playground_controls = mo.md(_template).batch(
         hypothesis=mo.ui.text_area(
@@ -733,8 +961,14 @@ def _(active_lens, active_lens_label, demo_layers, mo):
             1, 32, step=1, value=1, show_value=True, include_input=True
         ),
         layers=mo.ui.multiselect(
-            options={f"Layer {_layer}": _layer for _layer in active_lens.source_layers},
-            value=[f"Layer {_layer}" for _layer in _default_layers],
+            options={
+                f"Layer {_layer} ({_layer / model.n_layers:.0%} depth)": _layer
+                for _layer in lens.source_layers
+            },
+            value=[
+                f"Layer {_layer} ({_layer / model.n_layers:.0%} depth)"
+                for _layer in _default_layers
+            ],
         ),
         top_k=mo.ui.slider(1, 10, step=1, value=5, show_value=True),
         make_slice=mo.ui.checkbox(value=False),
@@ -760,6 +994,7 @@ def _(
     mo,
     model,
     playground_controls,
+    token_gloss,
     tokenizer,
 ):
     _cfg = playground_controls.value
@@ -767,15 +1002,53 @@ def _(
         _cfg is None,
         mo.callout(mo.md("Set the playground controls and press **▶**."), kind="info"),
     )
+    # The form's `validate=` runs only in the submit-button handler; marimo's
+    # Ctrl/Cmd+Enter shortcut sets the value directly and skips it. This gate is
+    # the notebook's best pedagogical mechanism — it is what makes it structurally
+    # impossible to run without a prediction on record — so it needs a backstop
+    # rather than relying on which key the student pressed.
+    mo.stop(
+        not (_cfg.get("hypothesis") or "").strip(),
+        mo.callout(
+            mo.md(
+                "**Write a falsifiable prediction first.** (Ctrl/Cmd+Enter skips "
+                "the form's own check; the run is held here instead.)"
+            ),
+            kind="warn",
+        ),
+    )
 
     # Keep the playground renderer independent from the guided-slice renderer.
     from jlens.vis import build_page as _build_page
     from jlens.vis import compute_slice as _compute_slice
 
+    _MAX_SEQ = 512
     _prompt = _cfg["prompt"].strip()
-    _input_ids = model.encode(_prompt, max_length=512)
+    _input_ids = model.encode(_prompt, max_length=_MAX_SEQ)
     _seq_len = int(_input_ids.shape[1])
     _offset = int(_cfg["position_from_end"])
+
+    # Truncation is silent inside `model.encode` (tokenizer truncation=True), and
+    # the positions it leaves behind still print as perfectly reasonable absolute
+    # indices. A long prompt would quietly make "N tokens from the end" mean "from
+    # token 512" instead.
+    _full_len = len(tokenizer(_prompt).input_ids)
+    _truncated = _full_len > _seq_len
+    _trunc_note = (
+        mo.callout(
+            mo.md(
+                f"**This prompt was truncated** — it tokenizes to **{_full_len}** "
+                f"tokens and only the first **{_seq_len}** are used. Your probe "
+                f"offset counts back from token {_seq_len}, *not* from the end of "
+                "the text you typed. Shorten the prompt if the part you care about "
+                "is past the cut."
+            ),
+            kind="warn",
+        )
+        if _truncated
+        else None
+    )
+
     mo.stop(
         _offset > _seq_len,
         mo.callout(
@@ -790,8 +1063,39 @@ def _(
     _absolute_position = _seq_len - _offset
 
     _layers = sorted(int(_layer) for _layer in _cfg["layers"])
+    # The form's options come from the reference lens so it survives a lens
+    # switch; the active lens may fit a different set, so reconcile here where
+    # the mismatch can be explained instead of erasing the form.
+    _missing = [_l for _l in _layers if _l not in active_lens.source_layers]
+    _layers = [_l for _l in _layers if _l in active_lens.source_layers]
+    mo.stop(
+        not _layers,
+        mo.callout(
+            mo.md(
+                f"None of the selected layers are fitted by **{active_lens_label}** "
+                f"(it fits {active_lens.source_layers[0]}–{active_lens.source_layers[-1]}). "
+                "Pick layers this lens actually has."
+            ),
+            kind="danger",
+        ),
+    )
+    _layer_note = (
+        mo.callout(
+            mo.md(
+                f"Dropped layer(s) {_missing} — not fitted by **{active_lens_label}**. "
+                f"Comparing the remaining {len(_layers)}."
+            ),
+            kind="warn",
+        )
+        if _missing
+        else None
+    )
 
     with mo.status.spinner(title="Comparing readouts at the selected position…"):
+        # Two calls, one per readout: each runs its own forward pass over the same
+        # activations and only the transport differs. Left as-is deliberately —
+        # collapsing them needs a change in `lens.apply`, and at ~2 s a submit the
+        # duplicated pass is not what is costing the student anything.
         _jl, _ml, _ = active_lens.apply(
             model, _prompt, layers=_layers, positions=[_position]
         )
@@ -803,6 +1107,9 @@ def _(
     _rows, _target, _final_top = compare_readouts(
         _jl, _ll, _ml, _layers, _top_k
     )
+    # The same reference `compare_readouts` ranks against — pinned into the slice
+    # below so the downloaded page opens on the token the table is about.
+    _target_id = int(_ml[0].float().argmax())
     _source_token = tokenizer.decode(
         [int(_input_ids[0, _absolute_position])],
         clean_up_tokenization_spaces=False,
@@ -847,21 +1154,42 @@ def _(
                     layer_stride=int(_cfg["slice_stride"]),
                     last_n_tokens=int(_cfg["slice_window"]),
                     max_tracked=64,
+                    # Open with the model's own target already pinned. Without
+                    # this every download opened blank and had to be re-pinned by
+                    # hand after each resubmit.
+                    pinned_token_ids={_target_id},
                     mask_display=bool(_cfg["mask_display"]),
                 )
                 _page, _, _ = _build_page(
                     _slice,
                     _prompt,
-                    title="Playground slice",
+                    title=f"Slice · {active_lens_label}",
+                    # Route 3 sends students to Korean and other non-English
+                    # prompts; the guided slice glossed those and this one did not.
+                    alt_token=token_gloss,
                     description=(
-                        f"{active_lens_label} · probe offset {_position} · {_prompt!r}"
+                        f"{active_lens_label} · probe offset {_position} · "
+                        f"stride {int(_cfg['slice_stride'])} · "
+                        f"last {int(_cfg['slice_window'])} positions · "
+                        f"word-like display {'on' if _cfg['mask_display'] else 'off'} · "
+                        f"{_prompt!r}"
                     ),
                 )
+            # Settings in the filename: two downloads at different strides used to
+            # arrive as `playground_slice.html` and `playground_slice (1).html`,
+            # with nothing on either page saying which was which.
+            _slug = (
+                f"slice_{_cfg['slice_stride']}stride"
+                f"_{_cfg['slice_window']}win"
+                f"_off{_offset}"
+                f"_{'masked' if _cfg['mask_display'] else 'raw'}"
+                f"_{active_lens_label.split(' ')[0].lower()}.html"
+            )
             _viz = mo.download(
                 _page.encode(),
-                filename="playground_slice.html",
+                filename=_slug,
                 mimetype="text/html",
-                label="⬇ Download the interactive slice for this prompt",
+                label=f"⬇ Download the interactive slice ({_slug})",
             )
         except Exception as _e:
             _viz = mo.callout(
@@ -877,11 +1205,23 @@ def _(
             "**Verdict before the next run:** Did the result support, refute, or "
             "fail to test your prediction? Name one competing explanation. Then "
             "change exactly one variable or design a control whose pass *and* "
-            "fail outcomes would both teach you something."
+            "fail outcomes would both teach you something.\n\n"
+            "One caution when you sweep offsets or swap prompts: the reference "
+            "here is `argmax` of the **final layer for that prompt at that "
+            "position**, so changing either changes the target token. Two runs' "
+            "ranks are then ranks *of different tokens* — comparable only if you "
+            "say so explicitly."
         ),
         kind="neutral",
     )
-    mo.vstack([_table, _viz, _reflection])
+    # `is not None`, not truthiness: on a successful slice `_viz` is a
+    # `mo.download`, and `UIElement.__bool__` writes "The truth value of a
+    # UIElement is always True..." to stderr — which marimo renders as a console
+    # block under the result, so every successful submit looked like a bug.
+    mo.vstack([
+        _n for _n in (_trunc_note, _layer_note, _table, _viz, _reflection)
+        if _n is not None
+    ])
     return
 
 
@@ -921,24 +1261,65 @@ def _(mo):
     mo.md(r"""
     ## Appendix A. Fit a student lens from scratch (optional)
 
-    Fit $J_l$ over 100 WikiText prompts and save a student lens file. This is a
-    long GPU job (~15–20 minutes for the 4B model) and pulls `datasets` on demand,
-    so it runs **only when you click**. When it finishes, validate the file below,
-    then return to the research playground and select **Student-fitted lens**.
+    Fit $J_l$ over WikiText prompts and save a student lens file. This is a GPU job
+    that pulls `datasets` on demand, so it runs **only when you click**.
+
+    **Pick the prompt count deliberately.** Estimator quality saturates quickly, so
+    a **25-prompt** fit takes 4–5 minutes — a real experiment inside one class
+    period — while 100 takes 15–20. Each count is saved under its own filename, so
+    fitting 25 and then 100 leaves you with *two* lenses to compare. That is what
+    makes investigation route 5 answerable: which differences between lenses are
+    architecture, and which are just estimation noise?
     """)
     return
 
 
 @app.cell
 def _(mo):
-    run_fit = mo.ui.run_button(label="Fit a 100-prompt lens (~15–20 min on GPU)")
-    run_fit
-    return (run_fit,)
+    fit_controls = mo.md(
+        "Fit over {n_prompts} WikiText prompts.\n\n"
+        "*25 ≈ 4–5 min · 50 ≈ 8–10 min · 100 ≈ 15–20 min. Each is saved separately.*"
+    ).batch(
+        n_prompts=mo.ui.dropdown(
+            options={"25 prompts (~5 min)": 25,
+                     "50 prompts (~10 min)": 50,
+                     "100 prompts (~20 min)": 100},
+            value="25 prompts (~5 min)",
+        ),
+    ).form(submit_button_label="▶ Fit this lens", bordered=True)
+    fit_controls
+    return (fit_controls,)
 
 
 @app.cell
-def _(LOCAL_FITTED_LENS, OUTPUT_ROOT, jlens, mo, model, run_fit):
-    if run_fit.value:
+def _(MODEL_NAME, MODEL_REVISION, OUTPUT_ROOT, fit_controls, jlens, mo, model):
+    from functools import partial as _partial
+    from pathlib import Path as _Path
+
+    _cfg = fit_controls.value
+    # A form keeps its submitted value indefinitely (unlike `run_button`, which
+    # resets itself). This cell refs the model and the config cells, so any
+    # upstream re-run — editing MODEL_NAME, a kernel reconnect, Run-all — would
+    # re-enter the body with no click and silently start another 20-minute fit.
+    # Guard on the *artifact*, not the trigger: an existing file means the work is
+    # already done.
+    _n = int(_cfg["n_prompts"]) if _cfg else 0
+    _dest = OUTPUT_ROOT / f"jacobian_lens_n{_n}.pt" if _cfg else None
+    if _cfg and _dest.exists():
+        _mb = _dest.stat().st_size / 2**20
+        _out = mo.vstack([
+            mo.md(
+                f"`{_dest.name}` already exists ({_mb:.0f} MB) — not refitting. "
+                "Delete the file, or choose a different size, to fit again."
+            ),
+            mo.download(
+                data=_partial(_Path.read_bytes, _dest),
+                filename=_dest.name,
+                mimetype="application/octet-stream",
+                label=f"⬇ Download {_dest.name} ({_mb:.0f} MB)",
+            ),
+        ])
+    elif _cfg:
         import subprocess as _sp
         import sys as _sys
 
@@ -949,30 +1330,58 @@ def _(LOCAL_FITTED_LENS, OUTPUT_ROOT, jlens, mo, model, run_fit):
             _sp.run([_sys.executable, "-m", "pip", "install", "datasets"], check=True)
         from jlens.examples import load_wikitext_prompts
 
-        with mo.status.spinner(title="Fitting a 100-prompt Jacobian lens (~15–20 min)…"):
-            _prompts = load_wikitext_prompts(n_prompts=100)
+        with mo.status.spinner(title=f"Fitting a {_n}-prompt Jacobian lens…"):
+            _prompts = load_wikitext_prompts(n_prompts=_n)
             _fitted = jlens.fit(
                 model,
                 _prompts,
                 dim_batch=32,
                 max_seq_len=128,
-                checkpoint_path=str(OUTPUT_ROOT / "ckpt.pt"),
+                checkpoint_path=str(OUTPUT_ROOT / f"ckpt_n{_n}.pt"),
             )
-            _fitted.save(str(LOCAL_FITTED_LENS))
-        _out = mo.md(
-            f"✅ Fitted **{_fitted.n_prompts} prompts**, saved to "
-            f"`{LOCAL_FITTED_LENS}`. Use the validation below before comparing it."
-        )
+            # Stamp the model identity into the file. A lens is only meaningful
+            # for the residual basis it was fitted in, but `d_model` agreement is
+            # all a loader can otherwise check — and upload is how these files
+            # travel between sessions and between students.
+            _fitted.fitted_for_model = MODEL_NAME
+            _fitted.fitted_for_revision = MODEL_REVISION
+            _fitted.save(str(_dest))
+        _mb = _dest.stat().st_size / 2**20
+        _out = mo.vstack([
+            mo.md(
+                f"✅ Fitted **{_fitted.n_prompts} prompts** → `{_dest.name}` "
+                f"({_mb:.0f} MB). Select **Student-fitted lens** in §3.1 and press "
+                "▶ to use it."
+            ),
+            mo.callout(
+                mo.md(
+                    "**Download it now.** This file lives on the molab session's "
+                    "disk, which does not survive a restart — losing it costs you "
+                    "the whole fit."
+                ),
+                kind="warn",
+            ),
+            mo.download(
+                # Lazy, not eager bytes. marimo materializes an eager payload into
+                # a virtual file *and* a shared-memory segment at render time; a
+                # ~400 MB lens would be copied twice for a button nobody may click.
+                # A callable is resolved only when the download is requested.
+                data=_partial(_Path.read_bytes, _dest),
+                filename=_dest.name,
+                mimetype="application/octet-stream",
+                label=f"⬇ Download {_dest.name} ({_mb:.0f} MB)",
+            ),
+        ])
     else:
-        _out = mo.md(
-            "_Idle — click the button above to fit. Nothing runs until you do._"
-        )
-    _stat = LOCAL_FITTED_LENS.stat() if LOCAL_FITTED_LENS.exists() else None
-    fitted_lens_version = (
-        (_stat.st_mtime_ns, _stat.st_size) if _stat is not None else None
+        _out = mo.md("_Idle — choose a size and press ▶. Nothing runs until you do._")
+
+    # Every fitted lens on disk, newest last. The §3.1 loader reads this, so a
+    # fresh fit becomes selectable without the notebook tracking mtimes by hand.
+    fitted_lens_files = sorted(
+        OUTPUT_ROOT.glob("jacobian_lens_n*.pt"), key=lambda _p: _p.stat().st_mtime
     )
     _out
-    return (fitted_lens_version,)
+    return (fitted_lens_files,)
 
 
 @app.cell(hide_code=True)
@@ -988,40 +1397,90 @@ def _(mo):
 
 
 @app.cell
-def _(LOCAL_FITTED_LENS, fitted_lens_version, jlens, mo, model):
-    _ = fitted_lens_version
-    if LOCAL_FITTED_LENS.exists():
-        _fitted = jlens.JacobianLens.load(str(LOCAL_FITTED_LENS))
-        _shape_ok = (
-            _fitted.d_model == model.d_model
-            and bool(_fitted.source_layers)
-            and max(_fitted.source_layers) < model.n_layers
-        )
+def _(MODEL_NAME, fitted_lens_files, mo, model, torch):
+    if not fitted_lens_files:
         _msg = mo.md(
-            f"✅ Loaded student-fitted lens: **{_fitted.n_prompts} prompts**, "
-            f"structurally compatible: **{_shape_ok}**. "
-            "This is a file/shape check, not a quality verdict."
+            "ℹ️ No student-fitted lens on disk yet. The guided demo and playground "
+            "use the course reference lens."
         )
     else:
-        _msg = mo.md(
-            f"ℹ️ No student-fitted lens at `{LOCAL_FITTED_LENS}`. "
-            "The guided demo and playground default to the course reference lens."
-        )
+        _rows = []
+        for _p in fitted_lens_files:
+            # Read the metadata, not the lens. Every field this table shows is a
+            # plain scalar in the checkpoint dict, but `JacobianLens.load` calls
+            # `J.float()` on 31 2560x2560 matrices — turning a ~390 MB fp16 file
+            # into ~780 MB of fp32 resident, per row, just to print four numbers.
+            # `mmap=True` keeps the tensors on disk; we never touch them.
+            _ck = torch.load(str(_p), map_location="cpu", weights_only=True, mmap=True)
+            _layers = _ck["source_layers"]
+            _rows.append({
+                "File": _p.name,
+                "Prompts": _ck["n_prompts"],
+                "Fitted layers": len(_layers),
+                "Structurally compatible": (
+                    _ck["d_model"] == model.d_model
+                    and bool(_layers)
+                    and max(_layers) < model.n_layers
+                ),
+                "Fitted for": _ck.get("fitted_for_model") or "— not recorded —",
+                "Size (MB)": round(_p.stat().st_size / 2**20),
+            })
+            del _ck
+        _msg = mo.vstack([
+            mo.ui.table(_rows, selection=None, pagination=False),
+            mo.callout(
+                mo.md(
+                    "**Structural compatibility is not quality.** Matching `d_model` "
+                    "and layer bounds says a file will load, nothing more — a lens "
+                    f"fitted for a different model of the same width passes every "
+                    f"check in this table. The `Fitted for` column is the only "
+                    f"identity claim, and it should read `{MODEL_NAME}`. The real "
+                    "check is behavioral: run the same held-out prompt through two "
+                    "of these in §3 and see whether the difference looks like "
+                    "estimation noise or like something systematic."
+                ),
+                kind="neutral",
+            ),
+        ], gap=0.4)
     _msg
     return
 
 
 @app.cell
-def _(LOCAL_FITTED_LENS, fitted_lens_version, mo):
-    _ = fitted_lens_version
-    if LOCAL_FITTED_LENS.exists():
-        _mb = LOCAL_FITTED_LENS.stat().st_size / 2**20
-        _dl = mo.download(
-            data=lambda: LOCAL_FITTED_LENS.read_bytes(),
-            filename="jacobian_lens.pt",
-            mimetype="application/octet-stream",
-            label=f"⬇ Download your fitted lens ({_mb:.0f} MB)",
-        )
+def _(fitted_lens_files, mo):
+    from functools import partial as _partial
+    from pathlib import Path as _P
+
+    # Kept as a backstop; the fit cell already offers the download inline, next to
+    # the result, which is where it is actually needed.
+    #
+    # `partial(_P.read_bytes, _p)`, NOT `lambda _f=_p: _f.read_bytes()`. Both are
+    # lazy; only one is safe.
+    #
+    # marimo rewrites underscore-prefixed names to per-cell mangled ones. Written
+    # as a lambda default over the comprehension variable, this line raised
+    # `NameError: name '_cell_NCOB_p' is not defined. Did you mean
+    # '_cell_pHFh_p'?` -- the default resolved against a *different* cell's
+    # prefix. Reproduced in a fresh interpreter, and only when `_p` also appeared
+    # as a lambda parameter in the fit cell above; adding or removing an unrelated
+    # underscore name in either cell made it come and go. So the exact trigger is
+    # incidental, which is the argument for not writing the construct at all:
+    # `partial` binds the value with no default and no closure, so it cannot
+    # depend on what other cells happen to name their locals.
+    #
+    # It mattered because this branch is empty until a student has fitted a lens
+    # -- so the first time it could ever fire is in a classroom, on the download
+    # button they need right after Appendix A.
+    if fitted_lens_files:
+        _dl = mo.vstack([
+            mo.download(
+                data=_partial(_P.read_bytes, _p),
+                filename=_p.name,
+                mimetype="application/octet-stream",
+                label=f"⬇ {_p.name} ({_p.stat().st_size / 2**20:.0f} MB)",
+            )
+            for _p in fitted_lens_files
+        ], gap=0.3)
     else:
         _dl = mo.md("_No fitted lens on disk yet._")
     _dl
