@@ -331,6 +331,26 @@ def _(mo):
 
     _ensure_importable("qwen_omni_utils")
 
+    def _print_versions():
+        # What this kernel actually resolved, on one line. molab supplies its own
+        # torch/torchvision and ignores the `# /// script` block, and three of the
+        # packages above are deliberately unpinned, so "what is installed" is a
+        # per-session fact — and every molab failure so far has been one of these
+        # numbers, discovered from a traceback several cells later.
+        _report = [f"python={sys.version.split()[0]}"]
+        # matplotlib and numpy are not in the list above — molab has always
+        # supplied them — so the banner is where their absence would show up.
+        for _dist in ("torch", "torchvision", "transformers", "accelerate", "numpy",
+                      "matplotlib", "librosa", "audioread", "av", "qwen-omni-utils",
+                      "marimo", "wigglystuff", "anywidget"):
+            try:
+                _report.append(f"{_dist}={importlib.metadata.version(_dist)}")
+            except importlib.metadata.PackageNotFoundError:
+                _report.append(f"{_dist}=MISSING")
+        print("versions: " + ", ".join(_report))
+
+    _print_versions()
+
     # The experiment code (src/) and sample video live under the
     # `avllm_interpretability/` subdirectory of this repo. If the clone already
     # exists, hard-sync it to REPO_REF so pushed fixes reach molab (a kernel
