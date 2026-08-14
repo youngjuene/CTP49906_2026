@@ -176,6 +176,45 @@ def _(mo):
 
     _ensure_video_reader()
 
+    def _ensure_audio_decoder():
+        # qwen-omni-utils opens the clip's audio itself and hands `librosa.load`
+        # an already-constructed `audioread.ffdec.FFmpegAudioFile`. librosa only
+        # accepts that object when its class is in `audioread.available_backends()`:
+        #
+        #     if isinstance(path, tuple(audioread.available_backends())):
+        #         y, sr = __audioread_load(...)      # the path qwen needs
+        #     else:
+        #         y, sr = __soundfile_load(...)      # sf.SoundFile(<object>) -> TypeError
+        #
+        # That list is built once and cached in `audioread.BACKENDS`, and it
+        # contains the ffmpeg backend only if `ffdec.available()` succeeded at
+        # the moment it was built. On molab it did not, so the call fell through
+        # to soundfile and died with
+        # `TypeError: Invalid file: <audioread.ffdec.FFmpegAudioFile object ...>`
+        # — several cells after setup reported success.
+        #
+        # ffmpeg demonstrably works there, because qwen constructs one of these
+        # objects (which spawns ffmpeg) before librosa ever sees it. So rebuild
+        # the cache and register the backend explicitly. On a healthy kernel this
+        # is a no-op; every published librosa from 0.9.2 to 0.11.0 has the same
+        # `isinstance` check, so this is a detection fix, not a version pin.
+        import audioread
+        import audioread.ffdec
+
+        if not hasattr(audioread, "BACKENDS"):
+            print("audioread has no BACKENDS cache; leaving detection alone")
+            return
+        try:
+            audioread.available_backends(flush_cache=True)
+        except TypeError:  # older audioread: no flush_cache parameter
+            audioread.BACKENDS[:] = []
+            audioread.available_backends()
+        if audioread.ffdec.FFmpegAudioFile not in audioread.BACKENDS:
+            audioread.BACKENDS.append(audioread.ffdec.FFmpegAudioFile)
+            print("registered audioread's ffmpeg backend so librosa accepts it")
+
+    _ensure_audio_decoder()
+
     def _ensure_importable(module, attempts=4):
         # `find_spec` above only proves a package is on disk, not that it
         # imports. qwen-omni-utils 0.0.9 imports `audioread`, `numpy`, `torch`,
