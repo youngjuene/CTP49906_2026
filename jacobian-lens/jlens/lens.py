@@ -41,6 +41,13 @@ class JacobianLens:
         self.source_layers = sorted(self.jacobians)
         self.n_prompts = n_prompts
         self.d_model = d_model
+        # Provenance, optional and additive. A lens is only meaningful in the
+        # residual basis it was fitted in, but `d_model` is the only thing a
+        # loader can otherwise check -- so any lens fitted for any other model of
+        # the same width loads cleanly and then reads out fluent nonsense. These
+        # let a caller notice; nothing here enforces them.
+        self.fitted_for_model: str | None = None
+        self.fitted_for_revision: str | None = None
 
     def __repr__(self) -> str:
         return (
@@ -59,24 +66,34 @@ class JacobianLens:
                 "n_prompts": self.n_prompts,
                 "source_layers": self.source_layers,
                 "d_model": self.d_model,
+                "fitted_for_model": self.fitted_for_model,
+                "fitted_for_revision": self.fitted_for_revision,
             },
             path,
         )
 
     @classmethod
     def load(cls, path: str) -> JacobianLens:
-        """Load a lens previously written by :meth:`save`."""
+        """Load a lens previously written by :meth:`save`.
+
+        Files written before provenance was recorded simply carry ``None`` for
+        the two ``fitted_for_*`` fields -- absence of a claim, not a claim of
+        compatibility, and callers should treat it that way.
+        """
         checkpoint = torch.load(path, map_location="cpu", weights_only=True)
         if "J" not in checkpoint:
             raise ValueError(
                 f"{path} is not a JacobianLens file "
                 f"(found keys {sorted(checkpoint)!r}; a fit() checkpoint?)"
             )
-        return cls(
+        lens = cls(
             jacobians=checkpoint["J"],
             n_prompts=checkpoint["n_prompts"],
             d_model=checkpoint["d_model"],
         )
+        lens.fitted_for_model = checkpoint.get("fitted_for_model")
+        lens.fitted_for_revision = checkpoint.get("fitted_for_revision")
+        return lens
 
     @classmethod
     def from_pretrained(
