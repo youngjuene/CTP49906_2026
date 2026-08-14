@@ -74,6 +74,17 @@ def main():
     ap.add_argument("--attention_prompt", default="Describe what you see and hear in the video")
     ap.add_argument("--max_new_tokens", type=int, default=32)
     ap.add_argument("--generated_at", default="", help="optional ISO timestamp to stamp into meta.json")
+    ap.add_argument(
+        "--write_probe_distributions",
+        action="store_true",
+        help=(
+            "Also write the full per-(layer, position) distribution pack. This is "
+            "~15 MB of JSON into precomputed/, which is NOT gitignored and which "
+            "every molab kernel clones — nothing in the notebook reads it today, "
+            "so it is opt-in. Turn it on only when building the entropy/margin "
+            "sidecar."
+        ),
+    )
     args = ap.parse_args()
 
     proj = Path(__file__).resolve().parents[1]
@@ -220,10 +231,17 @@ def main():
         attention_token_types=attn_types, meta=meta,
         baseline_attention_summary=baseline_summary,
         knockout_attention_summary=knockout_summary,
-        probe_distributions=compact_probe_result.to_dict(),
+        probe_distributions=(
+            compact_probe_result.to_dict() if args.write_probe_distributions else None
+        ),
         cache_identity=cache_identity.to_dict(),
     )
     print(f"✅ wrote precompute artifacts to {out_dir}")
+    if not args.write_probe_distributions:
+        print(
+            "   (skipped probe_distributions — ~15 MB of JSON no notebook cell "
+            "reads; pass --write_probe_distributions if you need it)"
+        )
     print(f"   caption: {logit_caption!r}")
     print(f"   baseline vs knockout: {baseline_text!r}  |  {knockout_text!r}")
 

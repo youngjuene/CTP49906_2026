@@ -240,9 +240,11 @@ Knockout 셀**에 속하고(생성 중에 작동), 마지막 두 개는 **오디
 
 ## WP-6 수업 배포 안내
 
-이 노트북과 함께 이중 언어 [`study_materials/wp6/`](../study_materials/wp6/)
-교사용 실행 안내와 학생 빠른 시작을 사용하세요. 재생 매니페스트는 모델 revision과
-산출물 체크섬을 고정합니다. 청중 응답 표면은
-[`../audience/CTP49906_audience_response_molab.py`](../audience/CTP49906_audience_response_molab.py)입니다.
+이중 언어 교사용 실행 안내, 학생 빠른 시작, 청중 응답 표면은 PRD에 명세되어
+있으나 **아직 이 저장소에 없습니다**. 현재 존재하는 것은
+[`WORKSHEET.md`](WORKSHEET.md)이며, 노트북의 실행 원장(run ledger)이 그 형식에
+맞는 표를 그대로 내보냅니다(노트북 하단의 `⬇ Download your runs as a worksheet
+table`).
+
 사람의 접근성·현지화·라이선스·거버넌스 검토가 끝나기 전까지는 수업 전용 후보
 배포이며 연구 준비 완료를 주장하지 않습니다.

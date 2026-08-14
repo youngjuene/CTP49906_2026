@@ -97,15 +97,17 @@ run in this mode. Regenerate the artifacts on a CUDA box with
 | **Setup** | Installs deps, patches the video reader, clones the repo. | Nothing to tune; just let it finish. |
 | **Guided-demo reference** | Central knobs: `VIDEO_PATH`, `NFRAMES`, `LOGIT_PROMPT`, `ATTENTION_PROMPT`, `KNOCKOUT_RULES`, `MAX_NEW_TOKENS`. | Leave unchanged first; edit only to redesign the shared reference run. |
 | **Video preview** | Plays the exact clip (frames **and** embedded audio) sent to Qwen. | Whatever the model can't perceive here, it can't answer from. |
-| **Model + helpers** | Loads Qwen2.5-Omni-3B (talker freed — this only needs the *thinker*) and builds the token-type map. | Prints `token counts:` — how many `audio` / `video` / `query_text` tokens your prompt produced. |
+| **Model + helpers** | Loads Qwen2.5-Omni-3B (talker freed — this only needs the *thinker*) and builds the token-type map. | Prints `token counts:` with **every** modality including the zeros — `image=0` on a video clip is a fact, not an omission. |
 | **Logit Lens** | One forward pass; decodes per-layer predictions at audio positions to a CSV; also prints the caption. | The caption is the model's "final answer" for comparison. |
 | **Diversity by layer** | Two plots: how many *distinct* probe tokens each layer decodes at audio positions, and how dominant the top token is. | A descriptive argmax statistic—not uncertainty, quality, or proof of fusion. |
+| **🎞️ Probe grid** | All 36 layers × every audio position on one canvas, coloured by token **class** (content / junk / undecodable). Drag to scrub a layer; click a column for that position's whole trajectory. | The headline finding of the week: the probe is **degenerate** at audio positions — layer 34 decodes 6 distinct tokens across 248 positions, 245 of them junk. "Crystallization" is convergence onto a space. |
 | **Attention Knockout** | Generates a **baseline** caption and a **knockout** caption side-by-side using `KNOCKOUT_RULES`. | The whole point: does the answer *change* when a pathway is cut? |
-| **Captured attention** | Baseline and knockout heatmaps plus their delta, showing final-query attention mass by token type. **Descriptive, not causal importance.** | Masking mechanically redistributes attention; read this *alongside* outcome measures. |
-| **Teacher-forced Δ log-lik** | Feeds the baseline caption back in tagged `answer` and scores its per-token log-probability change under the same direct-edge knockout. | Continuous and deterministic; reports additive total and length-normalized mean. |
-| **🎛️ Playground** | Interactive form (below) that re-runs the logit-lens diversity measurement on your choices. | Where students spend most of their time. |
-| **🎯 Teacher forcing** | Interactive form for the Δ log-lik measurement: your clip, prompt, target modality, and layer band, with the source fixed to `answer`. | Where `answer → audio` — inert everywhere else — becomes a real experiment. |
-| **Synthesis challenge** | Audits the evidence, then asks for a new modality-routing or fusion design. | Separate observation from mechanism and state what would falsify the design. |
+| **Captured attention** | Baseline and knockout heatmaps plus their delta, showing final-query attention mass by token type. **Descriptive, not causal importance.** | The knockout panel's blocked column is ~0 *by construction*. Only the baseline panel says where attention normally goes; only Δ says where the mask pushed it. |
+| **Teacher-forced Δ log-lik** | Feeds the baseline caption back in tagged `answer` and scores its per-token log-probability change under the same direct-edge knockout. | Continuous and deterministic; reports additive total **and** length-normalized Δ/token — the mean is the one that survives a change of caption length. |
+| **🎚️ Layer-band sweep** | Regenerates the caption with one modality blocked over a chosen band, and diffs it against the baseline. | An unchanged caption is "no effect under this measurement", not proof the pathway is absent. Bands that mask zero layers are refused before the GPU runs. |
+| **🎛️ Playground** | Interactive form that re-runs the logit-lens diversity measurement on your choices. | Forward-pass only, so `generated` and `answer` are **inert on either side** of a rule here. `Frames` moves the *video* token count, never the audio one. |
+| **🎯 Teacher forcing** | Interactive form for the Δ log-lik measurement: your clip, prompt, target modality, and layer band, with the source fixed to `answer`. | Where `answer → audio` — inert everywhere else — becomes a real experiment. Pick `Silent control` as the clip: it is the one control in this lab that can fail. |
+| **📓 Lab ledger** | Every ▶ recorded with the prediction you wrote first, the setting you changed, and the measurement — exportable as a `WORKSHEET.md` table. | Two counts to watch: runs **without a control**, and runs **without a verdict**. |
 
 ### Reading a knockout rule
 
@@ -243,9 +245,11 @@ graded on.
 
 ## WP-6 classroom release notes
 
-Use the bilingual [`study_materials/wp6/`](../study_materials/wp6/) runbook and
-student quick-start alongside this notebook. The replay manifest pins the model
-revision and artifact checksums; the audience response surface is
-[`../audience/CTP49906_audience_response_molab.py`](../audience/CTP49906_audience_response_molab.py).
-This is a teaching-only candidate release until the listed human accessibility,
+The bilingual instructor runbook, student quick-start, and audience-response
+surface are **specified in the PRD but not yet in this repository**. What exists
+today is [`WORKSHEET.md`](WORKSHEET.md), and the notebook's run ledger exports
+rows in its format directly (`⬇ Download your runs as a worksheet table` at the
+bottom of the notebook).
+
+This is a teaching-only candidate release until the human accessibility,
 localization, licensing, and governance gates are reviewed.
