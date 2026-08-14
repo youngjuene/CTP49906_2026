@@ -146,7 +146,12 @@ def group_tokens_into_words(caption_tokens, delta):
 
 
 def render_delta_strip(
-    caption_tokens, delta, cmap_name="RdBu", word_level=True, highlight_below=None
+    caption_tokens,
+    delta,
+    cmap_name="RdBu",
+    word_level=True,
+    highlight_below=None,
+    vmax=None,
 ):
     """Colored caption strip: word-level display, token-level values (F2).
 
@@ -167,6 +172,13 @@ def render_delta_strip(
     visual sweep (an outline alone is too subtle to read while dragging). The
     diverging background scale is preserved underneath either way, and passing
     `None` (the default) renders the plain strip.
+
+    `vmax` pins the ends of the diverging scale. Left `None` it is derived from
+    *this* caption's own worst drop, which makes two strips incomparable: a run
+    whose worst token is -0.2 nats and one whose worst is -9 nats both render
+    fully saturated. Any time two strips are shown together -- the silent-clip
+    control against the real clip, or a layer-band sweep -- pass the same `vmax`
+    to both, or the colors say nothing about relative effect size.
     """
     import matplotlib
 
@@ -182,7 +194,7 @@ def render_delta_strip(
     else:
         units = [(tok or "", val, None) for tok, val in zip(caption_tokens, vals)]
 
-    vmax = max(1e-6, max(abs(v) for _, v, _ in units))
+    vmax = max(1e-6, float(vmax) if vmax is not None else max(abs(v) for _, v, _ in units))
     norm = matplotlib.colors.TwoSlopeNorm(vmin=-vmax, vcenter=0.0, vmax=vmax)
     cmap = matplotlib.colormaps[cmap_name]
 
@@ -326,7 +338,17 @@ def teacher_forced_delta(
     #    fires (q_len == k_len == ext_len).
     def _logits(active_rules):
         ctx = (
-            block_attention(model, active_rules, ext_types, ext_len, track_attention=False)
+            block_attention(
+                model,
+                active_rules,
+                ext_types,
+                ext_len,
+                track_attention=False,
+                # Scoring is forward-only, so `generated` rules would be inert
+                # here; `answer` is the live counterpart and this is what tells
+                # `rule_reach` to say so instead of silently returning a baseline.
+                context="forward",
+            )
             if active_rules
             else nullcontext()
         )

@@ -270,6 +270,34 @@ def test_teacher_forced_delta_plumbing_with_a_fake_model():
     assert res["knockout_distribution"] == res["baseline_distribution"]
 
 
+def _backgrounds(html):
+    return [chunk.split(";")[0] for chunk in html.split("background:")[1:]]
+
+
+def test_strip_renormalizes_per_run_without_a_shared_vmax():
+    # The failure this guards: a caption whose worst token is -0.2 nats and one
+    # whose worst is -9 nats both render fully saturated, so two strips shown
+    # together say nothing about relative effect size.
+    small = render_delta_strip([" a", " b"], [-0.2, 0.0])
+    large = render_delta_strip([" a", " b"], [-9.0, 0.0])
+    assert _backgrounds(small) == _backgrounds(large)
+
+
+def test_shared_vmax_makes_two_strips_comparable():
+    small = render_delta_strip([" a", " b"], [-0.2, 0.0], vmax=9.0)
+    large = render_delta_strip([" a", " b"], [-9.0, 0.0], vmax=9.0)
+    assert _backgrounds(small) != _backgrounds(large)
+    # The larger drop must be the hotter end of the diverging scale.
+    assert _backgrounds(large)[0] != _backgrounds(small)[0]
+    # Neutral (0.0) is unchanged by the scale, so only the drop moved.
+    assert _backgrounds(large)[1] == _backgrounds(small)[1]
+
+
+def test_vmax_default_preserves_existing_behavior():
+    assert render_delta_strip([" a"], [-1.0]) == render_delta_strip([" a"], [-1.0], vmax=None)
+    assert render_delta_strip([" a"], [-1.0]) == render_delta_strip([" a"], [-1.0], vmax=1.0)
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     fails = 0

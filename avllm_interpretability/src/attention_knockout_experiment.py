@@ -5,9 +5,10 @@ from collections import defaultdict, Counter
 from typing import Optional, List, Dict, Tuple
 from contextlib import contextmanager
 
-# Ensure the model's source files are accessible
-from transformers import Qwen2_5OmniForConditionalGeneration, Qwen2_5OmniProcessor
-from qwen_omni_utils import process_mm_info
+# `transformers` and `qwen_omni_utils` are imported inside the CLI block below,
+# not here: nothing in this module's library surface touches them, and importing
+# them at module scope would make the pure guards (`rule_reach`, the hook logic)
+# untestable anywhere the multimodal stack is not installed.
 import argparse
 import time
 
@@ -39,6 +40,101 @@ TOKEN_TYPE_MAP: Dict[str, int] = {
 }
 # Create a reverse map for potential debugging (optional)
 ID_TO_TOKEN_TYPE: Dict[int, str] = {v: k for k, v in TOKEN_TYPE_MAP.items()}
+
+# `generated` positions are the ones past `original_input_len`; they are created
+# by decoding, so they exist as queries *and* as keys only in the decode branch of
+# `BlockAttentionHook`. In a single forward pass over the prompt there are none,
+# which makes a `generated` rule inert on either side. `answer` is the mirror
+# image: assigned positionally by `build_answer_token_types`, so it is present in
+# `token_types` and live during prefill.
+POSITIONAL_TOKEN_TYPES = frozenset({"generated"})
+
+
+def rule_reach(rules, token_types, n_layers, context="generate"):
+    """What a set of knockout rules would actually mask. Pure; no model needed.
+
+    A rule that matches no layer or no token is silently a no-op: `block_attention`
+    registers hooks only where `start <= i < end` and the hook itself only fires
+    where a query is a source and a key is a target. The notebook then reports the
+    unchanged output as "this band shows no effect" -- a confident false negative,
+    produced precisely when a student is being careful (dragging both range-slider
+    handles onto layer 12 to ask "is it exactly here?" yields `[12, 12)`).
+
+    `context` selects which of the hook's two branches will run:
+      "generate" -- `model.generate()`, so both the prefill and the decode branch
+        fire and `generated` is live as source and as target.
+      "forward"  -- a single forward pass over the prompt, so only the prefill
+        branch fires and `generated` is inert on *both* sides. The notebook's
+        diversity scoreboard and the teacher-forcing scorer are this case; the
+        scoreboard's prose warns only about the source half.
+
+    Returns `{"ok": bool, "reasons": [...], "rules": [per-rule dict]}` rather than
+    raising, so a caller can render the diagnosis in-cell before spending GPU time.
+    """
+    counts = Counter(token_types)
+    reasons = []
+    per_rule = []
+    for rule in rules:
+        if len(rule) != 4:
+            reasons.append(f"{rule!r} is not (source, target, start_layer, end_layer)")
+            per_rule.append({"rule": rule, "ok": False})
+            continue
+        source, target, start, end = rule
+        why = []
+        for role, name in (("source", source), ("target", target)):
+            if name not in TOKEN_TYPE_MAP:
+                why.append(
+                    f"unknown {role} {name!r} -- use {' / '.join(TOKEN_TYPE_MAP)}"
+                )
+            elif name in POSITIONAL_TOKEN_TYPES:
+                if context == "forward":
+                    why.append(
+                        f"{role} {name!r} is inert in a forward pass: there are no "
+                        f"{name} positions until the model decodes"
+                    )
+            elif counts.get(name, 0) == 0:
+                why.append(
+                    f"{role} {name!r} appears 0 times in this input "
+                    f"(present: {', '.join(f'{k} {v}' for k, v in counts.most_common())})"
+                )
+        try:
+            start_i, end_i = int(start), int(end)
+        except (TypeError, ValueError):
+            why.append(f"start/end must be integers, got {start!r}, {end!r}")
+            start_i = end_i = 0
+        else:
+            layers = max(0, min(end_i, n_layers) - max(0, start_i))
+            if layers == 0:
+                why.append(
+                    f"[{start_i}, {end_i}) masks 0 of {n_layers} layers "
+                    "(`end` is exclusive)"
+                )
+        per_rule.append({
+            "rule": tuple(rule),
+            "source_tokens": counts.get(source, 0),
+            "target_tokens": counts.get(target, 0),
+            "layers": max(0, min(int(end_i), n_layers) - max(0, int(start_i))),
+            "ok": not why,
+            "reasons": why,
+        })
+        reasons.extend(why)
+    return {"ok": not reasons, "reasons": reasons, "rules": per_rule}
+
+
+def capture_vram_estimate(n_layers, seq_len, n_steps, n_heads=16, dtype_bytes=2):
+    """Rough bytes held by `track_attention` capture, for the budget warning.
+
+    Each captured layer keeps one `[heads, q, k]` attention tensor per decode step
+    on CPU. Widening `ATTENTION_CAPTURE_LAYERS` from the default `(0, 2)` to every
+    layer is the obvious student move and the one that can take the session down --
+    `force_attention_output_hook`'s docstring already says so, but nothing measures
+    it. Heads are averaged only *after* capture, so `n_heads` belongs here: the
+    captured tensor is the pre-reduction one. Defaults match Qwen2.5-Omni-3B's
+    thinker (16 heads, bf16); pass the real values when the caller knows them.
+    """
+    return (
+        int(n_layers) * int(n_heads) * int(n_steps) * int(seq_len) ** 2 * int(dtype_bytes)
+    )
 
 
 # --- 2. The (Vectorized) Hook for Modifying Attention Masks ---
@@ -184,18 +280,21 @@ def force_attention_output_hook(module, args, kwargs):
 # --- 4. The Context Manager to Apply All Hooks ---
 
 @contextmanager
-def block_attention(model: torch.nn.Module, 
+def block_attention(model: torch.nn.Module,
                     knockout_rules: List[Tuple[str, str, int, int]], # <-- NEW FORMAT
-                    token_types: List[str], 
+                    token_types: List[str],
                     original_input_len: int,
                     track_attention: bool = False,
-                    capture_layer_range: Optional[Tuple[int, int]] = None): # <-- MODIFIED
+                    capture_layer_range: Optional[Tuple[int, int]] = None,
+                    context: str = "generate"):
     """
     A context manager that applies attention hooks to the model.
     - knockout_rules: List of (source, target, start_layer, end_layer)
     - capture_layer_range: Optional (start, end) range for *attention capture*
+    - context: "generate" (both hook branches fire) or "forward" (prefill only, so
+      `generated` rules are inert). See `rule_reach`.
     """
-    
+
     knockout_hook_handles = []
     capture_flag_handles = []
     capture_hook_handles = []
@@ -219,6 +318,21 @@ def block_attention(model: torch.nn.Module,
         ) from e
     generated_token_id = TOKEN_TYPE_MAP["generated"]
 
+    # A rule that reaches nothing is the same failure as an unknown token type:
+    # the caller believes an intervention is applied and gets a baseline back.
+    # Refuse it here rather than let the notebook label the unchanged output
+    # "the pathway is not carried here".
+    if knockout_rules:
+        reach = rule_reach(
+            knockout_rules, token_types, len(model.thinker.model.layers), context=context
+        )
+        if not reach["ok"]:
+            raise ValueError(
+                "These knockout rules would mask nothing: "
+                + "; ".join(reach["reasons"])
+                + ". A no-op rule returns a baseline run that reads as 'no effect'."
+            )
+
     try:
         # 2. Register all hooks
         num_knockout_hooks = 0
@@ -233,7 +347,35 @@ def block_attention(model: torch.nn.Module,
             capture_start = max(0, capture_layer_range[0])
             capture_end = min(total_layers, capture_layer_range[1])
             print(f"Applying ATTENTION CAPTURE to layer range: [{capture_start}, {capture_end})")
-        
+        if track_attention:
+            # Budget note, not a hard cap: the step count is unknown here, so this
+            # prices a single prefill. Widening the range is a legitimate
+            # experiment -- it just needs to be a priced one.
+            n_captured = max(0, capture_end - capture_start)
+            # Heads come from the model rather than the default where we can get
+            # them: the captured tensor is `[heads, q, k]` and the head count
+            # drives the estimate linearly.
+            try:
+                n_heads = int(model.config.thinker_config.text_config.num_attention_heads)
+            except AttributeError:
+                n_heads = 16
+            est = capture_vram_estimate(
+                n_captured, original_input_len, 1, n_heads=n_heads
+            )
+            print(
+                f"Attention capture: {n_captured} layer(s) x {n_heads} heads x "
+                f"{original_input_len}^2 ~= {est / 2**30:.2f} GiB per decode step "
+                "(host RAM)."
+            )
+            if n_captured > 4:
+                print(
+                    f"⚠️  Capturing {n_captured} layers costs about "
+                    f"{est / 2**30:.1f} GiB *per generated token*. This is the "
+                    "usual way to lose both loaded models on a 24 GB classroom "
+                    "GPU -- narrow ATTENTION_CAPTURE_LAYERS if the run dies."
+                )
+
+
         # --- NEW: Layer-by-layer hook registration ---
         for i, layer in enumerate(all_layers):
             
@@ -415,6 +557,11 @@ def parse_args():
 
 
 if __name__ == "__main__":
+    from qwen_omni_utils import process_mm_info
+    from transformers import (
+        Qwen2_5OmniForConditionalGeneration,
+        Qwen2_5OmniProcessor,
+    )
 
     config = parse_args()
     KNOCKOUT_RULES = config['KNOCKOUT_RULES']

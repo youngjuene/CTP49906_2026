@@ -5,9 +5,10 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 import torch
-from transformers import Qwen2_5OmniForConditionalGeneration, Qwen2_5OmniProcessor
-# Make sure qwen_omni_utils.py is accessible in your environment
-from qwen_omni_utils import process_mm_info
+# `transformers`' Qwen-Omni classes and `qwen_omni_utils` are imported inside the
+# CLI block at the bottom, not here: the library surface (hooks, the token-type
+# mapper, the CSV adapter) never names them, and a module-scope import would make
+# those untestable wherever the multimodal stack is not installed.
 from collections import Counter
 
 try:
@@ -137,6 +138,12 @@ def clear_logit_lens_hooks():
     print("🧹 Cleared all logit lens hooks.")
 
 def create_token_type_mapping(input_ids, config):
+    """Per-position modality names, using the same vocabulary as the knockout mapper.
+
+    The non-multimodal bucket is `query_text`, not `text`: this mapper's output is
+    printed to the student before any rule is written, and `text` is not a key in
+    `TOKEN_TYPE_MAP` -- so the name they saw first was the one no rule accepts.
+    """
     token_types = []
     for token_id in input_ids.cpu().flatten():
         if token_id == config.audio_token_index:
@@ -146,7 +153,7 @@ def create_token_type_mapping(input_ids, config):
         elif token_id == config.video_token_index:
             token_types.append("video")
         else:
-            token_types.append("text")
+            token_types.append("query_text")
     return token_types
 
 
@@ -306,6 +313,12 @@ def analyze_and_save_audio_logits_to_csv(
 # --- Main Execution Block (Unchanged) ---
 
 if __name__ == "__main__":
+    from qwen_omni_utils import process_mm_info
+    from transformers import (
+        Qwen2_5OmniForConditionalGeneration,
+        Qwen2_5OmniProcessor,
+    )
+
     parser = argparse.ArgumentParser(description="Run logit lens analysis on a video using Qwen2.5 Omni model")
     parser.add_argument("--model_path", required=True, help="Path or name of the pretrained model")
     parser.add_argument("--video_path", required=True, help="Path to the input video file")
