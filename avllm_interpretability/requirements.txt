@@ -22,8 +22,13 @@ librosa
 accelerate==1.14.0
 torch==2.6.0+cu124
 torchvision==0.21.0+cu124
-# The repository's historical 4.52.0.dev0 build is no longer published.
-transformers==4.52.0
+# The repository's historical 4.52.0.dev0 build is no longer published. Pinned
+# exactly, and to .4 rather than .0: the experiments in src/ hook transformers
+# internals (the `self_attn` attention_mask kwarg, `thinker.model.layers`,
+# `config.thinker_config.audio_token_index`), and 4.52.0 is yanked on PyPI — the
+# two ship byte-identical `models/qwen2_5_omni`, so .4 costs nothing and adds
+# three `from_pretrained` fixes.
+transformers==4.52.4
 
 # Notebook runtime. The molab notebook installs these itself (molab ignores the
 # `# /// script` block), but a local `uv pip install -r requirements.txt` needs

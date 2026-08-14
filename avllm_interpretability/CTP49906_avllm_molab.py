@@ -6,7 +6,7 @@
 #     "matplotlib",
 #     "torch==2.6.0",
 #     "torchvision==0.21.0",
-#     "transformers==4.52.0",
+#     "transformers==4.52.4",
 #     "accelerate==1.14.0",
 #     "qwen-omni-utils==0.0.9",
 #     "wigglystuff==0.5.21",
@@ -75,21 +75,34 @@ def _(mo):
         return tuple(out)
 
     def _ensure_packages(specs):
-        # specs: (import_name, dist_name, min_version_or_None, pip_spec).
+        # specs: (import_name, dist_name, want, pip_spec), where `want` is a
+        # minimum version, `None` for "any version will do", or `("==", version)`
+        # when only that exact one will — a *newer* release is wrong too, so a
+        # kernel that ships one gets it replaced rather than silently used.
         # molab does not install the `# /// script` block into the running
-        # kernel, so pip-install anything missing (or too old) at runtime.
+        # kernel, so pip-install anything missing, too old, or simply different.
         to_install = []
-        for import_name, dist_name, min_version, pip_spec in specs:
+        for import_name, dist_name, want, pip_spec in specs:
             if importlib.util.find_spec(import_name) is None:
                 to_install.append(pip_spec)
                 continue
-            if min_version is not None:
+            if want is not None:
                 try:
                     have = importlib.metadata.version(dist_name)
                 except importlib.metadata.PackageNotFoundError:
                     to_install.append(pip_spec)
                     continue
-                if _ver_tuple(have) < _ver_tuple(min_version):
+                _exact = isinstance(want, tuple)
+                _need = want[1] if _exact else want
+                _wrong = (
+                    _ver_tuple(have) != _ver_tuple(_need) if _exact
+                    else _ver_tuple(have) < _ver_tuple(_need)
+                )
+                if _wrong:
+                    print(
+                        f"{dist_name}: kernel has {have}, this notebook needs "
+                        f"{'exactly ' if _exact else '>= '}{_need} — installing"
+                    )
                     to_install.append(pip_spec)
         if to_install:
             with mo.status.spinner(title=f"Installing {', '.join(to_install)}…"):
@@ -98,7 +111,19 @@ def _(mo):
                 )
 
     _ensure_packages([
-        ("transformers", "transformers", "4.52.0", "transformers==4.52.0"),
+        # Exact, not a minimum. `src/attention_knockout_experiment.py` rewrites
+        # the `attention_mask` kwarg of `layer.self_attn`, and the logit lens
+        # reads `thinker.model.layers`, `thinker.lm_head` and
+        # `config.thinker_config.audio_token_index` — internals, all of them. A
+        # kernel that already ships a *newer* transformers passes a `>=` check
+        # and would run this lab against a version nobody validated it on, which
+        # for a knockout is worse than a crash: a mask that stops matching is a
+        # null result, not an error. 4.52.4 rather than the 4.52.0 this notebook
+        # used to pin: 4.52.0 is yanked on PyPI (an exact pin still installs it,
+        # but nothing else resolves to it), the two ship byte-identical
+        # `models/qwen2_5_omni` and `generation/utils.py`, and 4.52.4 adds three
+        # `from_pretrained` fixes.
+        ("transformers", "transformers", ("==", "4.52.4"), "transformers==4.52.4"),
         ("accelerate", "accelerate", "1.14.0", "accelerate==1.14.0"),
         ("qwen_omni_utils", "qwen-omni-utils", None, "qwen-omni-utils==0.0.9"),
         ("av", "av", None, "av"),  # PyAV — backs the video-decode shim below
