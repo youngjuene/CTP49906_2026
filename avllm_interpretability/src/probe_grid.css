@@ -1,0 +1,369 @@
+/* probe_grid.css -- every rule is scoped under .ctp-probe-grid.
+ *
+ * anywidget injects this into the host document, so an unscoped `.chip` or a
+ * bare `canvas` rule would leak into marimo's own UI. The canvas colours are
+ * declared here as custom properties (not hardcoded in JS) so the same tokens
+ * drive the swatches, the chips and the drawn cells, and so a light/dark flip
+ * is one block of overrides rather than a branch in the drawing code.
+ */
+
+.ctp-probe-grid {
+  --ctp-pg-content: #0f766e;
+  --ctp-pg-junk: #c3c8d0;
+  --ctp-pg-undecodable: #dc2626;
+  --ctp-pg-settled: rgba(17, 24, 39, 0.7);
+  --ctp-pg-grid: rgba(120, 120, 120, 0.35);
+  --ctp-pg-fg: #1f2328;
+  --ctp-pg-muted: #6b7280;
+  --ctp-pg-pin: #b45309;
+  --ctp-pg-surface: rgba(127, 127, 127, 0.07);
+  --ctp-pg-border: rgba(127, 127, 127, 0.28);
+
+  position: relative;
+  display: block;
+  color: var(--ctp-pg-fg);
+  font-size: 13px;
+  line-height: 1.45;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  .ctp-probe-grid {
+    --ctp-pg-content: #2dd4bf;
+    --ctp-pg-junk: #40464f;
+    --ctp-pg-undecodable: #f87171;
+    --ctp-pg-settled: rgba(240, 244, 248, 0.72);
+    --ctp-pg-fg: #e7eaee;
+    --ctp-pg-muted: #99a1ad;
+    --ctp-pg-pin: #fbbf24;
+  }
+}
+
+/* marimo sets its theme with an attribute/class on the document root, which
+ * beats prefers-color-scheme when the user has picked one explicitly. */
+html.dark .ctp-probe-grid,
+body.dark .ctp-probe-grid,
+[data-theme="dark"] .ctp-probe-grid {
+  --ctp-pg-content: #2dd4bf;
+  --ctp-pg-junk: #40464f;
+  --ctp-pg-undecodable: #f87171;
+  --ctp-pg-settled: rgba(240, 244, 248, 0.72);
+  --ctp-pg-fg: #e7eaee;
+  --ctp-pg-muted: #99a1ad;
+  --ctp-pg-pin: #fbbf24;
+}
+
+html.light .ctp-probe-grid,
+[data-theme="light"] .ctp-probe-grid {
+  --ctp-pg-content: #0f766e;
+  --ctp-pg-junk: #c3c8d0;
+  --ctp-pg-undecodable: #dc2626;
+  --ctp-pg-settled: rgba(17, 24, 39, 0.7);
+  --ctp-pg-fg: #1f2328;
+  --ctp-pg-muted: #6b7280;
+  --ctp-pg-pin: #b45309;
+}
+
+.ctp-probe-grid .pg-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.6em;
+}
+
+.ctp-probe-grid .pg-title {
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.ctp-probe-grid .pg-verdict {
+  color: var(--ctp-pg-muted);
+  font-size: 12px;
+}
+
+.ctp-probe-grid .pg-readout {
+  margin: 0.25em 0 0.5em;
+  padding: 0.35em 0.55em;
+  border-left: 3px solid var(--ctp-pg-pin);
+  background: var(--ctp-pg-surface);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.ctp-probe-grid .pg-canvas-wrap {
+  position: relative;
+  width: 100%;
+}
+
+.ctp-probe-grid .pg-canvas {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  touch-action: none; /* pointer drag scrubs layers; don't let it pan */
+  cursor: crosshair;
+  outline: none;
+}
+
+.ctp-probe-grid .pg-canvas:focus-visible {
+  outline: 2px solid var(--ctp-pg-pin);
+  outline-offset: 2px;
+}
+
+.ctp-probe-grid .pg-tip {
+  position: absolute;
+  z-index: 5;
+  max-width: 22em;
+  padding: 0.3em 0.5em;
+  border: 1px solid var(--ctp-pg-border);
+  border-radius: 4px;
+  background: var(--ctp-pg-surface);
+  backdrop-filter: blur(6px);
+  color: var(--ctp-pg-fg);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  white-space: pre-wrap;
+  pointer-events: none;
+}
+
+.ctp-probe-grid .pg-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4em 1em;
+  margin: 0.35em 0;
+  color: var(--ctp-pg-muted);
+  font-size: 11px;
+}
+
+.ctp-probe-grid .pg-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.35em;
+}
+
+.ctp-probe-grid .pg-sw {
+  width: 11px;
+  height: 11px;
+  border-radius: 2px;
+  flex: 0 0 auto;
+}
+
+.ctp-probe-grid .pg-sw-content {
+  background: var(--ctp-pg-content);
+}
+
+.ctp-probe-grid .pg-sw-junk {
+  background: var(--ctp-pg-junk);
+}
+
+.ctp-probe-grid .pg-sw-undecodable {
+  background: var(--ctp-pg-undecodable);
+}
+
+.ctp-probe-grid .pg-sw-settled {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--ctp-pg-settled);
+}
+
+.ctp-probe-grid .pg-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4em 1.2em;
+  margin: 0.4em 0 0.3em;
+  font-size: 12px;
+}
+
+.ctp-probe-grid .pg-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  cursor: pointer;
+  user-select: none;
+}
+
+.ctp-probe-grid .pg-hint {
+  color: var(--ctp-pg-muted);
+}
+
+.ctp-probe-grid .pg-chips-head {
+  margin-top: 0.3em;
+  color: var(--ctp-pg-muted);
+  font-size: 11px;
+}
+
+.ctp-probe-grid .pg-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  max-height: 9.5em;
+  overflow-y: auto;
+  padding: 0.3em;
+  border: 1px solid var(--ctp-pg-border);
+  border-radius: 4px;
+}
+
+.ctp-probe-grid .pg-chip {
+  display: inline-block;
+  max-width: 12em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: pre;
+  padding: 0 3px;
+  border-radius: 2px;
+  background: var(--ctp-pg-surface);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+/* Default state: junk is greyed and struck through, so the degenerate reading
+ * is the one a student meets first. `.pg-plain` (the toggle) turns it off. */
+.ctp-probe-grid .pg-chip.is-junk {
+  color: var(--ctp-pg-muted);
+  text-decoration: line-through;
+  opacity: 0.5;
+}
+
+.ctp-probe-grid .pg-chip.is-undecodable {
+  color: var(--ctp-pg-undecodable);
+}
+
+.ctp-probe-grid.pg-plain .pg-chip.is-junk {
+  color: inherit;
+  text-decoration: none;
+  opacity: 1;
+}
+
+.ctp-probe-grid .pg-chip.is-pinned {
+  box-shadow: inset 0 0 0 1px var(--ctp-pg-pin);
+}
+
+.ctp-probe-grid .pg-pin-panel {
+  margin-top: 0.5em;
+  padding: 0.4em 0.5em;
+  border: 1px solid var(--ctp-pg-border);
+  border-radius: 4px;
+}
+
+.ctp-probe-grid .pg-pin-head {
+  margin-bottom: 0.3em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  color: var(--ctp-pg-muted);
+}
+
+.ctp-probe-grid .pg-pin-strip {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-height: 16em;
+  overflow-y: auto;
+}
+
+.ctp-probe-grid .pg-pin-row {
+  display: grid;
+  grid-template-columns: 5.5em 10px 1fr;
+  align-items: center;
+  gap: 0.4em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+}
+
+.ctp-probe-grid .pg-pin-row.is-active {
+  background: var(--ctp-pg-surface);
+}
+
+.ctp-probe-grid .pg-pin-layer {
+  color: var(--ctp-pg-muted);
+  text-align: right;
+}
+
+.ctp-probe-grid .pg-pin-bar {
+  height: 11px;
+  border-radius: 2px;
+  background: var(--ctp-pg-content);
+}
+
+.ctp-probe-grid .pg-pin-bar.is-junk {
+  background: var(--ctp-pg-junk);
+}
+
+.ctp-probe-grid .pg-pin-bar.is-undecodable {
+  background: var(--ctp-pg-undecodable);
+}
+
+.ctp-probe-grid .pg-pin-bar.is-settled {
+  box-shadow: inset 0 0 0 1px var(--ctp-pg-settled);
+}
+
+.ctp-probe-grid .pg-pin-token {
+  white-space: pre;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ctp-probe-grid .pg-pin-token.is-junk {
+  color: var(--ctp-pg-muted);
+  text-decoration: line-through;
+}
+
+.ctp-probe-grid.pg-plain .pg-pin-token.is-junk {
+  color: inherit;
+  text-decoration: none;
+}
+
+.ctp-probe-grid .pg-pin-token.is-undecodable {
+  color: var(--ctp-pg-undecodable);
+}
+
+.ctp-probe-grid .pg-notes {
+  margin-top: 0.5em;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35em;
+}
+
+.ctp-probe-grid .pg-note {
+  color: var(--ctp-pg-muted);
+  font-size: 11px;
+  max-width: 74ch;
+}
+
+.ctp-probe-grid .pg-note-def {
+  border-left: 2px solid var(--ctp-pg-border);
+  padding-left: 0.5em;
+}
+
+.ctp-probe-grid .pg-note-caveat {
+  border-left: 2px solid var(--ctp-pg-undecodable);
+  padding-left: 0.5em;
+}
+
+.ctp-probe-grid .pg-empty {
+  padding: 0.6em;
+  border: 1px dashed var(--ctp-pg-border);
+  border-radius: 4px;
+  color: var(--ctp-pg-muted);
+  font-size: 12px;
+}
+
+.ctp-probe-grid .pg-error {
+  margin: 0;
+  padding: 0.6em;
+  border: 1px solid var(--ctp-pg-undecodable);
+  border-radius: 4px;
+  color: var(--ctp-pg-undecodable);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  white-space: pre-wrap;
+  overflow-x: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ctp-probe-grid * {
+    transition: none !important;
+    animation: none !important;
+    scroll-behavior: auto !important;
+  }
+}
