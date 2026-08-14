@@ -48,6 +48,10 @@ synthesis challenge, and an optional fitting appendix:
   model's own final-layer distribution;
 - vary the prompt, offset from the end, layer sample, top-k, slice window,
   layer stride, and word-like display filter;
+- read the layer × position slice **in the notebook**: a script-free grid with
+  hover detail, plus per-token rank maps, so the whole lab runs in one session
+  with no file downloaded or re-uploaded (the d3 page stays available as an
+  optional file);
 - record a falsifiable prediction before each run and look deliberately for
   prompts where the simpler vanilla lens wins;
 - optionally fit a smaller 100-prompt lens in the advanced appendix, then bring
@@ -117,6 +121,20 @@ Reading a slice page:
 - Click a cell to select a (position, layer) and pin its top-1 token; pinned
   tokens get rank-tracking charts and a rank heatmap.
 - The bottom row (`L = n_layers − 1`) is the model's actual output.
+
+That page needs a host that runs its scripts — a browser tab, or a local
+notebook. For hosts that don't (marimo strips `<script>` from cell output, and
+molab will not run an embedded page's inlined script either), `jlens.vis` also
+renders the same arrays as plain tables with no script, iframe, or external
+asset:
+
+```python
+from jlens.vis import compute_slice, slice_grid_html, token_rank_grid_html
+
+sl = compute_slice(model, lens, prompt, layer_stride=2, last_n_tokens=64)
+slice_grid_html(sl)            # top-1 per (position, layer), shaded by agreement
+token_rank_grid_html(sl, [tid])  # full-vocab rank of one token, per cell
+```
 
 ## License and data
 
