@@ -7,6 +7,16 @@ the lens top-1 token with rank overlays and per-token rank-tracking charts.
 Data ships as gzip'd typed-array bytes, either base64-embedded inline (single
 self-contained file, d3 inlined too) or as ``slice.bin`` / ``meta.json`` /
 ``ranks/{tid}.bin`` sidecars for static hosting.
+
+That page is d3-driven, so it needs a host that will run its scripts -- a real
+browser tab, a local notebook. Several hosts will not: marimo sanitizes cell
+output and drops ``<script>``, so the page can only be shown by nesting a
+document, and in a hosted runtime (molab) that nested document does not run the
+inlined scripts either -- it renders as a blank rectangle.
+:func:`slice_grid_html` and :func:`token_rank_grid_html` render the same arrays
+as plain tables with no script, no iframe and no external asset, which is what
+makes them displayable in place anywhere; the interaction they would otherwise
+get from JavaScript comes from the host's own widgets re-calling them.
 """
 
 from __future__ import annotations
@@ -16,6 +26,8 @@ import gzip
 import hashlib
 import html
 import json
+import math
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from importlib.resources import files
 from pathlib import Path
@@ -513,3 +525,424 @@ def build_page(
         .replace("__BOOTSTRAP__", bootstrap_json)
     )
     return page, raw_bytes, payload_bytes
+
+
+# --------------------------------------------------------------------------- #
+# Script-free rendering
+# --------------------------------------------------------------------------- #
+#
+# Everything below emits a bare HTML fragment: tables, inline colours, native
+# ``title`` tooltips. No <script>, no <iframe>, no external asset. That is the
+# whole point -- a hosted notebook that refuses to run an embedded page's
+# scripts will still render this, so the slice can be read where it is computed
+# instead of via a downloaded file.
+
+#: ColorBrewer 9-class Blues, lightest (worst rank) to darkest (rank 0). One
+#: hue, so the ordering survives every common colour-vision deficiency. Applied
+#: to *log* rank: the informative range is 0-100 out of a ~150k vocabulary.
+_BLUES = (
+    "#f7fbff", "#deebf7", "#c6dbef", "#9ecae1", "#6baed6",
+    "#4292c6", "#2171b5", "#08519c", "#08306b",
+)
+_INK = "#10243e"
+_ABSENT = ("#f4f4f4", "#9aa4b0")
+
+#: Emitted with every fragment. Idempotent, and every rule is scoped to a
+#: ``jlg-`` class so two grids in one page cannot restyle their host. Layout
+#: only: colour stays inline per cell, so the grid still reads as a heatmap if
+#: a host strips style blocks.
+_GRID_CSS = (
+    "<style>"
+    ".jlg-wrap{overflow:auto;border:1px solid #d7dee8;border-radius:6px;"
+    "background:#fff;color:#10243e;color-scheme:light}"
+    ".jlg-wrap table{border-collapse:separate;border-spacing:0;"
+    "font:12px/1.35 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}"
+    ".jlg-wrap th,.jlg-wrap td{padding:2px 6px;white-space:pre;text-align:left;"
+    "border-right:1px solid #eef2f7;border-bottom:1px solid #eef2f7}"
+    ".jlg-wrap thead th{position:sticky;top:0;z-index:2;background:#f2f5f9;"
+    "font-weight:600}"
+    ".jlg-wrap tbody th{position:sticky;left:0;z-index:1;background:#f2f5f9;"
+    "font-weight:400;text-align:right;color:#5b6875}"
+    ".jlg-wrap thead th:first-child{left:0;z-index:3}"
+    ".jlg-cap{font:13px/1.45 system-ui,sans-serif;color:#3d4a5c;margin:0 0 6px}"
+    ".jlg-key{display:flex;flex-wrap:wrap;gap:10px;align-items:center;"
+    "font:12px/1.6 system-ui,sans-serif;color:#5b6875;margin:6px 0 14px}"
+    ".jlg-sw{display:inline-block;width:13px;height:13px;border-radius:3px;"
+    "vertical-align:-2px;margin-right:4px;border:1px solid #d7dee8}"
+    "</style>"
+)
+
+
+def _attr(text: str) -> str:
+    """Escape ``text`` for an HTML attribute, keeping newlines legible: a
+    ``title`` renders ``&#10;`` as a line break, which is how a tooltip carries
+    a whole top-K list."""
+    return html.escape(text, quote=True).replace("\n", "&#10;")
+
+
+def _visible(text: str, *, limit: int | None = None) -> str:
+    """Token text with whitespace made visible and, optionally, truncated.
+
+    Tokens routinely start with a space or *are* a newline; rendered raw in a
+    table cell those become invisible or blow the row height, which quietly
+    changes what the reader thinks the model emitted.
+    """
+    shown = (
+        text.replace("\r\n", "\n")
+        .replace("\n", "⏎")
+        .replace("\r", "⏎")
+        .replace("\t", "⇥")
+    )
+    if limit is not None and len(shown) > limit:
+        shown = shown[: max(limit - 1, 1)] + "…"
+    return shown
+
+
+def token_label(
+    slice_data: SliceData, token_id: int, alt_token: dict[int, str] | None = None
+) -> str:
+    """Display string for ``token_id``, with the gloss appended when one exists
+    (a Korean or Cyrillic token alone is unreadable to half the room).
+
+    Public because a host building a token picker needs to label its options
+    the same way the grids label their cells.
+    """
+    token_id = int(token_id)
+    raw = slice_data.vocab_fragment.get(token_id)
+    if raw is None:
+        return f"<id {token_id}>"
+    gloss = (alt_token or {}).get(token_id)
+    return f"{raw} ({gloss})" if gloss else raw
+
+
+def _fmt_rank(rank: int) -> str:
+    if rank < 0:
+        return "–"
+    if rank < 1000:
+        return str(int(rank))
+    if rank < 1_000_000:
+        return f"{rank / 1000:.0f}k"
+    return f"{rank / 1_000_000:.1f}M"
+
+
+def _rank_style(rank: int, vocab_size: int) -> tuple[str, str]:
+    """``(background, colour)`` for a full-vocabulary rank. Rank 0 is darkest;
+    chance (rank ~ vocab/2) lands at the pale end."""
+    if rank < 0:
+        return _ABSENT
+    ceiling = math.log10(max(int(vocab_size), 1000))
+    quality = 1.0 - min(math.log10(int(rank) + 1) / ceiling, 1.0)
+    index = min(int(quality * len(_BLUES)), len(_BLUES) - 1)
+    return _BLUES[index], ("#ffffff" if index >= 6 else _INK)
+
+
+def _layer_headers(slice_data: SliceData) -> list[tuple[str, str]]:
+    """``(label, tooltip)`` per rendered layer. The last one is the model's
+    final layer, rendered with ``J = I`` by :func:`compute_slice` -- i.e. the
+    model's actual output, not a lens readout. Marked ``★``, because a reader
+    comparing rows needs to know which one is the reference."""
+    total = slice_data.layers[-1] + 1
+    headers = []
+    for index, layer in enumerate(slice_data.layers):
+        is_final = index == len(slice_data.layers) - 1
+        depth = f"{layer / total:.0%} depth"
+        headers.append((
+            f"L{layer}★" if is_final else f"L{layer}",
+            f"layer {layer} · {depth} · "
+            + (
+                "final layer: identity transport, so this column is the model's "
+                "own output"
+                if is_final
+                else "read out through the lens transport J_l"
+            ),
+        ))
+    return headers
+
+
+def _position_slice(
+    slice_data: SliceData, max_positions: int | None
+) -> tuple[range, str]:
+    """Positions to render (the last ``max_positions``) and a note naming what
+    was dropped. Silently rendering a prefix would misrepresent the slice."""
+    total = slice_data.seq_len
+    if max_positions is None or total <= max_positions:
+        return range(total), ""
+    start = total - max_positions
+    return (
+        range(start, total),
+        f" Showing the last {max_positions} of {total} slice positions; "
+        f"{start} earlier position(s) are not drawn.",
+    )
+
+
+def _row_header(slice_data: SliceData, position: int) -> tuple[str, str]:
+    absolute = slice_data.ctx_offset + position
+    strs = slice_data.context_token_strs
+    token = strs[absolute] if absolute < len(strs) else ""
+    return (
+        f"{absolute} {_visible(token, limit=9)}",
+        f"prompt position {absolute} = {token!r}",
+    )
+
+
+def _legend(entries: Sequence[tuple[str, str]], trailing: str = "") -> str:
+    """A swatch-and-label row. ``entries`` are ``(background, label)``; label
+    text keeps the key's own muted colour so a dark swatch cannot make its
+    caption unreadable."""
+    swatches = "".join(
+        f'<span><span class="jlg-sw" style="background:{bg}"></span>'
+        f"{html.escape(label)}</span>"
+        for bg, label in entries
+    )
+    tail = f"<span>{html.escape(trailing)}</span>" if trailing else ""
+    return f'<div class="jlg-key">{swatches}{tail}</div>'
+
+
+def slice_grid_html(
+    slice_data: SliceData,
+    *,
+    alt_token: dict[int, str] | None = None,
+    tooltip_k: int = 5,
+    max_cell_chars: int = 11,
+    max_positions: int | None = None,
+    height: str = "560px",
+    caption: str = "",
+) -> str:
+    """Render the top-1 grid as a self-contained, script-free HTML fragment.
+
+    Rows are prompt positions, columns are the slice's layers, and each cell
+    carries that cell's top displayed candidate. Colour answers one question --
+    *where does the readout already agree with the model's own answer?* -- by
+    comparing every cell against the final-layer top-1 **at the same position**:
+    darkest where it is this cell's own top-1, mid where it merely appears in
+    the cell's top-K, pale where it is absent.
+
+    Colour deliberately does not encode the displayed token's rank: with
+    ``mask_display=False`` every displayed top-1 is rank 0 by construction, so
+    that map would be a solid block whatever the model did.
+
+    Args:
+        alt_token: Token id to English gloss, shown in tooltips.
+        tooltip_k: Candidates listed in each cell's hover tooltip.
+        max_cell_chars: Cell text is truncated to this; the tooltip has it all.
+        max_positions: Render only the last N positions (see the caption note).
+        height: CSS max-height of the scroll box.
+        caption: Prose rendered above the grid.
+    """
+    positions, elision = _position_slice(slice_data, max_positions)
+    headers = _layer_headers(slice_data)
+    top_ids = slice_data.top_ids
+    top_ranks = slice_data.top_ranks
+    n_shown = min(tooltip_k, top_ids.shape[2])
+    final_index = len(slice_data.layers) - 1
+
+    parts = [_GRID_CSS]
+    if caption or elision:
+        parts.append(f'<p class="jlg-cap">{html.escape(caption + elision)}</p>')
+    parts.append(f'<div class="jlg-wrap" style="max-height:{html.escape(height)}">')
+    parts.append("<table><thead><tr><th>pos · token</th>")
+    for label, tip in headers:
+        parts.append(f'<th title="{_attr(tip)}">{html.escape(label)}</th>')
+    parts.append("</tr></thead><tbody>")
+
+    for position in positions:
+        row_label, row_tip = _row_header(slice_data, position)
+        parts.append(
+            f'<tr><th title="{_attr(row_tip)}">{html.escape(row_label)}</th>'
+        )
+        final_id = int(top_ids[position, final_index, 0])
+        for layer_index in range(len(headers)):
+            cell_ids = top_ids[position, layer_index]
+            cell_id = int(cell_ids[0])
+            # Short phrases and a short header on purpose: this tooltip is
+            # repeated once per cell, and a 128 x 17 grid has 2,176 of them --
+            # the prose belongs in the legend and the column headers, which are
+            # written once.
+            if cell_id == final_id:
+                background, colour = _BLUES[7], "#ffffff"
+                agreement = "= the final layer's top-1"
+            elif bool((cell_ids == final_id).any()):
+                background, colour = _BLUES[3], _INK
+                agreement = "final layer's top-1 is in this top-K"
+            else:
+                background, colour = _BLUES[0], _INK
+                agreement = "final layer's top-1 absent here"
+            listing = "\n".join(
+                f"{k + 1}. {token_label(slice_data, cell_ids[k], alt_token)!r} "
+                f"rank {_fmt_rank(int(top_ranks[position, layer_index, k]))}"
+                for k in range(n_shown)
+            )
+            tooltip = (
+                f"pos {slice_data.ctx_offset + position} · "
+                f"{headers[layer_index][0]}\n{agreement}\n{listing}"
+            )
+            text = _visible(
+                token_label(slice_data, cell_id, alt_token), limit=max_cell_chars
+            )
+            parts.append(
+                f'<td style="background:{background};color:{colour}" '
+                f'title="{_attr(tooltip)}">{html.escape(text)}</td>'
+            )
+        parts.append("</tr>")
+
+    parts.append("</tbody></table></div>")
+    parts.append(
+        _legend(
+            [
+                (_BLUES[7], "cell top-1 = final-layer top-1"),
+                (_BLUES[3], "final-layer top-1 in this cell's top-K"),
+                (_BLUES[0], "absent"),
+            ],
+            "★ = the model's final layer (identity transport). Hover any cell "
+            f"for its top {n_shown} with full-vocabulary ranks.",
+        )
+    )
+    return "".join(parts)
+
+
+def token_rank_grid_html(
+    slice_data: SliceData,
+    token_ids: Iterable[int],
+    *,
+    alt_token: dict[int, str] | None = None,
+    max_positions: int | None = None,
+    height: str = "420px",
+) -> str:
+    """Render one position x layer rank map per token in ``token_ids``.
+
+    This is the script-free form of the interactive page's rank-tracking chart:
+    each cell is that token's **full-vocabulary** rank in that cell's readout,
+    shaded on a log scale. Tokens absent from ``slice_data.tracked_token_ids``
+    have no rank tensor and are reported as such rather than drawn empty.
+    """
+    tracked = {int(t): i for i, t in enumerate(slice_data.tracked_token_ids)}
+    positions, elision = _position_slice(slice_data, max_positions)
+    headers = _layer_headers(slice_data)
+    ranks = slice_data.rank_tensor
+    # `vocab_size` is 0 on a slice built before it was recorded; fall back to the
+    # largest rank actually observed, and to a floor when nothing was tracked at
+    # all (an empty rank tensor has no max).
+    vocab_size = slice_data.vocab_size or (
+        int(max(ranks.max(), 1)) if ranks.size else 1
+    )
+
+    parts = [_GRID_CSS]
+    wanted = [int(t) for t in token_ids]
+    if not wanted:
+        return "".join(parts) + (
+            '<p class="jlg-cap">No token selected — pick one to see where in the '
+            "prompt and how early in the stack it becomes a candidate.</p>"
+        )
+
+    for token_id in wanted:
+        label = token_label(slice_data, token_id, alt_token)
+        if token_id not in tracked:
+            parts.append(
+                f'<p class="jlg-cap">{html.escape(repr(label))} has no rank '
+                "tensor in this slice (it was never tracked), so its ranks are "
+                "not available here.</p>"
+            )
+            continue
+        column = ranks[:, :, tracked[token_id]]
+        # Over the *rendered* window, not the whole slice: with `max_positions`
+        # set, a minimum taken over everything would caption the picture with a
+        # cell the reader cannot find in it.
+        window = column[positions.start : positions.stop]
+        best = int(window.min())
+        best_row, best_layer = (
+            int(i) for i in np.unravel_index(int(window.argmin()), window.shape)
+        )
+        best_position = positions.start + best_row
+        parts.append(
+            f'<p class="jlg-cap"><b>{html.escape(repr(label))}</b> — best rank '
+            f"{_fmt_rank(best)} at layer {slice_data.layers[best_layer]}, prompt "
+            f"position {slice_data.ctx_offset + best_position}."
+            f"{html.escape(elision)}</p>"
+        )
+        parts.append(f'<div class="jlg-wrap" style="max-height:{html.escape(height)}">')
+        parts.append("<table><thead><tr><th>pos · token</th>")
+        for header_label, tip in headers:
+            parts.append(f'<th title="{_attr(tip)}">{html.escape(header_label)}</th>')
+        parts.append("</tr></thead><tbody>")
+        for position in positions:
+            row_label, row_tip = _row_header(slice_data, position)
+            parts.append(f'<tr><th title="{_attr(row_tip)}">{html.escape(row_label)}</th>')
+            for layer_index, (layer_label, _) in enumerate(headers):
+                rank = int(column[position, layer_index])
+                background, colour = _rank_style(rank, vocab_size)
+                tooltip = (
+                    f"pos {slice_data.ctx_offset + position} · {layer_label}\n"
+                    f"rank of {label!r}: {rank if rank >= 0 else 'not computed'}"
+                )
+                parts.append(
+                    f'<td style="background:{background};color:{colour}" '
+                    f'title="{_attr(tooltip)}">{html.escape(_fmt_rank(rank))}</td>'
+                )
+            parts.append("</tr>")
+        parts.append("</tbody></table></div>")
+
+    parts.append(
+        _legend(
+            [
+                (_rank_style(0, vocab_size)[0], "rank 0"),
+                (_rank_style(10, vocab_size)[0], "10"),
+                (_rank_style(1000, vocab_size)[0], "1k"),
+                (_rank_style(vocab_size, vocab_size)[0], f"{vocab_size:,}"),
+            ],
+            f"Ranks are against the full {vocab_size:,}-column vocabulary, so "
+            f"chance is about {vocab_size // 2:,}.",
+        )
+    )
+    return "".join(parts)
+
+
+def position_top_k_rows(
+    slice_data: SliceData,
+    position: int,
+    *,
+    top_k: int = 5,
+    token_ids: Iterable[int] = (),
+    alt_token: dict[int, str] | None = None,
+) -> list[dict]:
+    """One row per layer for a single slice position, as plain dicts for a
+    table widget: the exact numbers behind a column of the grid, for a reader
+    who needs to copy them rather than hover over them.
+
+    ``position`` indexes the slice window, not the prompt.
+    """
+    tracked = {int(t): i for i, t in enumerate(slice_data.tracked_token_ids)}
+    wanted = [int(t) for t in token_ids]
+    n_shown = min(top_k, slice_data.top_ids.shape[2])
+    total = slice_data.layers[-1] + 1
+    rows = []
+    for layer_index, layer in enumerate(slice_data.layers):
+        is_final = layer_index == len(slice_data.layers) - 1
+        row = {
+            "Layer": f"{layer} ({layer / total:.0%})" + (" ★ model output" if is_final else ""),
+            f"Top {n_shown} candidates (rank)": " · ".join(
+                f"{token_label(slice_data, slice_data.top_ids[position, layer_index, k], alt_token)!r}"
+                f" ({_fmt_rank(int(slice_data.top_ranks[position, layer_index, k]))})"
+                for k in range(n_shown)
+            ),
+        }
+        for token_id in wanted:
+            label = token_label(slice_data, token_id, alt_token)
+            # Two ids can decode to the same string; keyed on the label alone,
+            # the second one would overwrite the first and its column would
+            # simply not appear.
+            key = f"rank of {label!r}"
+            if key in row:
+                key = f"{key} · id {token_id}"
+            row[key] = (
+                _fmt_rank(
+                    int(
+                        slice_data.rank_tensor[
+                            position, layer_index, tracked[token_id]
+                        ]
+                    )
+                )
+                if token_id in tracked
+                else "not tracked"
+            )
+        rows.append(row)
+    return rows
