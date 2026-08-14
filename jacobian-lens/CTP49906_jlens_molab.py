@@ -58,8 +58,12 @@ def _(mo):
       untouched so molab's GPU-matched build (Blackwell needs a cu128 wheel) is
       preserved. First run pulls a few GB of model weights.
     - The guided demo and playground use the **course reference lens**, fitted on
-      1,000 WikiText prompts. The advanced appendix runs only when clicked; you
-      can instead upload a previously fitted lens file.
+      1,000 WikiText prompts. The advanced appendix runs only when clicked.
+    - **Nothing in this notebook requires a file round-trip.** Slices render in
+      place, and a lens you fit in Appendix A is selectable in §3.1 straight
+      away — it stays on this session's disk. The download and upload buttons
+      exist only to carry a fit *out of* this session and back into a later one;
+      skip them and the whole path still works.
     """)
     return
 
@@ -494,6 +498,20 @@ def _(mo):
     Submit one bundled example at a time; this prevents an expensive recompute
     while you are still changing controls.
 
+    **How to read the grid.** One row per prompt position, one column per
+    rendered layer, and each cell holds that readout's top displayed candidate.
+    Shading answers *where does the readout already agree with the model?* —
+    dark where the cell's own top-1 is the final layer's top-1 for that
+    position, mid where the final answer is merely somewhere in the cell's
+    top-K, pale where it is absent. The `★` column is the model's final layer
+    (identity transport), so it is the reference the other columns are shaded
+    against, not a lens readout. **Hover any cell** for its full candidate list
+    with full-vocabulary ranks.
+
+    Everything under the grid — which tokens to track, which position to read
+    exactly — is computed from the slice that is already in memory, so moving
+    those controls costs nothing and never refits or re-runs the model.
+
     `Word-like display` filters which candidates are *shown* (special tokens and
     punctuation disappear), but ranks are still calculated against the full
     vocabulary. Toggle it off whenever the polished view looks too coherent —
@@ -521,6 +539,54 @@ def _(JLENS_DIR):
     return (token_gloss,)
 
 
+@app.cell(hide_code=True)
+def _(JLENS_DIR, token_gloss):
+    from jlens import vis
+
+    _ = JLENS_DIR  # the clone has to be on sys.path before jlens.vis imports
+
+    def standalone_page(slice_data, prompt, title, description):
+        """The d3 page for one slice, as bytes, built only when clicked.
+
+        The notebook's own view is script-free and renders in place; this
+        builds the d3 instrument as a file for a reader who wants it in a
+        browser tab of its own. `mo.download` resolves a callable lazily, so
+        nothing in here — including the d3 fetch — runs unless the button is
+        pressed. Shared by §2.2 and §3 so the two paths cannot drift apart.
+        """
+        try:
+            vis._template("embed")
+        except RuntimeError:
+            # The embed page inlines d3. If the runtime blocks Python's socket,
+            # fetch the same SRI-pinned file with curl; either way it is
+            # verified before it is inlined, and the template is then memoized.
+            import base64
+            import hashlib
+            import subprocess
+
+            body = subprocess.run(
+                ["curl", "--fail", "--silent", "--show-error", "-L", vis._D3_URL],
+                check=True,
+                capture_output=True,
+            ).stdout
+            sri = "sha384-" + base64.b64encode(hashlib.sha384(body).digest()).decode()
+            if sri != vis._D3_SRI:
+                raise RuntimeError(f"d3 integrity check failed: {sri}") from None
+            vis._TEMPLATE_FOR_MODE["embed"] = vis.PAGE_TEMPLATE.replace(
+                "__D3__", f"<script>\n{body.decode()}\n</script>"
+            )
+        page, _, _ = vis.build_page(
+            slice_data,
+            prompt,
+            title=title,
+            description=description,
+            alt_token=token_gloss,
+        )
+        return page.encode()
+
+    return (standalone_page,)
+
+
 @app.cell
 def _(mo):
     from jlens.examples import EXAMPLES
@@ -546,10 +612,9 @@ def _(mo):
 
 
 @app.cell(hide_code=True)
-def _(EXAMPLES, example_controls, lens, mo, model, token_gloss, tokenizer):
-    from jlens import vis
+def _(EXAMPLES, example_controls, lens, mo, model, tokenizer):
     from jlens.examples import resolve_prompt
-    from jlens.vis import build_page, compute_slice
+    from jlens.vis import compute_slice
 
     _cfg = example_controls.value
     mo.stop(
@@ -557,36 +622,16 @@ def _(EXAMPLES, example_controls, lens, mo, model, token_gloss, tokenizer):
         mo.callout(mo.md("Choose the guided-slice settings and press **▶**."), kind="info"),
     )
 
-    # The embed page inlines d3. If the runtime blocks Python's socket, fetch the
-    # same SRI-pinned file with curl; the verified template is then memoized.
-    try:
-        vis._template("embed")
-    except RuntimeError:
-        import base64 as _b64
-        import hashlib as _hashlib
-        import subprocess as _sp
-
-        _d3 = _sp.run(
-            ["curl", "--fail", "--silent", "--show-error", "-L", vis._D3_URL],
-            check=True,
-            capture_output=True,
-        ).stdout
-        _sri = "sha384-" + _b64.b64encode(_hashlib.sha384(_d3).digest()).decode()
-        if _sri != vis._D3_SRI:
-            raise RuntimeError(f"d3 integrity check failed: {_sri}") from None
-        vis._TEMPLATE_FOR_MODE["embed"] = vis.PAGE_TEMPLATE.replace(
-            "__D3__", f"<script>\n{_d3.decode()}\n</script>"
-        )
-
     _example = next(e for e in EXAMPLES if e.slug == _cfg["example"])
-    _prompt = resolve_prompt(_example, tokenizer)
+    guided_prompt = resolve_prompt(_example, tokenizer)
+    guided_title = _example.section
 
     # `compute_slice` truncates at max_seq_len=512 and says nothing. The longest
     # bundled example is several times that, so the window lands on positions
     # nowhere near the decision point the example exists to show — labelled with
     # absolute indices that look entirely reasonable.
     _MAX_SEQ = 512
-    _full_len = len(tokenizer(_prompt).input_ids)
+    _full_len = len(tokenizer(guided_prompt).input_ids)
     _win = int(_cfg["last_n_tokens"])
     _trunc = (
         mo.callout(
@@ -603,76 +648,175 @@ def _(EXAMPLES, example_controls, lens, mo, model, token_gloss, tokenizer):
         else None
     )
 
-    _gloss = token_gloss
-
     with mo.status.spinner(title=f"Computing slice for “{_example.section}”…"):
-        _slice = compute_slice(
+        guided_slice = compute_slice(
             model,
             lens,
-            _prompt,
+            guided_prompt,
             layer_stride=int(_cfg["layer_stride"]),
             last_n_tokens=int(_cfg["last_n_tokens"]),
             max_tracked=_example.n_tracked if _example.n_tracked is not None else 128,
             mask_display=bool(_cfg["mask_display"]),
         )
-        _page, _, _ = build_page(
-            _slice,
-            _prompt,
-            title=_example.section,
-            # Name the lens on the page. This guided slice always uses the
-            # *course reference* lens — it sits above §3.1, so it is not affected
-            # by the lens picker there. Without saying so, a student who has just
-            # fitted their own lens will scroll up, see this picture, and file it
-            # under their fit: a plausible-but-wrong attribution manufactured by
-            # the notebook itself.
-            description=(
-                f"{_example.description}  —  course reference lens "
-                f"(n_prompts={lens.n_prompts}); the lens picker in §3.1 does not "
-                f"affect this slice. Layer stride {int(_cfg['layer_stride'])}, "
-                f"last {int(_cfg['last_n_tokens'])} positions, word-like display "
-                f"{'on' if _cfg['mask_display'] else 'off'}."
-            ),
-            alt_token=_gloss,
-        )
 
-    # molab renders cell output inside a locked-down iframe that won't run this
-    # page's inlined scripts, so the inline view often comes up blank. The page
-    # is fully self-contained (d3 inlined), so always offer it as a download —
-    # opening the file in a browser tab gives the real interactive slice. The
-    # inline iframe stays below for runtimes (local marimo, Jupyter) that do
-    # render it.
-    _download = mo.download(
-        _page.encode(),
-        filename=(
-            f"slice_{_example.slug}"
-            f"_{int(_cfg['layer_stride'])}stride"
-            f"_{int(_cfg['last_n_tokens'])}win"
-            f"_{'masked' if _cfg['mask_display'] else 'raw'}.html"
-        ),
-        mimetype="text/html",
-        label="⬇ Download this slice, then open it in a new browser tab",
+    # Name the lens wherever this slice is shown. The guided slice always uses
+    # the *course reference* lens — it sits above §3.1, so it is not affected by
+    # the lens picker there. Without saying so, a student who has just fitted
+    # their own lens will scroll up, see this picture, and file it under their
+    # fit: a plausible-but-wrong attribution manufactured by the notebook itself.
+    guided_description = (
+        f"{_example.description}  —  course reference lens "
+        f"(n_prompts={lens.n_prompts}); the lens picker in §3.1 does not "
+        f"affect this slice. Layer stride {int(_cfg['layer_stride'])}, "
+        f"last {int(_cfg['last_n_tokens'])} positions, word-like display "
+        f"{'on' if _cfg['mask_display'] else 'off'}."
     )
-    # No unconditional `mo.iframe` here any more. molab renders cell output inside
-    # a locked-down iframe that will not run this page's inlined scripts, so the
-    # inline view came up as a 660 px blank rectangle — shipped as the *default*
-    # view of the notebook's only real instrument, which reads as "it's broken".
-    # On the blackmail example that blank box also carried a multi-megabyte
-    # srcdoc. Local marimo and Jupyter do render it, so it stays available behind
-    # a box you tick on purpose.
+    guided_filename = (
+        f"slice_{_example.slug}"
+        f"_{int(_cfg['layer_stride'])}stride"
+        f"_{int(_cfg['last_n_tokens'])}win"
+        f"_{'masked' if _cfg['mask_display'] else 'raw'}.html"
+    )
+    # Only the slice is computed here. Rendering it lives downstream so that the
+    # view controls cannot trigger a recompute: this cell is the 10–30 s one.
+    # The settings and the lens name travel with the picture instead of being
+    # printed here, since it is the picture people screenshot and quote.
     mo.vstack([_c for _c in (
         _trunc,
         mo.md(
-            f"**{_example.section}** — interactive slice. **Download it and open "
-            "the file in a new browser tab**; that is the real, interactive view. "
-            "The inline preview below is off by default because molab blocks "
-            "scripted iframes (it works in local marimo / Jupyter)."
+            f"**{_example.section}** — slice ready: "
+            f"{guided_slice.seq_len} positions × {len(guided_slice.layers)} "
+            f"layers, {len(guided_slice.tracked_token_ids)} tracked tokens."
         ),
-        _download,
-        mo.accordion({
-            "Try the inline preview (blank in molab, works locally)":
-                mo.iframe(_page, height="660px")
-        }),
     ) if _c is not None])
+    return guided_description, guided_filename, guided_prompt, guided_slice, guided_title
+
+
+@app.cell(hide_code=True)
+def _(guided_slice, mo, token_gloss):
+    from jlens.vis import token_label
+
+    # Re-minted whenever a new slice is computed, which is correct here: the
+    # options *are* this slice's tracked tokens and this slice's positions, and
+    # a stale selection would silently point at another prompt's vocabulary.
+    _tracked = list(guided_slice.tracked_token_ids)
+    _token_options = {}
+    for _tid in _tracked:
+        _label = repr(token_label(guided_slice, _tid, token_gloss))
+        # Two ids can decode to the same string; without the id, the duplicate
+        # key would silently drop one of them from the picker.
+        if _label in _token_options:
+            _label = f"{_label} · id {_tid}"
+        _token_options[_label] = int(_tid)
+
+    # Default to the model's own answer for the last position: the final layer
+    # (identity transport) top-1 there. `compute_slice` tracks by top-K
+    # frequency, so it is usually but not always tracked — fall back rather
+    # than open on an empty rank map.
+    _answer = int(guided_slice.top_ids[-1, -1, 0])
+    _default_id = _answer if _answer in _tracked else (_tracked[0] if _tracked else None)
+    _default = [_k for _k, _v in _token_options.items() if _v == _default_id][:1]
+
+    _positions = {
+        f"{guided_slice.ctx_offset + _i}  "
+        f"{guided_slice.context_token_strs[guided_slice.ctx_offset + _i]!r}": _i
+        for _i in range(guided_slice.seq_len)
+    }
+
+    guided_view = mo.md(
+        "**Track these tokens through the stack** {tokens} *(rank map below; "
+        "the default is the model's own answer at the last position)*\n\n"
+        "**Read the exact readout at position** {position}"
+    ).batch(
+        tokens=mo.ui.multiselect(
+            options=_token_options, value=_default, max_selections=4
+        ),
+        position=mo.ui.dropdown(
+            options=_positions, value=list(_positions)[-1]
+        ),
+    )
+    guided_view
+    return (guided_view,)
+
+
+@app.cell(hide_code=True)
+def _(
+    guided_description,
+    guided_filename,
+    guided_prompt,
+    guided_slice,
+    guided_title,
+    guided_view,
+    mo,
+    standalone_page,
+    token_gloss,
+):
+    from functools import partial as _partial
+
+    from jlens.vis import (
+        position_top_k_rows,
+        slice_grid_html,
+        token_rank_grid_html,
+    )
+
+    # No `mo.iframe` here. marimo sanitizes HTML output and drops `<script>`,
+    # which is why displaying the d3 page at all means nesting a document — and
+    # in molab that nested document never ran the page's inlined scripts, so it
+    # came up as a 660 px blank rectangle carrying a multi-megabyte srcdoc,
+    # shipped as the *default* view of the notebook's only real instrument.
+    # These fragments need no script: plain tables, inline colour, native
+    # `title` tooltips. Nothing to strip and nothing to block, so they render
+    # in molab, in local marimo, and in Jupyter alike.
+    _sel = guided_view.value
+    _tokens = [int(_t) for _t in (_sel["tokens"] or [])]
+    _position = int(_sel["position"])
+    _absolute = guided_slice.ctx_offset + _position
+
+    mo.vstack([
+        mo.Html(
+            slice_grid_html(
+                guided_slice, alt_token=token_gloss, caption=guided_description
+            )
+        ),
+        mo.md(
+            "#### Rank of the tracked token(s)\n\n"
+            "Full-vocabulary rank in every cell, shaded on a log scale — the "
+            "same quantity the interactive page charts. Dark is rank 0; a token "
+            "that turns dark early and stays dark was a candidate long before "
+            "the final layer."
+        ),
+        mo.Html(token_rank_grid_html(guided_slice, _tokens, alt_token=token_gloss)),
+        mo.md(f"#### Exact readout at prompt position {_absolute}"),
+        mo.ui.table(
+            position_top_k_rows(
+                guided_slice,
+                _position,
+                top_k=5,
+                token_ids=_tokens,
+                alt_token=token_gloss,
+            ),
+            selection=None,
+            pagination=False,
+        ),
+        mo.accordion({
+            "Optional — the same slice as a standalone d3 page (a file to open "
+            "in its own browser tab; nothing above needs it)": mo.download(
+                # Lazy: `mo.download` resolves a callable only when clicked, so
+                # neither the page nor its d3 fetch costs anything unless asked
+                # for. Nothing in the notebook's own path depends on it.
+                data=_partial(
+                    standalone_page,
+                    guided_slice,
+                    guided_prompt,
+                    guided_title,
+                    guided_description,
+                ),
+                filename=guided_filename,
+                mimetype="text/html",
+                label=f"⬇ Build and download {guided_filename}",
+            )
+        }),
+    ])
     return
 
 
@@ -730,9 +874,11 @@ def _(mo):
     # until ▶.
     lens_form = mo.md(
         "**Lens source** {source}\n\n"
-        "For **Student-fitted lens** — which of your fits: {fit_size}\n\n"
-        "Only for **Uploaded lens file** — a `jacobian_lens.pt` you downloaded from "
-        "a previous session:\n\n"
+        "For **Student-fitted lens** — which of your fits: {fit_size}. A lens "
+        "fitted in Appendix A during *this* session appears here with no file "
+        "handling at all.\n\n"
+        "Only for **Uploaded lens file** — a `jacobian_lens.pt` from a *previous* "
+        "session; not needed for anything you fit today:\n\n"
         "{upload}\n\n"
         "The **scrambled control** is the reference lens with each layer's transport "
         "swapped for a different layer's. It is a *negative control*: if a mismatched "
@@ -838,8 +984,8 @@ def _(
             )
         elif _choice == "fitted":
             if not fitted_lens_files:
-                # Not `mo.stop`: cancelling here killed the form, the results and
-                # the slice download all at once, and the recovery action was 250
+                # Not `mo.stop`: cancelling here killed the form, the results
+                # and the slice view all at once, and the recovery action was 250
                 # lines further down.
                 _load_warning = (
                     "No student-fitted lens exists in this session yet — run "
@@ -941,7 +1087,8 @@ def _(demo_layers, lens, mo, model):
         f"{model.n_layers}.\n\n"
         "Compare top **{top_k}** candidates.\n\n"
         "---\n\n"
-        "**Also build a downloadable slice** {make_slice}\n\n"
+        "**Also build the layer × position slice view** {make_slice} *(rendered "
+        "below the result table, in the notebook)*\n\n"
         "Slice layer stride {slice_stride} · last positions {slice_window} · "
         "word-like display {mask_display} *(these three do nothing unless the box "
         "above is ticked)*"
@@ -994,7 +1141,6 @@ def _(
     mo,
     model,
     playground_controls,
-    token_gloss,
     tokenizer,
 ):
     _cfg = playground_controls.value
@@ -1018,8 +1164,6 @@ def _(
         ),
     )
 
-    # Keep the playground renderer independent from the guided-slice renderer.
-    from jlens.vis import build_page as _build_page
     from jlens.vis import compute_slice as _compute_slice
 
     _MAX_SEQ = 512
@@ -1107,8 +1251,8 @@ def _(
     _rows, _target, _final_top = compare_readouts(
         _jl, _ll, _ml, _layers, _top_k
     )
-    # The same reference `compare_readouts` ranks against — pinned into the slice
-    # below so the downloaded page opens on the token the table is about.
+    # The same reference `compare_readouts` ranks against — tracked in the slice
+    # below so the rank map opens on the token this table is about.
     _target_id = int(_ml[0].float().argmax())
     _source_token = tokenizer.decode(
         [int(_input_ids[0, _absolute_position])],
@@ -1140,57 +1284,49 @@ def _(
         mo.ui.table(_rows, selection=None, pagination=False),
     ])
 
-    # Offer the matching interactive slice as a download. A visualization failure
-    # must not hide the numeric comparison above.
+    # Compute the slice here; render it downstream, so that moving the view
+    # controls never re-runs this cell. A visualization failure must not hide
+    # the numeric comparison above, so a failed slice is a note, not a stop.
+    playground_slice = None
+    playground_prompt = _prompt
+    playground_target_id = _target_id
+    playground_title = f"Slice · {active_lens_label}"
+    playground_description = (
+        f"{active_lens_label} · probe offset {_position} · "
+        f"stride {int(_cfg['slice_stride'])} · "
+        f"last {int(_cfg['slice_window'])} positions · "
+        f"word-like display {'on' if _cfg['mask_display'] else 'off'} · "
+        f"{_prompt!r}"
+    )
+    # Settings in the filename: two downloads at different strides used to
+    # arrive as `playground_slice.html` and `playground_slice (1).html`, with
+    # nothing on either page saying which was which.
+    playground_filename = (
+        f"slice_{_cfg['slice_stride']}stride"
+        f"_{_cfg['slice_window']}win"
+        f"_off{_offset}"
+        f"_{'masked' if _cfg['mask_display'] else 'raw'}"
+        f"_{active_lens_label.split(' ')[0].lower()}.html"
+    )
     if not _cfg["make_slice"]:
-        _viz = mo.md("_Slice skipped for this submit._")
+        _viz = mo.md("_Slice view skipped for this submit._")
     else:
         try:
-            with mo.status.spinner(title="Building the interactive slice…"):
-                _slice = _compute_slice(
+            with mo.status.spinner(title="Computing the slice…"):
+                playground_slice = _compute_slice(
                     model,
                     active_lens,
                     _prompt,
                     layer_stride=int(_cfg["slice_stride"]),
                     last_n_tokens=int(_cfg["slice_window"]),
                     max_tracked=64,
-                    # Open with the model's own target already pinned. Without
-                    # this every download opened blank and had to be re-pinned by
-                    # hand after each resubmit.
+                    # Track the model's own target whatever else scores highly,
+                    # so the rank map below opens on the token this result table
+                    # is about instead of on an arbitrary frequent one.
                     pinned_token_ids={_target_id},
                     mask_display=bool(_cfg["mask_display"]),
                 )
-                _page, _, _ = _build_page(
-                    _slice,
-                    _prompt,
-                    title=f"Slice · {active_lens_label}",
-                    # Route 3 sends students to Korean and other non-English
-                    # prompts; the guided slice glossed those and this one did not.
-                    alt_token=token_gloss,
-                    description=(
-                        f"{active_lens_label} · probe offset {_position} · "
-                        f"stride {int(_cfg['slice_stride'])} · "
-                        f"last {int(_cfg['slice_window'])} positions · "
-                        f"word-like display {'on' if _cfg['mask_display'] else 'off'} · "
-                        f"{_prompt!r}"
-                    ),
-                )
-            # Settings in the filename: two downloads at different strides used to
-            # arrive as `playground_slice.html` and `playground_slice (1).html`,
-            # with nothing on either page saying which was which.
-            _slug = (
-                f"slice_{_cfg['slice_stride']}stride"
-                f"_{_cfg['slice_window']}win"
-                f"_off{_offset}"
-                f"_{'masked' if _cfg['mask_display'] else 'raw'}"
-                f"_{active_lens_label.split(' ')[0].lower()}.html"
-            )
-            _viz = mo.download(
-                _page.encode(),
-                filename=_slug,
-                mimetype="text/html",
-                label=f"⬇ Download the interactive slice ({_slug})",
-            )
+            _viz = None
         except Exception as _e:
             _viz = mo.callout(
                 mo.md(
@@ -1214,13 +1350,131 @@ def _(
         ),
         kind="neutral",
     )
-    # `is not None`, not truthiness: on a successful slice `_viz` is a
-    # `mo.download`, and `UIElement.__bool__` writes "The truth value of a
-    # UIElement is always True..." to stderr — which marimo renders as a console
-    # block under the result, so every successful submit looked like a bug.
+    # `is not None`, not truthiness: `_viz` is None on a successful slice (the
+    # view itself is rendered two cells down), and several of these entries are
+    # marimo objects whose truthiness is either meaningless or noisy.
     mo.vstack([
         _n for _n in (_trunc_note, _layer_note, _table, _viz, _reflection)
         if _n is not None
+    ])
+    return (
+        playground_description,
+        playground_filename,
+        playground_prompt,
+        playground_slice,
+        playground_target_id,
+        playground_title,
+    )
+
+
+@app.cell(hide_code=True)
+def _(mo, playground_slice, playground_target_id, token_gloss):
+    from jlens.vis import token_label as _token_label
+
+    mo.stop(
+        playground_slice is None,
+        mo.md(
+            "_Tick **Also build the layer × position slice view** in the form "
+            "above and press ▶ to get the grid here._"
+        ),
+    )
+
+    _tracked = list(playground_slice.tracked_token_ids)
+    _options = {}
+    for _tid in _tracked:
+        _label = repr(_token_label(playground_slice, _tid, token_gloss))
+        if _label in _options:
+            _label = f"{_label} · id {_tid}"
+        _options[_label] = int(_tid)
+
+    # The target is pinned at compute time, so it is always tracked: the rank
+    # map opens on the same token the result table above ranks.
+    _default = [_k for _k, _v in _options.items() if _v == int(playground_target_id)][:1]
+    _positions = {
+        f"{playground_slice.ctx_offset + _i}  "
+        f"{playground_slice.context_token_strs[playground_slice.ctx_offset + _i]!r}": _i
+        for _i in range(playground_slice.seq_len)
+    }
+
+    playground_view = mo.md(
+        "**Track these tokens through the stack** {tokens} *(the model's own "
+        "target for this run is selected by default)*\n\n"
+        "**Read the exact readout at position** {position}"
+    ).batch(
+        tokens=mo.ui.multiselect(options=_options, value=_default, max_selections=4),
+        position=mo.ui.dropdown(options=_positions, value=list(_positions)[-1]),
+    )
+    playground_view
+    return (playground_view,)
+
+
+@app.cell(hide_code=True)
+def _(
+    mo,
+    playground_description,
+    playground_filename,
+    playground_prompt,
+    playground_slice,
+    playground_title,
+    playground_view,
+    standalone_page,
+    token_gloss,
+):
+    from functools import partial as _partial
+
+    # Underscore aliases: marimo forbids two cells defining the same name, and
+    # §2.2's view cell already imports these under their real names.
+    from jlens.vis import position_top_k_rows as _position_rows
+    from jlens.vis import slice_grid_html as _grid_html
+    from jlens.vis import token_rank_grid_html as _rank_html
+
+    _sel = playground_view.value
+    _tokens = [int(_t) for _t in (_sel["tokens"] or [])]
+    _position = int(_sel["position"])
+
+    mo.vstack([
+        mo.Html(
+            _grid_html(
+                playground_slice,
+                alt_token=token_gloss,
+                # The settings and the lens ride with the picture. Two submits
+                # at different strides are otherwise two identical-looking
+                # grids, and the one on screen is whichever ran last.
+                caption=playground_description,
+            )
+        ),
+        mo.md("#### Rank of the tracked token(s)"),
+        mo.Html(_rank_html(playground_slice, _tokens, alt_token=token_gloss)),
+        mo.md(
+            "#### Exact readout at prompt position "
+            f"{playground_slice.ctx_offset + _position}"
+        ),
+        mo.ui.table(
+            _position_rows(
+                playground_slice,
+                _position,
+                top_k=5,
+                token_ids=_tokens,
+                alt_token=token_gloss,
+            ),
+            selection=None,
+            pagination=False,
+        ),
+        mo.accordion({
+            "Optional — the same slice as a standalone d3 page (a file to open "
+            "in its own browser tab; nothing above needs it)": mo.download(
+                data=_partial(
+                    standalone_page,
+                    playground_slice,
+                    playground_prompt,
+                    playground_title,
+                    playground_description,
+                ),
+                filename=playground_filename,
+                mimetype="text/html",
+                label=f"⬇ Build and download {playground_filename}",
+            )
+        }),
     ])
     return
 
@@ -1355,11 +1609,12 @@ def _(MODEL_NAME, MODEL_REVISION, OUTPUT_ROOT, fit_controls, jlens, mo, model):
             ),
             mo.callout(
                 mo.md(
-                    "**Download it now.** This file lives on the molab session's "
-                    "disk, which does not survive a restart — losing it costs you "
-                    "the whole fit."
+                    "**Nothing further is needed to use it here** — it is on this "
+                    "session's disk and §3.1 can load it now. Download it only if "
+                    "you want it *after* this session: the disk does not survive a "
+                    "restart, and re-fitting costs the same minutes again."
                 ),
-                kind="warn",
+                kind="neutral",
             ),
             mo.download(
                 # Lazy, not eager bytes. marimo materializes an eager payload into
