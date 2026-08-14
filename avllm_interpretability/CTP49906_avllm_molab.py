@@ -178,40 +178,91 @@ def _(mo):
 
     def _ensure_audio_decoder():
         # qwen-omni-utils opens the clip's audio itself and hands `librosa.load`
-        # an already-constructed `audioread.ffdec.FFmpegAudioFile`. librosa only
-        # accepts that object when its class is in `audioread.available_backends()`:
+        # an already-constructed `audioread.ffdec.FFmpegAudioFile`. Whether librosa
+        # accepts that object depends on which librosa the kernel resolved:
         #
-        #     if isinstance(path, tuple(audioread.available_backends())):
-        #         y, sr = __audioread_load(...)      # the path qwen needs
-        #     else:
-        #         y, sr = __soundfile_load(...)      # sf.SoundFile(<object>) -> TypeError
+        #   <= 0.11.0  reads audioread objects, but dispatches to its audioread
+        #              reader only for classes in `audioread.available_backends()`
+        #              — a list built once and cached, holding the ffmpeg backend
+        #              only if `ffdec.available()` succeeded at that moment.
+        #   >= 1.0.0   dropped audioread altogether (it declares only soundfile),
+        #              so the object goes straight to `sf.SoundFile(...)`, which
+        #              raises `TypeError: Invalid file:
+        #              <audioread.ffdec.FFmpegAudioFile object ...>`.
         #
-        # That list is built once and cached in `audioread.BACKENDS`, and it
-        # contains the ffmpeg backend only if `ffdec.available()` succeeded at
-        # the moment it was built. On molab it did not, so the call fell through
-        # to soundfile and died with
-        # `TypeError: Invalid file: <audioread.ffdec.FFmpegAudioFile object ...>`
-        # — several cells after setup reported success.
-        #
-        # ffmpeg demonstrably works there, because qwen constructs one of these
-        # objects (which spawns ffmpeg) before librosa ever sees it. So rebuild
-        # the cache and register the backend explicitly. On a healthy kernel this
-        # is a no-op; every published librosa from 0.9.2 to 0.11.0 has the same
-        # `isinstance` check, so this is a detection fix, not a version pin.
-        import audioread
-        import audioread.ffdec
+        # molab is the second case: it runs Python 3.13, librosa 1.0.0 requires
+        # >= 3.12, and nothing here pins librosa — while a local 3.11 venv still
+        # resolves 0.11.0 and can hit the first. Both are the same missing
+        # capability, so restore it once rather than repair two registries: wrap
+        # `librosa.load` and decode audioread objects with the reader librosa 1.0
+        # deleted. Same shape as the read_video shim above — qwen-omni-utils
+        # 0.0.9 calls an API its dependency has since removed — and it beats
+        # pinning librosa < 1.0, which would downgrade a package molab already
+        # ships and re-resolve numba/soxr on a 3.13 kernel.
+        import librosa
+        import numpy as np
 
-        if not hasattr(audioread, "BACKENDS"):
-            print("audioread has no BACKENDS cache; leaving detection alone")
-            return
-        try:
-            audioread.available_backends(flush_cache=True)
-        except TypeError:  # older audioread: no flush_cache parameter
-            audioread.BACKENDS[:] = []
-            audioread.available_backends()
-        if audioread.ffdec.FFmpegAudioFile not in audioread.BACKENDS:
-            audioread.BACKENDS.append(audioread.ffdec.FFmpegAudioFile)
-            print("registered audioread's ffmpeg backend so librosa accepts it")
+        if getattr(librosa.load, "__audioread_shim__", False):
+            return  # already wrapped; this cell re-ran
+        _librosa_load = librosa.load
+
+        def _audioread_load(reader, offset, duration, dtype):
+            # Ported from librosa 0.11.0's `__audioread_load`, minus its lookup
+            # of the backend registry: audioread readers yield blocks of
+            # interleaved little-endian 16-bit PCM, which scale to [-1, 1).
+            buf = []
+            with reader as input_file:  # closes it, and so the ffmpeg child
+                sr_native = input_file.samplerate
+                n_channels = input_file.channels
+                s_start = int(sr_native * offset) * n_channels
+                s_end = (
+                    np.inf if duration is None
+                    else s_start + int(sr_native * duration) * n_channels
+                )
+                n = 0
+                for frame in input_file:
+                    frame = np.frombuffer(frame, "<i2").astype(dtype) / 2**15
+                    n_prev, n = n, n + len(frame)
+                    if n < s_start:
+                        continue  # offset is past this block
+                    if s_end < n_prev:
+                        break  # past the requested duration
+                    if s_end < n:
+                        frame = frame[: int(s_end - n_prev)]  # end is in this block
+                    if n_prev <= s_start <= n:
+                        frame = frame[s_start - n_prev :]  # start is in this block
+                    buf.append(frame)
+            if buf:
+                y = np.concatenate(buf)
+                if n_channels > 1:
+                    y = y.reshape((-1, n_channels)).T  # de-interleave
+            else:
+                y = np.empty(0, dtype=dtype)
+            return y, sr_native
+
+        def _load(path, *, sr=22050, mono=True, offset=0.0, duration=None,
+                  dtype=np.float32, res_type="soxr_hq", **kwargs):
+            # Anything librosa can open itself — paths, file objects, SoundFile —
+            # is still librosa's job; only audioread readers come here.
+            if not (hasattr(path, "read_data") and hasattr(path, "samplerate")):
+                return _librosa_load(path, sr=sr, mono=mono, offset=offset,
+                                     duration=duration, dtype=dtype,
+                                     res_type=res_type, **kwargs)
+            y, sr_native = _audioread_load(path, offset, duration, dtype)
+            # The tail of librosa's own `load`, so mono/sr behave identically.
+            if mono:
+                y = librosa.to_mono(y)
+            if sr is not None:
+                y = librosa.resample(y, orig_sr=sr_native, target_sr=sr, res_type=res_type)
+            else:
+                sr = sr_native
+            return y, sr
+
+        _load.__audioread_shim__ = True
+        for _mod in (librosa, librosa.core, librosa.core.audio):
+            if getattr(_mod, "load", None) is _librosa_load:
+                _mod.load = _load
+        print("patched librosa.load (audioread reader) for qwen-omni-utils compatibility")
 
     _ensure_audio_decoder()
 

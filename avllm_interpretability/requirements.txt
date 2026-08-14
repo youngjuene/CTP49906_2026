@@ -12,6 +12,11 @@ qwen_omni_utils==0.0.9
 # absent on any environment whose dependency set was resolved differently.
 # Without both, `from qwen_omni_utils import process_mm_info` raises
 # ModuleNotFoundError.
+#
+# librosa stays unpinned on purpose. 1.0.0 (Python >= 3.12, so molab gets it)
+# dropped the audioread reader that qwen-omni-utils still feeds — pinning back to
+# 0.11 would force a downgrade and a numba/soxr re-resolve on every 3.12+ kernel,
+# so the notebook's setup cell restores that reader instead.
 audioread
 librosa
 accelerate==1.14.0
