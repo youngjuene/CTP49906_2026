@@ -1,7 +1,11 @@
 # /// script
 # requires-python = ">=3.10"
 # dependencies = [
-#     "marimo",
+#     # Floored at the version this notebook was authored and validated against:
+#     # it uses `mo.ui.multiselect(max_selections=...)`, `form(validate=...)` and
+#     # `slider(include_input=True)`. molab supplies its own marimo and ignores
+#     # this block; the floor is for `marimo edit` on a local machine.
+#     "marimo>=0.23.14",
 #     # Only marimo is declared here. jlens (imported from the cloned source),
 #     # transformers, huggingface-hub, and numpy are installed at runtime by the
 #     # setup cell, which never touches torch so molab's GPU-matched build (Blackwell
@@ -123,7 +127,13 @@ def _(mo):
         # (`qwen3_5`) only became natively supported around 5.13, so floor at the
         # locally-validated version to guarantee the model itself loads.
         ("transformers", "transformers", "5.13", "6", "transformers>=5.13,<6"),
-        ("huggingface_hub", "huggingface_hub", None, None, "huggingface_hub"),
+        # transformers 5.x itself requires `huggingface_hub>=1.5,<2`, and hub 1.0
+        # was a breaking release. Left unpinned, an image shipping hub 0.x passed
+        # the presence check here and was then upgraded as a side effect of the
+        # transformers install -- same outcome, but decided by pip's resolver
+        # rather than stated. Naming the bound puts both in one resolution and
+        # makes the requirement visible where it is depended on.
+        ("huggingface_hub", "huggingface_hub", "1.5", "2", "huggingface_hub>=1.5,<2"),
         ("numpy", "numpy", None, None, "numpy"),
     ])
 
@@ -588,7 +598,14 @@ def _(JLENS_DIR, token_gloss):
 
 
 @app.cell
-def _(mo):
+def _(JLENS_DIR, mo):
+    _ = JLENS_DIR  # ensure the clone / sys.path / deps cell ran first
+
+    # Without that reference this cell imports `jlens` while having no edge to
+    # the cell that puts the clone on `sys.path`: marimo is free to run it
+    # first, and running it on its own (its ▶, or after a kernel restart) is a
+    # `ModuleNotFoundError` for a student who did nothing wrong. Same guard the
+    # gloss cell below uses.
     from jlens.examples import EXAMPLES
 
     _example_template = (
