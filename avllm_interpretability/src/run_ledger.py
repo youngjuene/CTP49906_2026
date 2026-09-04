@@ -284,11 +284,17 @@ def render_ledger_html(runs, highlight_ids=()):
     # Column headers stay generic ("metric"); the metric's *name* lives in the
     # cell, so two runs measuring different things can never be read as one
     # column of comparable numbers.
+    # A lab that does not ask for a hypothesis would otherwise render the red
+    # "none written" alarm on every row -- flagging as a defect exactly the thing
+    # the notebook deliberately stopped collecting. Drop the column instead, and
+    # keep it the moment any run carries one.
+    show_prediction = any((r.get("prediction") or "").strip() for r in runs)
     heads = [
         # The id is shown, not just the sequence number: `apply_verdict` matches
         # on `run_id`, so an id the student cannot read off the table makes the
         # whole verdict half of the ledger unreachable.
-        "# / id", "kind", "condition", "metric", "changed", "control", "prediction",
+        "# / id", "kind", "condition", "metric", "changed", "control",
+        *(["prediction"] if show_prediction else []),
         "verdict",
     ]
     rows = [
@@ -327,6 +333,9 @@ def render_ledger_html(runs, highlight_ids=()):
             if verdict
             else '<span style="opacity:0.55">unresolved</span>'
         )
+        prediction_td = (
+            f'<td style="{td}">{prediction_cell}</td>' if show_prediction else ""
+        )
         condition_title = r.get("note") or _canonical(r.get("config", {}))
         rows.append(
             f'<tr style="{row_style}">'
@@ -341,7 +350,7 @@ def render_ledger_html(runs, highlight_ids=()):
             f"<strong>{_fmt_metric(r)}</strong></td>"
             f'<td style="{td}">{changed_cell}</td>'
             f'<td style="{td}">{control_cell}</td>'
-            f'<td style="{td}">{prediction_cell}</td>'
+            f"{prediction_td}"
             f'<td style="{td}">{verdict_cell}</td>'
             "</tr>"
         )
@@ -408,29 +417,28 @@ def build_worksheet_md(runs, only_ids=None):
         )
     else:
         lines.append("> Every run here belongs to a family that includes a control.")
-    lines += [
-        "",
-        "| # | Condition | Prediction (before ▶) | Metric | Control | Verdict "
-        "| Rival explanation |",
-        "|---|---|---|---|---|---|---|",
-    ]
+    show_prediction = any((r.get("prediction") or "").strip() for r in runs)
+    cols = (
+        ["#", "Condition"]
+        + (["Prediction (before ▶)"] if show_prediction else [])
+        + ["Metric", "Control", "Verdict", "Rival explanation"]
+    )
+    lines += ["", "| " + " | ".join(cols) + " |", "|" + "---|" * len(cols)]
     for r in runs:
         metric = (
             f"{r.get('metric_name', '')}: {_fmt_value(r.get('metric_value', ''))} "
             f"{r.get('metric_unit', '') or ''}"
         ).strip()
-        lines.append(
-            "| {seq} | {cond} | {pred} | {metric} | {control} | {verdict} "
-            "| {rival} |".format(
-                seq=_md_cell(r.get("seq", "")),
-                cond=_md_cell(r.get("condition", "")),
-                pred=_md_cell(r.get("prediction", "")) or "_(none written)_",
-                metric=_md_cell(metric),
-                control="control" if r.get("is_control") else "—",
-                verdict=_md_cell(r.get("verdict", "")) or "unresolved",
-                rival=_md_cell(r.get("rival", "")) or "—",
-            )
-        )
+        cells = [_md_cell(r.get("seq", "")), _md_cell(r.get("condition", ""))]
+        if show_prediction:
+            cells.append(_md_cell(r.get("prediction", "")) or "_(none written)_")
+        cells += [
+            _md_cell(metric),
+            "control" if r.get("is_control") else "—",
+            _md_cell(r.get("verdict", "")) or "unresolved",
+            _md_cell(r.get("rival", "")) or "—",
+        ]
+        lines.append("| " + " | ".join(cells) + " |")
     return "\n".join(lines) + "\n"
 
 
