@@ -38,6 +38,10 @@ def _(mo):
        positions across thinker layers.
     2. **Attention Knockout** — compare a baseline response with one generated after
        blocking a chosen source→target attention path.
+
+    Qwen2.5-Omni splits into a **thinker** (sees, hears, and writes the words) and a
+    **talker** (turns those words into speech). This lab frees the talker and uses
+    only the thinker — hence "thinker layers" throughout.
     """)
     return
 
@@ -55,6 +59,157 @@ def _(mo):
       torchvision no longer ships a video decoder.
     - The experiment code (`src/`) and the sample clip are cloned from
       `youngjuene/CTP49906_2026` by the setup cell below.
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## 🧭 Before you start — four pictures
+
+    Both experiments in this notebook happen on top of **tokens** and **attention
+    arrows**. These four ideas carry the rest.
+
+    ### 1. Video, sound and your question all become one row of tokens
+
+    <svg viewBox="0 0 720 196" style="width:100%;max-width:940px;height:auto" >
+      <title>Video, sound and question becoming one row of tokens</title>
+      <g font-size="13" fill="currentColor" text-anchor="middle">
+        <rect x="10" y="6" width="180" height="34" rx="6" fill="#54A24B" fill-opacity="0.18" stroke="#54A24B"/><text x="100" y="28">question (text)</text>
+        <rect x="205" y="6" width="180" height="34" rx="6" fill="#F58518" fill-opacity="0.18" stroke="#F58518"/><text x="295" y="28">sound (soundtrack)</text>
+        <rect x="400" y="6" width="300" height="34" rx="6" fill="#4C78A8" fill-opacity="0.18" stroke="#4C78A8"/><text x="550" y="28">video (frames)</text>
+      </g>
+      <path d="M355 46 L355 74" stroke="currentColor" stroke-width="2" marker-end="url(#ar1e)"/>
+      <defs><marker id="ar1e" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 z" fill="currentColor"/></marker></defs>
+      <g stroke-width="1">
+        <rect x="10"  y="86" width="14"  height="44" fill="#54A24B" fill-opacity="0.55" stroke="#54A24B"/>
+        <rect x="24"  y="86" width="279" height="44" fill="#4C78A8" fill-opacity="0.55" stroke="#4C78A8"/>
+        <rect x="303" y="86" width="23"  height="44" fill="#F58518" fill-opacity="0.55" stroke="#F58518"/>
+        <rect x="326" y="86" width="279" height="44" fill="#4C78A8" fill-opacity="0.55" stroke="#4C78A8"/>
+        <rect x="605" y="86" width="92"  height="44" fill="#F58518" fill-opacity="0.55" stroke="#F58518"/>
+        <rect x="697" y="86" width="3"   height="44" fill="#54A24B" stroke="#54A24B"/>
+      </g>
+      <path d="M660 156 L698 134" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar1e)"/>
+      <text x="655" y="162" font-size="12" fill="currentColor" text-anchor="end">your question is this sliver</text>
+      <g font-size="12" fill="currentColor">
+        <rect x="10"  y="176" width="12" height="12" fill="#4C78A8" fill-opacity="0.55" stroke="#4C78A8"/><text x="28"  y="186">video ~80%</text>
+        <rect x="150" y="176" width="12" height="12" fill="#F58518" fill-opacity="0.55" stroke="#F58518"/><text x="168" y="186">audio ~17%</text>
+        <rect x="290" y="176" width="12" height="12" fill="#54A24B" fill-opacity="0.55" stroke="#54A24B"/><text x="308" y="186">query_text ~2%</text>
+      </g>
+    </svg>
+
+    The model never "watches" the video. It reads one row of **tokens**. Every token
+    has a **type** (`video` · `audio` · `query_text`), and every intervention in this
+    lab is written in terms of those types. Video and audio arrive in **alternating
+    blocks** — not all the video and then all the sound. There are no still images, so
+    `image` is 0. (Proportions are for the default settings; the cell below prints the
+    real counts.)
+
+    ### 2. Attention is an arrow. A knockout cuts one kind of arrow.
+
+    <svg viewBox="0 0 720 250" style="width:100%;max-width:940px;height:auto" >
+      <title>Cutting one attention arrow</title>
+      <defs><marker id="a22e" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 z" fill="currentColor"/></marker></defs>
+      <g font-size="13" fill="currentColor" text-anchor="middle">
+        <rect x="10"  y="112" width="120" height="40" rx="6" fill="#4C78A8" fill-opacity="0.18" stroke="#4C78A8"/><text x="70"  y="137">video</text>
+        <rect x="145" y="112" width="120" height="40" rx="6" fill="#F58518" fill-opacity="0.18" stroke="#F58518"/><text x="205" y="137">audio</text>
+        <rect x="280" y="112" width="120" height="40" rx="6" fill="#54A24B" fill-opacity="0.18" stroke="#54A24B"/><text x="340" y="137">query_text</text>
+        <rect x="470" y="112" width="140" height="40" rx="6" fill="currentColor" fill-opacity="0.08" stroke="currentColor" stroke-dasharray="4 3"/><text x="540" y="137">generated</text>
+      </g>
+      <g fill="none" stroke="currentColor" stroke-width="1.8" marker-end="url(#a22e)">
+        <path d="M480 110 Q345 46 209 108"/>
+        <path d="M488 110 Q418 62 344 108"/>
+      </g>
+      <path d="M478 110 Q275 34 74 108" fill="none" stroke="currentColor" stroke-width="1.8" stroke-opacity="0.35" stroke-dasharray="7 6"/>
+      <g stroke="#E45756" stroke-width="4" stroke-linecap="round">
+        <path d="M261 55 L289 77"/><path d="M289 55 L261 77"/>
+      </g>
+      <text x="275" y="34" font-size="13" fill="#E45756" text-anchor="middle" font-weight="600">knockout</text>
+      <text x="540" y="176" font-size="12" fill="currentColor" text-anchor="middle">source = the one looking</text>
+      <path d="M12 162 L12 168 L398 168 L398 162" fill="none" stroke="currentColor" stroke-opacity="0.45"/>
+      <text x="205" y="184" font-size="12" fill="currentColor" text-anchor="middle">target = the one looked at</text>
+      <text x="10"  y="205" font-size="12" fill="currentColor">layers [0, 12) — layer 0 through 11. Layer 12 is NOT included.</text>
+      <g><rect x="10.0" y="212" width="17" height="20" fill="#E45756" fill-opacity="0.55" stroke="#E45756"/><rect x="29.2" y="212" width="17" height="20" fill="#E45756" fill-opacity="0.55" stroke="#E45756"/><rect x="48.4" y="212" width="17" height="20" fill="#E45756" fill-opacity="0.55" stroke="#E45756"/><rect x="67.6" y="212" width="17" height="20" fill="#E45756" fill-opacity="0.55" stroke="#E45756"/><rect x="86.8" y="212" width="17" height="20" fill="#E45756" fill-opacity="0.55" stroke="#E45756"/><rect x="106.0" y="212" width="17" height="20" fill="#E45756" fill-opacity="0.55" stroke="#E45756"/><rect x="125.2" y="212" width="17" height="20" fill="#E45756" fill-opacity="0.55" stroke="#E45756"/><rect x="144.4" y="212" width="17" height="20" fill="#E45756" fill-opacity="0.55" stroke="#E45756"/><rect x="163.6" y="212" width="17" height="20" fill="#E45756" fill-opacity="0.55" stroke="#E45756"/><rect x="182.8" y="212" width="17" height="20" fill="#E45756" fill-opacity="0.55" stroke="#E45756"/><rect x="202.0" y="212" width="17" height="20" fill="#E45756" fill-opacity="0.55" stroke="#E45756"/><rect x="221.2" y="212" width="17" height="20" fill="#E45756" fill-opacity="0.55" stroke="#E45756"/><rect x="240.4" y="212" width="17" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45"/><rect x="259.6" y="212" width="17" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45"/><rect x="278.8" y="212" width="17" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45"/><rect x="298.0" y="212" width="17" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45"/><rect x="317.2" y="212" width="17" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45"/><rect x="336.4" y="212" width="17" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45"/><rect x="355.6" y="212" width="17" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45"/><rect x="374.8" y="212" width="17" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45"/><rect x="394.0" y="212" width="17" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45"/><rect x="413.2" y="212" width="17" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45"/><rect x="432.4" y="212" width="17" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45"/><rect x="451.6" y="212" width="17" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45"/><rect x="470.8" y="212" width="17" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45"/><rect x="490.0" y="212" width="17" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45"/><rect x="509.2" y="212" width="17" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45"/><rect x="528.4" y="212" width="17" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45"/><rect x="547.6" y="212" width="17" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45"/><rect x="566.8" y="212" width="17" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45"/><rect x="586.0" y="212" width="17" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45"/><rect x="605.2" y="212" width="17" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45"/><rect x="624.4" y="212" width="17" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45"/><rect x="643.6" y="212" width="17" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45"/><rect x="662.8" y="212" width="17" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45"/><rect x="682.0" y="212" width="17" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45"/></g>
+      <text x="10"  y="245" font-size="11" fill="currentColor">0</text>
+      <text x="223" y="245" font-size="11" fill="currentColor">11</text>
+      <text x="688" y="245" font-size="11" fill="currentColor">35</text>
+    </svg>
+
+    A token building the answer looks at tokens **before** it. That looking is
+    attention. A rule `(source, target, start, end)` says *which arrows to cut, in
+    which layers*. `generated → video` = stop the tokens being generated from seeing
+    the video tokens.
+
+    ### 3. "Read once" and "write one token at a time" are different
+
+    <svg viewBox="0 0 720 150" style="width:100%;max-width:940px;height:auto" >
+      <title>Forward pass vs generation vs teacher forcing</title>
+      <defs><marker id="a33e" markerWidth="8" markerHeight="8" refX="6" refY="2.5" orient="auto"><path d="M0,0 L6,2.5 L0,5 z" fill="currentColor"/></marker></defs>
+      <g font-size="12.5" fill="currentColor">
+        <text x="10"  y="16" font-weight="600">① one forward pass</text>
+        <text x="250" y="16" font-weight="600">② generation</text>
+        <text x="490" y="16" font-weight="600">③ teacher forcing</text>
+      </g>
+      <g font-size="12" fill="currentColor" text-anchor="middle">
+        <rect x="10" y="28" width="150" height="34" rx="5" fill="#4C78A8" fill-opacity="0.18" stroke="#4C78A8"/><text x="85" y="49">input tokens</text>
+        <rect x="250" y="28" width="150" height="34" rx="5" fill="#4C78A8" fill-opacity="0.18" stroke="#4C78A8"/><text x="325" y="49">input tokens</text>
+        <rect x="490" y="28" width="150" height="34" rx="5" fill="#4C78A8" fill-opacity="0.18" stroke="#4C78A8"/><text x="565" y="49">input tokens</text>
+        <rect x="646" y="28" width="64" height="34" rx="5" fill="#E45756" fill-opacity="0.20" stroke="#E45756"/><text x="678" y="49">answer</text>
+      </g>
+      <g fill="none" stroke="currentColor" stroke-width="1.6" marker-end="url(#a33e)">
+        <path d="M85 66 L85 88"/><path d="M325 66 L325 82"/><path d="M565 66 L565 88"/>
+      </g>
+      <g font-size="12" fill="currentColor" text-anchor="middle">
+        <rect x="250" y="88" width="44" height="28" rx="4" fill="currentColor" fill-opacity="0.08" stroke="currentColor" stroke-dasharray="3 2"/><text x="272" y="107">1</text>
+        <rect x="303" y="88" width="44" height="28" rx="4" fill="currentColor" fill-opacity="0.08" stroke="currentColor" stroke-dasharray="3 2"/><text x="325" y="107">2</text>
+        <rect x="356" y="88" width="44" height="28" rx="4" fill="currentColor" fill-opacity="0.08" stroke="currentColor" stroke-dasharray="3 2"/><text x="378" y="107">3</text>
+      </g>
+      <g fill="none" stroke="currentColor" stroke-width="1.4" marker-end="url(#a33e)">
+        <path d="M296 102 L301 102"/><path d="M349 102 L354 102"/>
+      </g>
+      <g font-size="11.5" fill="currentColor">
+        <text x="10"  y="100">no generated tokens exist yet</text><text x="10"  y="116">→ a generated rule has nothing to cut</text>
+        <text x="250" y="136">→ generated rules bite here</text>
+        <text x="490" y="100">the caption is fed back in as answer</text><text x="490" y="116">→ answer rules bite here</text>
+      </g>
+    </svg>
+
+    This is why the same rule bites in one section and does nothing in another: you
+    cannot block a token that does not exist yet.
+
+    ### 4. The two numbers you get back
+
+    <svg viewBox="0 0 720 178" style="width:100%;max-width:940px;height:auto" >
+      <title>How to read the two numbers</title>
+      <defs><marker id="a44e" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 z" fill="currentColor"/></marker></defs>
+      <text x="10" y="16" font-size="12.5" fill="currentColor" font-weight="600">diversity — distinct predictions per layer</text>
+      <g fill="#4C78A8" fill-opacity="0.55" stroke="#4C78A8">
+        <rect x="14" y="70" width="20" height="34"/><rect x="40" y="52" width="20" height="52"/>
+        <rect x="66" y="38" width="20" height="66"/><rect x="92" y="60" width="20" height="44"/>
+        <rect x="118" y="46" width="20" height="58"/><rect x="144" y="78" width="20" height="26"/>
+        <rect x="170" y="64" width="20" height="40"/><rect x="196" y="86" width="20" height="18"/>
+      </g>
+      <path d="M10 104 L300 104" stroke="currentColor" stroke-width="1.2"/>
+      <text x="10" y="122" font-size="11.5" fill="currentColor">A descriptive count.</text>
+      <text x="10" y="138" font-size="11.5" fill="currentColor">Bigger is not better; smaller is not worse.</text>
+      <text x="390" y="16" font-size="12.5" fill="currentColor" font-weight="600">Δ log-likelihood — per token</text>
+      <path d="M400 74 L700 74" stroke="currentColor" stroke-width="1.2"/>
+      <path d="M550 62 L550 86" stroke="currentColor" stroke-width="1.2"/>
+      <text x="550" y="54" font-size="11.5" fill="currentColor" text-anchor="middle">0</text>
+      <circle cx="550" cy="74" r="6" fill="#54A24B" stroke="#54A24B"/>
+      <text x="550" y="100" font-size="11.5" fill="currentColor" text-anchor="middle">silent control ≈ 0</text>
+      <path d="M534 124 L406 124" stroke="currentColor" stroke-width="1.4" marker-end="url(#a44e)"/>
+      <path d="M566 124 L694 124" stroke="currentColor" stroke-width="1.4" marker-end="url(#a44e)"/>
+      <text x="400" y="144" font-size="11.5" fill="currentColor">← believes it less</text>
+      <text x="700" y="144" font-size="11.5" fill="currentColor" text-anchor="end">believes it more →</text>
+      <text x="390" y="164" font-size="11.5" fill="currentColor" font-style="italic">how far from 0 does your clip land?</text>
+    </svg>
+
+    **Diversity** records *what happened*, not whether anything got better. **Δ
+    log-likelihood** has a **sign** (negative = it believes its own answer less,
+    positive = more) and a **size**. The size only means anything **next to the
+    silent control** — which is why you run the control first.
     """)
     return
 
@@ -400,7 +555,7 @@ def _(PROJECT_DIR):
     USE_PRECOMPUTED = False
     PRECOMPUTED_DIR = PROJECT_DIR / "precomputed"
     if USE_PRECOMPUTED:
-        print(f"USE_PRECOMPUTED=True — replaying W7-W9 from {PRECOMPUTED_DIR} (no GPU)")
+        print(f"USE_PRECOMPUTED=True — replaying the guided demo from {PRECOMPUTED_DIR} (no GPU)")
     return PRECOMPUTED_DIR, USE_PRECOMPUTED
 
 
@@ -414,7 +569,7 @@ def _(USE_PRECOMPUTED):
     else:
         assert torch.cuda.is_available(), (
             "No GPU visible. In molab, attach a GPU via the notebook-specs button in the header. "
-            "(Or set USE_PRECOMPUTED=True in the cell above to replay W7-W9 from committed artifacts.)"
+            "(Or set USE_PRECOMPUTED=True in the cell above to replay the guided demo from committed artifacts.)"
         )
         DEVICE = torch.device("cuda:0")
         _free, _total = torch.cuda.mem_get_info(0)
@@ -427,8 +582,10 @@ def _(mo):
     mo.md(r"""
     ## Parameters
 
-    Edit these to point at your own video or change the intervention. On molab's
-    large GPU you can safely raise `NFRAMES`.
+    Edit these to point at your own video or change the intervention. Raise
+    `NFRAMES` with care: molab's GPU is roomy (96 GB) but the bottleneck is **host
+    RAM (32 GB)**, and the attention capture below grows as `seq²`. With capture on,
+    about 16 is the safe ceiling.
 
     The parameters are split across three cells *by re-run cost* (marimo re-runs
     every cell downstream of an edit): the model id — editing it reloads the
@@ -444,7 +601,7 @@ def _(mo):
     | `LOGIT_PROMPT` / `ATTENTION_PROMPT` | the instruction; changes the `query_text` positions and can change the caption. |
     | `KNOCKOUT_RULES` | `(source, target, start_layer, end_layer)`, `end` **exclusive**. A rule that matches no layer or no token is refused rather than silently returning a baseline. |
     | `MAX_NEW_TOKENS` | caption length — and therefore Σ Δ log-lik, which is why the per-token mean is the number to compare across runs. |
-    | `ATTENTION_CAPTURE_LAYERS` | which layers the attention heatmap below covers, `(0, 2)` by default. Widening it is a real experiment with a real cost: each captured layer holds a `seq × seq` tensor **per decode step**, so `(0, 36)` is the usual way to lose both loaded models on a 24 GB GPU. |
+    | `ATTENTION_CAPTURE_LAYERS` | which layers the attention heatmap below covers, `(0, 2)` by default. Widening it is a real experiment with a real cost. The capture accumulates in **host RAM, not VRAM**: each captured layer holds a `seq × seq` tensor **per decode step**. The default costs ~4 GiB; `(0, 36)` costs ~**75 GiB** and kills the kernel on molab's 32 GB of RAM. |
     """)
     return
 
@@ -703,6 +860,14 @@ def _(RESULTS_DIR, SILENT_VIDEO_PATH, VIDEO_PATH):
     MAX_DURATION_S = 120.0
     MAX_PIXELS = 1920 * 1080
     MAX_FPS = 60.0
+    # The three limits above are checked independently, so a clip sitting on all
+    # of them (120 s x 1080p x 60 fps) still decodes to ~42 GiB -- and molab gives
+    # 32 GB of RAM. The PyAV shim materialises every frame in a list, np.stack
+    # copies it, and `.permute(...).contiguous()` copies again, so peak host RAM is
+    # roughly 3x the decoded size. Bound the product, not just the factors.
+    # 6 GiB decoded ~= 18 GiB peak, which clears molab's 32 GB with the models on
+    # the GPU -- and still admits a 30 s 1080p30 or 60 s 720p30 phone clip.
+    MAX_DECODED_BYTES = 6 * 2**30
 
     def preflight_clip(path):
         """`None` if the clip is safe to decode, else a sentence explaining why not."""
@@ -729,6 +894,15 @@ def _(RESULTS_DIR, SILENT_VIDEO_PATH, VIDEO_PATH):
                     )
                 if _fps is not None and _fps > MAX_FPS:
                     return f"it is {_fps:.0f} fps; the limit is {MAX_FPS:.0f}."
+                if _dur and _fps and _px:
+                    _decoded = _dur * _fps * _px * 3
+                    if _decoded > MAX_DECODED_BYTES:
+                        return (
+                            f"it would decode to about {_decoded / 2**30:.1f} GiB "
+                            f"({_dur:.0f}s x {_fps:.0f} fps x {_v.width}x{_v.height}); "
+                            f"the limit is {MAX_DECODED_BYTES / 2**30:.0f} GiB. Trim it "
+                            "or lower the resolution and try again."
+                        )
                 if not _c.streams.audio:
                     return (
                         "this file has no audio track. Both playgrounds measure at "
@@ -817,6 +991,9 @@ def _(mo):
     ## Logit Lens
 
     A multimodal forward pass; the CSV analysis focuses on `audio` token positions.
+
+    If the caption below stops mid-sentence, that is expected: generation stops at
+    `MAX_NEW_TOKENS = 32`. It is a length cap, not a bug.
     """)
     return
 
@@ -920,6 +1097,9 @@ def _(mo):
 
     Left: how many distinct decoded predictions appear across audio-token positions
     at each layer. Right: how dominant the most common prediction is.
+
+    Both are descriptive counts of **what happened**. A bigger number is not a
+    better representation, and a smaller one is not a worse one.
     """)
     return
 
@@ -978,6 +1158,10 @@ def _(mo):
     **content**, **junk** (punctuation, whitespace, symbols), or undecodable. A
     thin ring marks the cells that already equal that position's own last-layer
     token.
+
+    Tokens that decode to Chinese or other-language fragments are normal too —
+    about a quarter of the probe cells for this clip. That is the model crossing
+    languages, not a broken notebook, and it all falls under the junk rule.
 
     **Drag anywhere on the grid** to move the active layer; the chip strip below
     it updates with no round trip to Python. **Click a column** to pin that
@@ -1212,6 +1396,11 @@ def _(ATTENTION_CAPTURE_LAYERS, mo):
 
     A **descriptive** summary (not causal importance): for each captured layer we
     average heads and sum the final query's attention over each token group.
+
+    **How to read it.** Each row (layer) sums to 1, so these are **shares**
+    (0.90 = 90%). That is why `generated` is the largest column in the baseline
+    panel: a token mostly looks at itself and the words it just wrote. Structure,
+    not a finding.
 
     Read the two panels together — they share one color scale, so a cell that
     looks darker really is smaller. The **knockout** panel's blocked column is
@@ -1588,6 +1777,10 @@ def _(mo):
     mo.md(r"""
     ## Teacher-forced Δ log-likelihood (fixed parameters)
 
+    **In plain terms:** hand the model back the words it just said and ask *"how
+    sure are you about this?"* — then compare that confidence before and after
+    cutting the pathway.
+
     The string diff above is **visceral but binary** — you can't see a *small*
     effect, and it depends on how generation happens to continue. This cell asks
     the same question as a **measurement**: it feeds the baseline caption back in
@@ -1619,7 +1812,7 @@ def _(
         _w9_out = mo.callout(
             mo.md(
                 "**Teacher forcing needs the live model** — this cell is skipped while "
-                "`USE_PRECOMPUTED=True`. (Cached replay of this measurement lands with F5b.)"
+                "`USE_PRECOMPUTED=True`. (This measurement has no cached replay yet.)"
             ),
             kind="warn",
         )
@@ -1783,7 +1976,7 @@ def _(mo):
     many *distinct* tokens it decodes across the audio-token positions.
 
     Nothing runs until you press submit (the controls are wrapped in a form), and
-    the eager model from the knockout experiment is reused — so runs are quick and
+    the model from the knockout experiment is reused — so runs are quick and
     need no extra VRAM.
 
     **What moves what.** The score is measured at **audio** token positions, and
@@ -1794,8 +1987,8 @@ def _(mo):
 
     This is a single forward pass over the prompt, so **`generated` and `answer`
     are inert here on either side of a rule** — there are no such positions until
-    the model decodes. Rules that reach nothing are refused rather than run.
-    Use `audio`, `video` or `query_text`. Build one rule with the dropdowns, or
+    the model decodes (🧭 picture ③ at the top). Rules that reach nothing are
+    refused rather than run. Use `audio`, `video` or `query_text`. Build one rule with the dropdowns, or
     enter several in the advanced field.
     """)
     return
@@ -1899,7 +2092,7 @@ def _(KNOCKOUT_RULES, LOGIT_PROMPT, NFRAMES, attention_model, mo):
             0, _n_layers, step=1, value=[0, _n_layers], show_value=True
         ),
         ko_rules_text=mo.ui.text(
-            placeholder="e.g.  audio,video,0,36 ; audio,image,0,36", full_width=True
+            placeholder="e.g.  audio,video,0,36 ; audio,query_text,0,36", full_width=True
         ),
         compare=mo.ui.checkbox(value=True),
     ).form(
@@ -2278,7 +2471,7 @@ def _(mo):
 
     The metric is **Δ log-likelihood, `knockout − baseline`** — *negative* means the
     model believed its own caption **less** after the knockout, i.e. that pathway was
-    holding the caption up. Unlike the W9 free-generation string diff it is
+    holding the caption up. Unlike the 🎚️ section's free-generation string diff, it is
     **continuous** (you can see a *small* effect) and **deterministic** (greedy
     caption, forward-only scoring). Nothing runs until you press ▶.
 
@@ -2623,6 +2816,9 @@ def _(mo):
     The ledger survives a form reset, and every run **and verdict** is appended to
     `notebook_results/lab_log.jsonl` as you go, so it survives a molab kernel
     restart too — the table reloads from that file when the notebook starts.
+
+    But **a molab session shutdown takes that file with it** (90 minutes idle, or
+    12 hours total). Press **download the worksheet** below before you walk away.
     """)
     return
 
