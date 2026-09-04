@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <b>English</b> · <a href="README.ko.md">한국어</a>
+  <b>English</b> · <a href="README_kr.md">한국어</a>
 </p>
 
 Code for experiments conducted in the paper, with Qwen 2.5 Omni as the representative model.

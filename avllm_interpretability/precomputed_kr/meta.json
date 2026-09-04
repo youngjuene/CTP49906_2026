@@ -1,0 +1,27 @@
+{
+  "clip": "02321.mp4",
+  "nframes": 8,
+  "n_layers": 36,
+  "logit_prompt": "영상에서 들리는 소리를 설명해 주세요",
+  "attention_prompt": "영상에서 보이는 것과 들리는 소리를 설명해 주세요",
+  "knockout_rules": [
+    [
+      "generated",
+      "video",
+      0,
+      36
+    ]
+  ],
+  "max_new_tokens": 32,
+  "attention_capture_layers": [
+    0,
+    2
+  ],
+  "model": "Qwen/Qwen2.5-Omni-3B",
+  "model_revision": "f75b40e3da2003cdd6e1829b1f420ca70797c34e",
+  "generated_at": "2026-09-04T03:35:32Z",
+  "condition_code": "original_reference",
+  "manipulation": "baseline",
+  "token_layout_fingerprint": "dcc3e8fbb0c108b53b145f84538675c05a6d6c540e72dda7ba27373c793c3efe",
+  "precompute_schema_version": "avllm-precompute/3.0.0"
+}

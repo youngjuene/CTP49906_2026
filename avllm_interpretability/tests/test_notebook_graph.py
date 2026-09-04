@@ -22,7 +22,12 @@ marimo = pytest.importorskip("marimo", reason="graph check needs marimo installe
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-NOTEBOOK = Path(__file__).resolve().parents[1] / "CTP49906_avllm_molab.py"
+# Both notebooks: `_kr.py` is the Korean-localized twin, and it carries the same
+# widget/GPU separation, so every invariant below has to hold for it too.
+NOTEBOOKS = [
+    Path(__file__).resolve().parents[1] / "CTP49906_avllm_molab.py",
+    Path(__file__).resolve().parents[1] / "CTP49906_avllm_molab_kr.py",
+]
 
 # A cell is "expensive" if it loads weights, generates, or scores. These are the
 # cells no widget interaction may ever reach.
@@ -35,11 +40,11 @@ EXPENSIVE_MARKERS = (
 )
 
 
-@pytest.fixture(scope="module")
-def cells():
+@pytest.fixture(scope="module", params=NOTEBOOKS, ids=lambda _p: _p.name)
+def cells(request):
     from marimo._ast.load import load_app
 
-    app = load_app(str(NOTEBOOK))
+    app = load_app(str(request.param))
     out = []
     for index, data in enumerate(app._cell_manager.cell_data()):
         if data.cell is None:
