@@ -59,10 +59,7 @@ def _(mo):
 
     - **GPU:** 헤더의 notebook-specs 버튼으로 GPU를 연결하세요. 이 노트북은
       `cuda:0`을 사용하며, 3B 모델은 molab의 VRAM에 넉넉히 올라갑니다.
-    - **의존성:** 셋업 셀이 커널에 pip로 설치합니다(molab은 `# /// script` 블록을
-      자동으로 반영하지 않습니다). 또한 molab에 들어 있는 torchvision에는 비디오
-      디코더가 없으므로, 작은 PyAV 심(shim)으로 `torchvision.io.read_video`를
-      복원합니다.
+    - **셋업 셀:** 필요한 것을 알아서 설치합니다. 끝날 때까지 기다리기만 하면 됩니다.
     - 실험 코드(`src/`)와 샘플 클립은 아래 셋업 셀이
       `youngjuene/CTP49906_2026`에서 클론해 옵니다.
     """)
@@ -592,9 +589,7 @@ def _(mo):
     ## 파라미터
 
     자신의 영상을 쓰거나 개입(intervention)을 바꾸려면 여기를 편집하세요.
-    `NFRAMES`는 조심해서 올리세요 — molab의 GPU는 96 GB로 넉넉하지만 병목은 **호스트
-    RAM 32 GB**이고, 아래 어텐션 캡처가 `seq²`로 커집니다. 캡처를 켠 기본 설정에서는
-    16 정도가 안전한 상한입니다.
+    `NFRAMES`는 16까지만 올리세요 — 그 이상은 메모리가 부족해 커널이 죽습니다.
 
     파라미터는 **재실행 비용**을 기준으로 세 셀로 나뉘어 있습니다(marimo는 편집한
     셀의 하위 셀을 모두 다시 실행합니다). 모델 id — 편집하면 모델을 다시 로드합니다;
@@ -609,7 +604,7 @@ def _(mo):
     | `LOGIT_PROMPT` / `ATTENTION_PROMPT` | 지시문. `query_text` 위치를 바꾸며 캡션도 바뀔 수 있습니다. |
     | `KNOCKOUT_RULES` | `(source, target, start_layer, end_layer)`이며 `end`는 **배타적**입니다. 어떤 레이어에도, 어떤 토큰에도 걸리지 않는 규칙은 조용히 기준선을 돌려주는 대신 거부됩니다. |
     | `MAX_NEW_TOKENS` | 캡션 길이 — 따라서 Σ Δ log-우도도 함께 바뀝니다. 실행끼리 비교할 때 토큰당 평균을 봐야 하는 이유입니다. |
-    | `ATTENTION_CAPTURE_LAYERS` | 아래 어텐션 히트맵이 다루는 레이어. 기본값은 `(0, 2)`입니다. 이 창을 넓히는 것은 진짜 실험이지만 진짜 비용이 듭니다. 캡처는 VRAM이 아니라 **호스트 RAM**에 쌓이며, 캡처한 레이어마다 **디코딩 스텝 하나당** `seq × seq` 텐서를 붙듭니다. 기본값은 약 4 GiB지만 `(0, 36)`은 약 **75 GiB**로, molab의 32 GB RAM을 넘겨 커널이 죽습니다. |
+    | `ATTENTION_CAPTURE_LAYERS` | 아래 어텐션 히트맵이 다루는 레이어. 기본값은 `(0, 2)`입니다. 넓히면 메모리를 급격히 먹습니다 — `(0, 36)`은 커널을 죽입니다. |
     """)
     return
 
@@ -1036,8 +1031,8 @@ def _(get_runs, mo):
         html = html.replace(
             "No runs logged yet. Write a prediction, press ▶, and the run "
             "lands here — with or without a control.",
-            "아직 기록된 실행이 없습니다. 가설을 적고 ▶를 누르면 실행이 여기에 "
-            "쌓입니다 — 대조군이 있든 없든.",
+            "아직 기록된 실행이 없습니다. ▶를 누르면 실행이 여기에 쌓입니다 — "
+            "대조군이 있든 없든.",
         )
         html = html.replace(">none written<", ">가설 없음<")
         # The control column's chip. `is_control` is a bool, so this cell is pure
@@ -1059,9 +1054,9 @@ def _(get_runs, mo):
         _runs = get_runs()
         _c = _counts(_runs)
         _head = mo.md(
-            f"###### 실습 기록 — 실행 {_c['n']}건 · "
+            f"<span style=\"font-size:1.15rem;font-weight:600\">실습 기록 — 실행 {_c['n']}건 · "
             f"대조군 없음 **{_c['n_uncontrolled_claims']}건** · "
-            f"판정 없음 {_c['n_unresolved']}건"
+            f"판정 없음 {_c['n_unresolved']}건</span>"
         )
         _html = _localize_ledger(_render_ledger(_runs, highlight_ids=highlight))
         return mo.vstack([_head, mo.Html(_html)], gap=0.3)
@@ -1252,10 +1247,10 @@ def _(mo):
     않고 갱신됩니다. **열을 클릭**하면 그 위치가 고정되어, 36개 레이어를 지나는
     궤적 전체를 토큰으로 읽을 수 있습니다.
 
-    > **여기서 눈여겨볼 것.** 이 섹션의 예전 버전은 "초기 레이어의 잡음이 최종
-    > 예측으로 결정화되는 과정을 지켜보라"고 안내했습니다. 그 말을 믿기 전에, 마지막
-    > 레이어들이 실제로 무엇으로 디코딩되는지 보세요. 프로브는 오디오 위치에서
-    > **보정되어 있지 않습니다**. 그 퇴화(degeneracy) 자체가 이번 주의 결과이고,
+    > **여기서 눈여겨볼 것.** "초기 레이어의 잡음이 최종 예측으로 정리되어 간다"고
+    > 읽고 싶어지지만, 그 전에 마지막 레이어들이 실제로 무엇으로 디코딩되는지 보세요.
+    > 프로브는 오디오 위치에서 **보정되어 있지 않습니다**. 그 퇴화(degeneracy) 자체가
+    > 이번 주의 결과이고,
     > 잡토큰/내용 구분이 그것을 눈에 보이게 만듭니다. 잡토큰 판정 규칙은 위젯 안에
     > 그대로 출력되므로 그 규칙에 이의를 제기할 수 있습니다.
 
@@ -1311,9 +1306,9 @@ def _(mo, probe_summary):
     ]
     mo.vstack([
         mo.md(
-            f"###### 레이어별 집계 — 잡토큰이 가장 많은 레이어는 **{_worst['name']}**로, "
+            f"<span style=\"font-size:1.15rem;font-weight:600\">레이어별 집계 — 잡토큰이 가장 많은 레이어는 **{_worst['name']}**로, "
             f"잡토큰 칸 **{_worst['junk']}**개에 모든 오디오 위치를 통틀어 서로 다른 토큰이 "
-            f"**{_worst['unique']}**개뿐입니다"
+            f"**{_worst['unique']}**개뿐입니다</span>"
         ),
         mo.ui.table(_rows, selection=None, pagination=True, page_size=12),
     ], gap=0.4)
@@ -1610,7 +1605,7 @@ def _(Counter, attention_token_types, mo):
         for _m in ("video", "audio", "query_text", "image")
     ]
     mo.vstack([
-        mo.md("###### 이 인코딩된 입력에 실제로 들어 있는 것"),
+        mo.md("<span style=\"font-size:1.15rem;font-weight:600\">이 인코딩된 입력에 실제로 들어 있는 것</span>"),
         mo.ui.table(_rows, selection=None, pagination=False),
         mo.md(
             "`generated`는 표에 없습니다. 그 위치는 모델이 디코딩하기 전에는 존재하지 "
@@ -1630,8 +1625,6 @@ def _(KNOCKOUT_RULES, attention_model, mo):
     def _band_validate(_v):
         if not _v:
             return None
-        if not (_v.get("prediction") or "").strip():
-            return "실행하기 전에 가설을 적으세요 — 틀릴 수 있는 가설이어야 합니다."
         # `.get` with a default throughout: a batch's value is a partial dict
         # until the frontend has pushed state for every child, so indexing
         # directly raises KeyError on the first render instead of validating.
@@ -1644,9 +1637,6 @@ def _(KNOCKOUT_RULES, attention_model, mo):
         return None
 
     band_controls = mo.md(
-        "**▶ 누르기 전 가설** — 이 대역이 경로를 나른다면 캡션에 무슨 일이 일어나야 "
-        "하며, 무엇이 관찰되면 가설이 틀린 것입니까?\n\n"
-        "{prediction}\n\n"
         "**generated** 토큰이 {target} 에 어텐션하는 것을 thinker 레이어 {layers} "
         "구간에서 금지\n\n"
         "{null_band} — 이 실행을 **무효과 대역(null band)**으로 표시합니다: 아무 일도 "
@@ -1655,12 +1645,6 @@ def _(KNOCKOUT_RULES, attention_model, mo):
         f"(`end`는 배타적입니다. 이 thinker는 레이어가 **{_band_layers}**개입니다. "
         "클립·프롬프트·프레임 수는 파라미터 셀에 설정된 값 그대로입니다.)"
     ).batch(
-        prediction=mo.ui.text_area(
-            placeholder="예: 설명이 앞쪽에서 조립되므로, [0,12)에서 video를 막으면 "
-                        "[24,36)에서 막을 때보다 캡션이 더 많이 바뀔 것이다.",
-            rows=2,
-            full_width=True,
-        ),
         target=mo.ui.dropdown(
             _band_targets,
             value=_band_default if _band_default in _band_targets else "video",
@@ -1712,22 +1696,6 @@ def _(
         mo.callout(
             mo.md("타깃과 레이어 대역을 고른 뒤 **▶ 이 대역으로 다시 생성**을 누르세요."),
             kind="info",
-        ),
-    )
-    # The form's `validate=` runs only in the submit-button handler; marimo's
-    # Ctrl/Cmd+Enter shortcut sets the value directly and skips it. The empty-band
-    # check has a backstop (`rule_reach` raises inside `block_attention`), but the
-    # prediction gate has none — and it is the one that makes hypothesis-before-▶
-    # structurally unavoidable rather than merely suggested.
-    mo.stop(
-        not (_bp.get("prediction") or "").strip(),
-        mo.callout(
-            mo.md(
-                "**가설을 먼저 적으세요** — 틀릴 수 있는 가설이어야 합니다. "
-                "(Ctrl/Cmd+Enter는 폼 자체의 검사를 건너뛰므로, 실행이 여기서 "
-                "멈춰 있습니다.)"
-            ),
-            kind="warn",
         ),
     )
     mo.stop(
@@ -1813,6 +1781,10 @@ def _(
             mo.ui.anywidget(_BandCompare(
                 text_a=_base_ans, text_b=_band_ans, min_match_words=2
             )),
+            mo.md(
+                "<span style=\"color:#4C78A8;font-weight:600\">다음 →</span> 같은 타깃으로 `[12,24)`와 `[24,36)`도 돌려 보세요. 세 대역의 "
+                "유사도를 나란히 놓으면 경로가 어디에 있는지 보입니다."
+            ),
         ])
         # Record it. `set_runs` is a SetFunctor, not the State object, so a cell
         # that only *sets* never re-runs itself — this append cannot re-trigger
@@ -1838,7 +1810,6 @@ def _(
                         "target": _bp["target"], "start": _lo, "end": _hi,
                         "max_new_tokens": MAX_NEW_TOKENS,
                     },
-                    prediction=_bp.get("prediction", ""),
                     is_control=bool(_bp.get("null_band")),
                 ): append_run(_prev, _r, log_path=LEDGER_LOG)
             )
@@ -1974,7 +1945,7 @@ def _(mo, w9_tf_result):
         **_w9_params(w9_tf_result["caption_tokens"], w9_tf_result["delta"]),
     ))
     mo.md(
-        "###### 토큰별 Δ log-우도 (단어에 마우스를 올리면 그 토큰들의 nats가 보입니다)\n\n"
+        "<span style=\"font-size:1.15rem;font-weight:600\">토큰별 Δ log-우도 (단어에 마우스를 올리면 그 토큰들의 nats가 보입니다)</span>\n\n"
         f"{w9_threshold} 이상 잃은 단어만 표시합니다 — **밑줄 친 숫자를 옆으로 드래그**하거나 "
         "클릭해서 입력하세요. 임계값을 넘은 단어는 **굵게 테두리**가 생기고 나머지는 "
         "흐려지므로, 드래그하는 대로 띠가 다시 정렬되는 것이 보입니다. 여기서는 모델을 "
@@ -2038,9 +2009,9 @@ def _(knockout_text, logit_csv_written, mo):
         )
         + "- 기준선 vs 녹아웃 비교 완료, 두 어텐션 패널 모두 표시했습니다.\n\n"
         "**여기까지는 시범 예제입니다 — 설정 하나를 대신 돌려 드린 것입니다.** 아래 두 "
-        "플레이그라운드가 여러분이 직접 돌리는 곳입니다. ▶를 누를 때마다 먼저 가설을 "
-        "요구하고 결과를 실습 기록에 추가하므로, 직전 실행이 화면에 남아 비교할 수 "
-        "있습니다. 🎯 섹션의 무음 클립 대조군부터 시작하세요."
+        "플레이그라운드가 여러분이 직접 돌리는 곳입니다. ▶를 누를 때마다 결과가 실습 "
+        "기록에 쌓이므로, 직전 실행이 화면에 남아 비교할 수 있습니다. 🎯 섹션의 무음 "
+        "클립 대조군부터 시작하세요."
     )
     return
 
@@ -2104,8 +2075,6 @@ def _(
         f"`[0, {_n_layers})`가 전체를 뜻합니다."
     )
     _template = (
-        "**▶ 누르기 전 가설** — 어느 레이어에서 다양성이 줄어야 하며, 그 이유는?\n\n"
-        "{prediction}\n\n"
         "**클립** {clip} &nbsp; (무음 대조군은 저장소 안에 있습니다 — 이름으로 고르면 "
         "되고, 업로드할 것이 없습니다)\n\n"
         "**업로드**를 골랐을 때만 — `mp4 / mov / mkv / webm`, 250 MB 이하, 120초 이하, 1080p 이하:\n\n"
@@ -2126,8 +2095,6 @@ def _(
     def _ko_validate(_v):
         if not _v:
             return None
-        if not (_v.get("prediction") or "").strip():
-            return "실행하기 전에 가설을 적으세요 — 틀릴 수 있는 가설이어야 합니다."
         # The radio carries Korean labels over English values, and `validate` sees
         # the frontend value — which for a radio is the *label* (`_convert_value`
         # indexes `options` with it). Comparing against the English value alone
@@ -2159,12 +2126,6 @@ def _(
         return None
 
     ko_controls = mo.md(_template).batch(
-        prediction=mo.ui.text_area(
-            placeholder="예: 두 스트림이 융합되는 중간 레이어에서 audio→video 차단이 "
-                        "다양성을 가장 크게 떨어뜨릴 것이다.",
-            rows=2,
-            full_width=True,
-        ),
         clip=mo.ui.radio(CLIP_CHOICES, value=CLIP_DEFAULT, inline=True),
         video=mo.ui.file(
             filetypes=[".mp4", ".mov", ".mkv", ".webm", ".avi"],
@@ -2231,15 +2192,6 @@ def _(
         mo.callout(
             mo.md("위에서 파라미터를 설정하고 **▶ Logit-lens 다양성 실행**을 누르세요."),
             kind="info",
-        ),
-    )
-    # Backstop for the prediction gate: `validate=` is skipped by marimo's
-    # Ctrl/Cmd+Enter shortcut. See the band-sweep cell above.
-    mo.stop(
-        not (_p.get("prediction") or "").strip(),
-        mo.callout(
-            mo.md("**가설을 먼저 적으세요** — 틀릴 수 있는 가설이어야 합니다."),
-            kind="warn",
         ),
     )
     # The band cell already guards replay mode; these two did not, and submitting
@@ -2500,8 +2452,12 @@ def _(
             ),
             mo.hstack(_stats, widths="equal", gap=1),
             _fig,
-            mo.md("###### 디코딩된 예측의 다양성 순으로 정렬한 레이어 (클수록 오디오 토큰 예측이 더 다양함)"),
+            mo.md("<span style=\"font-size:1.15rem;font-weight:600\">디코딩된 예측의 다양성 순으로 정렬한 레이어 (클수록 오디오 토큰 예측이 더 다양함)</span>"),
             _table,
+            mo.md(
+                "<span style=\"color:#4C78A8;font-weight:600\">다음 →</span> source를 `video`로 바꾸거나, 같은 규칙을 **무음 대조군**에 "
+                "돌려 두 스코어보드를 비교해 보세요."
+            ),
         ]
         _scoreboard = mo.vstack(_children)
 
@@ -2530,7 +2486,6 @@ def _(
                         "clip": _video_path.name, "nframes": _nframes, "prompt": _prompt,
                         "rules": [list(r) for r in _rules], "compare": _compare,
                     },
-                    prediction=_p.get("prediction", ""),
                     is_control=_is_control,
                     extra={"audio_tokens": _n_audio, "peak_layer": _peak},
                 ): append_run(_prev, _r, log_path=LEDGER_LOG)
@@ -2617,9 +2572,6 @@ def _(
     _n_layers = len(attention_model.thinker.model.layers)
     _tf_targets = ["audio", "video", "query_text", "image"]
     _tf_template = (
-        "**▶ 누르기 전 가설** — 예상하는 토큰당 Δ 값과, 무엇이 관찰되면 그 가설이 "
-        "반박되는지 적으세요:\n\n"
-        "{prediction}\n\n"
         "**클립** {clip} &nbsp; (반증 가능한 쪽은 `무음 대조군`입니다 — 저장소 안에 "
         "있으니 업로드하지 말고 이름으로 고르세요)\n\n"
         "**업로드**를 골랐을 때만 — `mp4 / mov / mkv / webm`, 250 MB 이하, 120초 이하, 1080p 이하:\n\n"
@@ -2635,8 +2587,6 @@ def _(
     def _tf_validate(_v):
         if not _v:
             return None
-        if not (_v.get("prediction") or "").strip():
-            return "실행하기 전에 가설을 적으세요 — 틀릴 수 있는 가설이어야 합니다."
         # Label *or* value: see the note in the 🎛️ form's validator.
         if _v.get("clip") in ("Upload", CLIP_UPLOAD) and not _v.get("video"):
             return "업로드를 선택했지만 파일을 고르지 않았습니다."
@@ -2647,12 +2597,6 @@ def _(
         return None
 
     tf_controls = mo.md(_tf_template).batch(
-        prediction=mo.ui.text_area(
-            placeholder="예: 무음 클립에서 토큰당 Δ는 ±0.02 nats 이내일 것이고, "
-                        "실제 클립에서는 최소 5배 더 큰 음수일 것이다.",
-            rows=2,
-            full_width=True,
-        ),
         clip=mo.ui.radio(CLIP_CHOICES, value=CLIP_DEFAULT, inline=True),
         video=mo.ui.file(
             filetypes=[".mp4", ".mov", ".mkv", ".webm", ".avi"], multiple=False, kind="area"
@@ -2699,15 +2643,6 @@ def _(
         mo.callout(
             mo.md("위에서 파라미터를 설정하고 **▶ 티처 포싱 Δ log-우도 실행**을 누르세요."),
             kind="info",
-        ),
-    )
-    # Backstop for the prediction gate: `validate=` is skipped by marimo's
-    # Ctrl/Cmd+Enter shortcut. See the band-sweep cell above.
-    mo.stop(
-        not (_tp.get("prediction") or "").strip(),
-        mo.callout(
-            mo.md("**가설을 먼저 적으세요** — 틀릴 수 있는 가설이어야 합니다."),
-            kind="warn",
         ),
     )
     mo.stop(
@@ -2826,6 +2761,10 @@ def _(
                 f"&nbsp;·&nbsp; **프롬프트** _{_tf_prompt}_ &nbsp;·&nbsp; **녹아웃** {_tf_rule_txt}"
             ),
             mo.hstack(_tf_stats, widths="equal", gap=1),
+            mo.md(
+                "<span style=\"color:#4C78A8;font-weight:600\">다음 →</span> 타깃을 `video`로 바꾸거나 레이어를 `[0,12)`로 좁혀 보세요. "
+                "**프롬프트를 영어로 바꾸면** 결과가 크게 달라집니다."
+            ),
         ])
         try:
             set_runs(
@@ -2845,7 +2784,6 @@ def _(
                         "start": _tf_lo, "end": _tf_hi,
                         "max_new_tokens": MAX_NEW_TOKENS,
                     },
-                    prediction=_tp.get("prediction", ""),
                     is_control=_tf_is_control,
                     extra={"delta_total": round(_tf_total, 4), "n_tokens": len(_tf_toks)},
                 ): append_run(_prev, _r, log_path=LEDGER_LOG)
@@ -2869,8 +2807,8 @@ def _(mo, tf_result):
         **_tf_params(tf_result["caption_tokens"], tf_result["delta"]),
     ))
     mo.md(
-        "###### 토큰별 Δ log-우도 (뜨거운 색 = 녹아웃 뒤 덜 믿게 됨. 단어에 마우스를 "
-        "올리면 그 토큰들의 nats가 보입니다)\n\n"
+        "<span style=\"font-size:1.15rem;font-weight:600\">토큰별 Δ log-우도 (뜨거운 색 = 녹아웃 뒤 덜 믿게 됨. 단어에 마우스를 "
+        "올리면 그 토큰들의 nats가 보입니다)</span>\n\n"
         f"{tf_threshold} 이상 잃은 단어만 표시합니다 — **밑줄 친 숫자를 옆으로 드래그**하거나 "
         "클릭해서 입력하세요. 다시 그려지는 것은 이 띠뿐이며 모델은 건드리지 않습니다."
     )
@@ -2917,8 +2855,8 @@ def _(mo):
     mo.md(r"""
     ## 📓 실습 기록 — 실제로 무엇을 돌렸는가
 
-    이 노트북에서 누른 모든 ▶가, 미리 적어 둔 가설과 같은 종류의 직전 실행 대비
-    바꾼 설정, 그리고 나온 측정값과 함께 아래에 기록됩니다. 지표는 **이름과 단위**를
+    이 노트북에서 누른 모든 ▶가, 같은 종류의 직전 실행 대비 바꾼 설정과 나온
+    측정값과 함께 아래에 기록됩니다. 지표는 **이름과 단위**를
     유지합니다. 캡션 유사도와 토큰당 Δ는 같은 양이 아니므로 절대 한 열에 섞이지
     않습니다.
 
@@ -3001,7 +2939,7 @@ def _(RESULTS_DIR, get_runs, mo, worksheet_md):
     _runs = get_runs()
     _md = worksheet_md(_runs)
     mo.vstack([
-        mo.md("###### `WORKSHEET.md`용 내보내기"),
+        mo.md("<span style=\"font-size:1.15rem;font-weight:600\">`WORKSHEET.md`용 내보내기</span>"),
         mo.download(
             _md.encode(),
             filename="lab_log.md",

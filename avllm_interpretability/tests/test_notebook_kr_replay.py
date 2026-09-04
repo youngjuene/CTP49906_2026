@@ -228,6 +228,7 @@ def test_the_ledger_chrome_is_localized_and_still_matches_the_renderer(replay):
     # And the view actually applies it. Seed the state explicitly: `ledger_view`
     # reads whatever `load_log` found, and notebook_results/ is gitignored -- so
     # on a fresh clone the ledger is empty and there are no headers to assert on.
+    # This test used to pass only because a previous run had left a log behind.
     defs["set_runs"](lambda _prev: [record])
     html = defs["ledger_view"]().text
     assert "판정 없음" in html
@@ -272,6 +273,50 @@ def test_the_ledger_summary_and_verdicts_reach_the_student_in_korean(replay):
     # student can match a table row against the file.
     assert ';font-weight:600">대조군</span>' in html
     assert "band_sweep" in html and "caption_similarity" in html
+
+
+def test_no_form_asks_for_a_hypothesis_any_more(replay):
+    # The lab was retuned for tweaking over typing: the prediction text areas and
+    # the gates that refused a run without one are gone. Assert both halves --
+    # the widget is absent, and a submit carrying no prediction is accepted.
+    _, defs = replay
+    payloads = {
+        "band_controls": {"target": ["video"], "layers": (0, 12), "null_band": False},
+        "ko_controls": {"clip": defs["CLIP_DEFAULT"], "video": None, "nframes": 8,
+                        "prompt": "p", "ko_enable": False, "ko_source": ["audio"],
+                        "ko_target": ["video"], "ko_layers": (0, 36),
+                        "ko_rules_text": "", "compare": True},
+        "tf_controls": {"clip": defs["CLIP_DEFAULT"], "video": None, "nframes": 8,
+                        "prompt": "p", "target": ["audio"], "layers": (0, 36)},
+    }
+    for name, payload in payloads.items():
+        form = defs[name]
+        assert "prediction" not in form.element.elements, name
+        assert form.validate(payload) is None, (name, form.validate(payload))
+
+
+def test_the_ledger_drops_the_prediction_column_when_nothing_carries_one(replay):
+    # Without this, every row would render the red "none written" alarm -- marking
+    # as a defect the field the notebook deliberately stopped collecting.
+    from src.run_ledger import render_ledger_html, run_record
+
+    def rec(pred):
+        return run_record(
+            kind="diversity", condition="audio→video [0,36)",
+            metric_name="mean_delta_diversity", metric_value=-2.1,
+            metric_unit="unique preds", config={"clip": "02321.mp4"},
+            prediction=pred, is_control=False,
+        )
+
+    without = render_ledger_html([rec("")])
+    assert "none written" not in without
+    assert without.count("<th") == 7
+
+    # ...and keeps it the moment a run has one, so the English notebook and any
+    # ledger reloaded from an older lab_log.jsonl are unaffected.
+    with_pred = render_ledger_html([rec("앞쪽 레이어가 더 크게 바꿀 것이다")])
+    assert with_pred.count("<th") == 8
+    assert "prediction" in with_pred
 
 
 @pytest.mark.parametrize("form_name", ["band_controls", "ko_controls", "tf_controls"])
