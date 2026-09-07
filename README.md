@@ -6,6 +6,7 @@ Classroom interpretability labs for Qwen2.5-Omni and Qwen3.5: **Logit Lens**, **
 
 - [`avllm_interpretability/`](avllm_interpretability/) — the experiments ([README](avllm_interpretability/README.md)), adapted from [ramaneswaran/avllm_interpretability](https://github.com/ramaneswaran/avllm_interpretability) ([project page](https://ramaneswaran.github.io/avllm_interpretability/))
 - [`jacobian-lens/`](jacobian-lens/) — vendored [anthropics/jacobian-lens](https://github.com/anthropics/jacobian-lens) reference code ([paper](https://transformer-circuits.pub/2026/workspace/index.html))
+- [`feedback-atlas/`](feedback-atlas/) — the real-time classroom feedback map ([README](feedback-atlas/README.md) · [한국어](feedback-atlas/README_kr.md)), a small web app rather than a notebook: attendees write during a presentation, opinions are embedded locally and projected to a shared 2D map
 
 ## Quick start
 
@@ -43,7 +44,13 @@ unverified.
 python -m pytest avllm_interpretability   # experiment logic, widgets, notebook replay
 python -m pytest jacobian-lens/tests      # jlens library
 python -m pytest tests                    # cross-notebook lint + jlens notebook smoke
+python -m pytest feedback-atlas           # feedback map: server, projection, privacy
 ```
+
+`feedback-atlas` has its own environment (`uv venv --python 3.12`) — numpy 2.5 and
+scipy 1.18 both require 3.12, so it cannot share the notebooks' 3.11. Its suite
+follows the same rule as the rest: CPU only, no weights, no network, with heavy
+dependencies skipping rather than failing.
 
 Three layers, because each catches what the others cannot:
 
@@ -70,9 +77,19 @@ uvx --with marimo==0.23.14 marimo export script \
 These are teaching-only materials. Human accessibility, localization, licensing,
 and research-governance review remain open.
 
-The WP-6 bilingual instructor/student runbooks and the blinded audience-response
-surface are **not in this repository yet** — they are planned, and the PRD
-(`CTP49906_W7-11_PRD.md`) is the current specification for them. The student
+The WP-6 bilingual instructor/student runbooks are **not in this repository yet** —
+they are planned, and the PRD (`CTP49906_W7-11_PRD.md`) is the current
+specification for them.
+
+[`feedback-atlas/`](feedback-atlas/) is a *neighbour* of the blinded
+audience-response surface that PRD also anticipates, and deliberately not the same
+thing. It collects opinions during a presentation and maps them; the blinded
+surface in `.omx/plans/prd-avllm-arts-integrated-classroom.md` (FR-6, §7.4)
+specifies a different data contract — blindness attestation, permission scope,
+withdrawal — and a different release path, a marimo notebook under `audience/`.
+The two overlap on `reviewer_id`/`target_id` and on post-semester
+de-identification, and should be reconciled before either is used for research
+rather than for teaching. The student
 worksheet that does exist is
 [`avllm_interpretability/WORKSHEET.md`](avllm_interpretability/WORKSHEET.md); the
 avllm notebook's run ledger exports rows in its format directly.
