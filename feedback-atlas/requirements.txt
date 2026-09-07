@@ -1,0 +1,65 @@
+# Python >= 3.12 is required, and not by preference: numpy 2.5.3 and scipy 1.18.1
+# both declare Requires-Python >= 3.12, so a 3.11 venv silently resolves to older
+# ones. It clears the repo's documented >= 3.11 floor either way.
+#
+#   uv venv --python 3.12 --seed .venv
+#   uv pip install --python .venv/bin/python -r requirements.txt
+#
+# The pure-logic half of src/ needs only numpy. Everything below numpy is needed
+# to *run* the server; the test suite skips what is absent rather than failing,
+# so a bare `uv pip install numpy pytest` is enough to exercise the logic.
+
+# --- core -------------------------------------------------------------------
+numpy==2.5.3
+# Pinned to <2.6 territory on purpose: numba 0.67 declares `numpy<2.6,>=1.22`,
+# and numba arrives transitively through umap-learn. A newer numpy resolves fine
+# on its own and then makes umap uninstallable, which surfaces as a resolver
+# error at install time rather than anything visible in the code.
+
+# --- web server -------------------------------------------------------------
+fastapi==0.141.1
+uvicorn[standard]==0.52.4
+# The [standard] extra is the load-bearing part: it is what pulls in the
+# `websockets` implementation. Without it uvicorn starts, serves HTTP, and then
+# fails the WebSocket upgrade at runtime -- so the failure lands mid-class rather
+# than at install. The whole transport choice rests on this (SSE is unusable
+# through a Cloudflare quick tunnel, which buffers text/event-stream).
+
+# --- embedding --------------------------------------------------------------
+sentence-transformers==6.0.1
+transformers==5.16.1
+# These two are pinned as a pair. sentence-transformers 6.0.1 declares
+# `transformers<6.0.0,>=5.0.0`, and google/embeddinggemma-300m declares a floor of
+# transformers >= 4.56.2 -- 5.16.1 satisfies both. Do not relax
+# sentence-transformers below 5.0: older versions accept `prompt_name=` and
+# *silently ignore it*, which does not raise and does not warn. The result is a
+# perfectly plausible map built in the wrong vector space, because EmbeddingGemma's
+# clustering prompt ("task: clustering | query: ") was never applied. src/embedder.py
+# asserts the prompt survived the load rather than trusting this pin alone.
+#
+# EmbeddingGemma is a *gated* download: the model page requires an accepted Gemma
+# licence and an HF token belonging to that same account. A fresh clone therefore
+# fails at first model load with a 401/403, not at install time. See README.md.
+
+# --- projection -------------------------------------------------------------
+# Not listed, deliberately: scikit-learn and scipy. src/projection.py does PCA as
+# centre-then-SVD and the orthogonal Procrustes fit as one more SVD, in numpy, so
+# neither is imported. Both still arrive transitively under umap-learn, but this
+# project does not depend on them -- which is what lets the cold-start path (PCA
+# below N=80, and the stabiliser that keeps the map from spinning) keep working
+# on an interpreter where the umap install failed.
+
+umap-learn==0.5.12
+numba==0.67.0
+llvmlite==0.49.0
+# Pinned as a triple, not just umap-learn. umap pulls numba, numba pulls llvmlite
+# with a tight `llvmlite<0.50,>=0.49.0dev0`, and a mismatched numba/llvmlite pair
+# is an ImportError at `import umap` -- a crash at server startup, not a resolver
+# error at install time. Pinning all three makes that failure impossible instead
+# of unlikely.
+
+# --- tests ------------------------------------------------------------------
+pytest==9.1.1
+httpx==0.28.1
+# httpx is what fastapi's TestClient uses to drive the WebSocket routes in
+# tests/test_server_routes.py. Tests that need it are marked and skip without it.

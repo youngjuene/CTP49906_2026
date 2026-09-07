@@ -1,0 +1,19 @@
+# The repo root .gitignore does not cover .venv, and every subproject here
+# carries its own environment (jlens and avllm already need separate ones).
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# Runtime state. atlas.db is the live class data: opinions, cached embeddings
+# and the last layout. It is deliberately not tracked -- it holds reviewer_id,
+# which section 6 of the PRD keeps off every surface it does not have to be on.
+*.db
+*.db-wal
+*.db-shm
+.env
+roster.csv
+
+# Numba's JIT cache, written by the startup warm-up so the second start skips it.
+.numba_cache/
