@@ -1,0 +1,236 @@
+*,*::before,*::after { box-sizing:border-box }
+html,body { height:100% }
+body {
+  margin:0; background:var(--desk); color:var(--fg);
+  font-family:var(--sans); font-size:var(--fs-chrome); line-height:1.5;
+  /* Without keep-all, browsers break Korean mid-word at arbitrary syllable
+   * blocks. One line; the single most common Korean-web CSS omission. */
+  word-break:keep-all;
+  -webkit-font-smoothing:antialiased;
+}
+:focus-visible { outline:2px solid var(--accent); outline-offset:-1px }
+button,input,select,textarea { font:inherit; color:inherit }
+[hidden] { display:none !important }
+@media (prefers-reduced-motion:reduce) { *{animation:none!important;transition:none!important} }
+
+/* ---------- landing + admin gate ---------- */
+.gate { min-height:100dvh; display:grid; place-items:center; padding:24px }
+.gate-card {
+  background:var(--card); border:1px solid var(--hair); border-radius:6px;
+  padding:24px; width:100%; max-width:352px; box-shadow:var(--shadow);
+  display:flex; flex-direction:column; gap:14px;
+}
+.gate-card h1 { font-size:17px; letter-spacing:-.01em; margin:0 }
+.gate-card .sub { font-size:13px; color:var(--muted); margin:-8px 0 0 }
+.field { display:flex; flex-direction:column; gap:4px }
+.field > label { font-size:12px; color:var(--muted) }
+input[type=text],input[type=password],select,textarea {
+  background:var(--card); border:1px solid var(--hair); border-radius:6px;
+  padding:8px 9px; width:100%; font-size:var(--fs-body);
+}
+textarea { resize:vertical; min-height:90px; line-height:var(--lh-body); word-break:keep-all }
+.input-bad { border-color:var(--bad) }
+.err {
+  display:flex; gap:8px; align-items:flex-start; font-size:12.5px; color:var(--bad);
+  background:color-mix(in srgb,var(--bad) 9%,transparent);
+  border:1px solid color-mix(in srgb,var(--bad) 28%,transparent);
+  border-radius:6px; padding:8px 10px;
+}
+.err svg { width:14px; height:14px; flex:none; margin-top:2px; fill:none;
+  stroke:currentColor; stroke-width:1.7 }
+.hint { font-size:11.5px; color:var(--muted); margin:0 }
+
+.btn {
+  height:28px; border-radius:6px; border:1px solid var(--hair); background:var(--card);
+  padding:0 10px; cursor:pointer; display:inline-flex; align-items:center; gap:6px;
+  font-size:12px;
+}
+/* :not() contributes its argument's specificity, so `.btn:hover:not(:disabled)`
+ * (0,3,0) outweighs `.btn.pri` (0,2,0). Without restating the fill on the
+ * primary variant below, hovering the submit button swapped in this secondary
+ * grey while keeping white text -- an invisible label on the one control the
+ * whole app exists to have pressed, in both themes, on every hover. */
+.btn:hover:not(:disabled) { background:var(--panel) }
+.btn:disabled { opacity:.5; cursor:not-allowed }
+.btn.pri { background:var(--accent-strong); border-color:var(--accent-strong);
+  color:var(--on-accent); font-weight:500 }
+.btn.pri:hover:not(:disabled) { background:var(--accent-strong); filter:brightness(1.08) }
+.btn.tall { height:36px; justify-content:center }
+
+/* ---------- app shell ---------- */
+.shell { height:100dvh; display:flex; flex-direction:column; gap:8px; padding:8px }
+.bar { display:flex; align-items:center; gap:8px; flex-wrap:wrap; flex:none }
+.logo { font-weight:700; font-size:13px; padding:0 4px; letter-spacing:-.01em }
+.weeks { display:flex; align-items:center; gap:2px; background:var(--card);
+  border:1px solid var(--hair); border-radius:6px; padding:2px }
+.weeks label { display:flex; align-items:center; gap:5px; padding:3px 8px;
+  border-radius:4px; cursor:pointer; font-size:12px; user-select:none }
+.weeks label:hover { background:var(--panel) }
+.weeks input { accent-color:var(--accent); margin:0; width:13px; height:13px }
+.conn { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--muted);
+  margin-left:auto }
+.conn i { width:7px; height:7px; border-radius:50%; background:var(--ok); display:block }
+.conn.warn i { background:var(--warn) }
+.conn.bad  i { background:var(--bad) }
+.admin-badge { font-size:11px; font-weight:500; color:#fff; background:var(--bad);
+  border-radius:4px; padding:1px 7px }
+
+.body { flex:1; display:flex; gap:8px; min-height:0 }
+.rail { display:flex; flex-direction:column; gap:8px; padding:2px; flex:none }
+.rail button { width:28px; height:28px; border-radius:6px; border:0; background:none;
+  color:var(--muted); display:grid; place-items:center; cursor:pointer }
+.rail button:hover { color:var(--fg) }
+.rail button[aria-pressed="true"] { background:var(--panel); color:var(--fg);
+  box-shadow:inset 0 0 0 1px var(--hair) }
+.rail .spacer { flex:1 }
+.rail svg { width:17px; height:17px; fill:none; stroke:currentColor; stroke-width:1.6;
+  stroke-linecap:round; stroke-linejoin:round }
+
+.map-card { flex:1; min-width:0; background:var(--card); border:1px solid var(--hair);
+  border-radius:6px; position:relative; overflow:hidden; display:flex;
+  flex-direction:column }
+#map { flex:1; display:block; width:100%; touch-action:none; cursor:grab }
+#map.dragging { cursor:grabbing }
+
+.legend { position:absolute; top:8px; right:8px; background:var(--tip-bg);
+  backdrop-filter:blur(6px); border:1px solid var(--hair); border-radius:6px;
+  padding:8px; min-width:170px; max-height:calc(100% - 44px); overflow:auto;
+  box-shadow:var(--shadow-sm) }
+.legend h4 { font:500 11px var(--sans); letter-spacing:.08em; text-transform:uppercase;
+  color:var(--muted); margin:0 0 6px }
+.legend .row { display:flex; align-items:center; gap:7px; padding:4px;
+  min-height:24px;
+  border-radius:4px; cursor:pointer; font-size:12px; border:0; background:none;
+  width:100%; text-align:left; color:inherit }
+.legend .row:hover { background:var(--panel) }
+.legend .row.off { opacity:.4 }
+.legend .sw { width:9px; height:9px; border-radius:50%; flex:none }
+.legend .sep { height:1px; background:var(--hair); margin:7px 0 }
+.legend .shape { display:flex; align-items:center; gap:7px; padding:2.5px 4px; font-size:12px }
+.legend .shape svg { width:11px; height:11px; flex:none }
+
+.statusbar { height:20px; line-height:20px; font-size:12px; display:flex;
+  align-items:center; gap:8px; padding:0 6px; color:var(--muted);
+  border-top:1px solid var(--hair); background:var(--tip-bg); flex:none }
+.statusbar .spacer { flex:1 }
+.statusbar .div { width:1px; height:10px; background:currentColor; opacity:.3; margin:0 2px }
+.scale { display:flex; align-items:center; gap:5px }
+.scale svg { height:9px; stroke:currentColor; fill:none; stroke-width:1;
+  shape-rendering:crispEdges }
+
+/* the tooltip: the nicest thing in Embedding Atlas's UI, lifted wholesale */
+.tip { position:absolute; background:var(--tip-bg); backdrop-filter:blur(6px);
+  border:1px solid var(--hair); border-radius:6px; box-shadow:var(--shadow);
+  padding:8px; max-width:340px; pointer-events:none; z-index:5;
+  display:flex; flex-direction:column; gap:8px }
+.tip .text { font-size:var(--fs-body); line-height:var(--lh-body); color:var(--fg) }
+.tip .meta { display:flex; gap:6px; flex-wrap:wrap }
+.badge { font-size:11px; padding:1px 8px; border:1px solid var(--hair);
+  background:var(--chip); border-radius:6px; color:var(--muted);
+  display:inline-flex; align-items:center; gap:5px }
+.badge .sw { width:7px; height:7px; border-radius:50%; flex:none }
+.flabel { font:500 11px var(--sans); letter-spacing:.07em; text-transform:uppercase;
+  color:var(--muted) }
+
+/* ---------- compose ---------- */
+.side { width:330px; flex:none; background:var(--panel); border:1px solid var(--hair);
+  border-radius:6px; padding:10px; display:flex; flex-direction:column; gap:10px;
+  overflow:auto }
+.side h2 { font:500 11px var(--sans); letter-spacing:.08em; text-transform:uppercase;
+  color:var(--muted); margin:0 }
+.seg { display:flex; background:var(--card); border:1px solid var(--hair);
+  border-radius:6px; padding:2px; gap:2px }
+.seg button { flex:1; border:0; background:none; border-radius:4px; padding:5px;
+  font-size:12.5px; color:var(--muted); cursor:pointer; display:flex;
+  align-items:center; justify-content:center; gap:6px }
+.seg button[aria-pressed="true"] { background:var(--panel); color:var(--fg);
+  font-weight:500; box-shadow:inset 0 0 0 1px var(--hair) }
+.seg svg { width:11px; height:11px }
+.row2 { display:flex; gap:8px; align-items:flex-end }
+
+.toast { position:fixed; left:50%; bottom:20px; transform:translateX(-50%);
+  background:var(--card); border:1px solid var(--hair); border-radius:6px;
+  padding:8px 14px; box-shadow:var(--shadow); font-size:12.5px; z-index:40 }
+
+/* ---------- admin reviewer panel ---------- */
+.revlist { display:flex; flex-direction:column; gap:1px; overflow:auto; flex:1; min-height:0 }
+.revrow { display:flex; align-items:center; gap:8px; padding:6px 7px; min-height:24px; border-radius:5px;
+  cursor:pointer; font-size:12.5px; border:0; background:none; width:100%;
+  text-align:left; color:inherit }
+.revrow:hover { background:var(--card) }
+.revrow[aria-selected="true"] { background:var(--card); box-shadow:inset 0 0 0 1px var(--accent) }
+.revrow .n { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+.revrow .c { font-family:var(--mono); font-size:11px; color:var(--muted);
+  font-variant-numeric:tabular-nums }
+.rolechip { font-size:10px; padding:0 5px; border-radius:4px; border:1px solid var(--hair);
+  color:var(--muted) }
+
+/* The arrival of a new opinion, mid-presentation. Embedding Atlas has no enter
+ * transition at all; writing the scatter is what buys this.
+ * transform-box:fill-box is load-bearing -- an SVG element's transform-origin
+ * defaults to the user-space origin, so without it the mark scales from the
+ * corner of the canvas and flies across the plot instead of growing in place. */
+@keyframes atlas-pop {
+  from { transform:scale(.1); opacity:0 }
+  60%  { transform:scale(1.28) }
+  to   { transform:scale(1); opacity:.72 }
+}
+#map .entering {
+  animation:atlas-pop .42s cubic-bezier(.34,1.56,.64,1) both;
+  transform-box:fill-box; transform-origin:center;
+}
+
+.empty { position:absolute; inset:0; display:grid; place-items:center; padding:24px;
+  text-align:center; color:var(--muted); font-size:13px; pointer-events:none }
+
+/* ---------- responsive ----------
+ * The projector and the phone want opposite things. On a wide screen the map is
+ * the shared object the room reads together; on a phone the viewer's job is to
+ * write, not to browse, so the form becomes the primary surface and the map
+ * shrinks to context.
+ */
+@media (max-width:1023px) {
+  .body { flex-direction:column }
+  .rail { flex-direction:row; order:3 }
+  .rail .spacer { flex:0 }
+  .map-card { flex:none; height:40vh; min-height:200px }
+  /* Extra room at the foot so the last line is not clipped against the tab bar.
+   * The panel scrolls, so nothing was unreachable -- but a sentence sliced in
+   * half horizontally reads as a broken layout, not as something to scroll. */
+  /* Let the page scroll rather than trapping the form in its own scroll area.
+   * Locking the shell to 100dvh is right on a projector, where the map is the
+   * whole point and nothing should move. On a phone it makes the form a nested
+   * scroller inside a fixed viewport, which clips its last line and hides the
+   * keyboard-adjacent controls people are reaching for. */
+  .shell { height:auto; min-height:100dvh }
+  .side { width:auto; order:2; flex:1 1 auto; overflow:visible; padding-bottom:16px }
+  .body { min-height:0 }
+  .legend { min-width:0; font-size:11px }
+}
+
+/* ---------- admin tools (PRD 5.6) ----------
+ * Sections stacked in one scrolling column rather than tabs: an instructor
+ * running this on a projector is reading the map, not hunting through panels,
+ * and every one of these is a filter that composes with the others.
+ */
+.apane h2 { font:500 11px var(--sans); letter-spacing:.08em;
+  text-transform:uppercase; color:var(--muted); margin:0 }
+.apane { display:flex; flex-direction:column; gap:8px; padding-bottom:10px;
+  border-bottom:1px solid var(--hair) }
+.apane:last-child { border-bottom:0; padding-bottom:0 }
+#adminpanel { width:360px; gap:12px }
+#sel-list, #nb-list { max-height:190px }
+.oprow { display:flex; flex-direction:column; gap:3px; padding:6px 7px;
+  border-radius:5px; cursor:pointer; border:0; background:none; width:100%;
+  text-align:left; color:inherit; font:inherit }
+.oprow:hover { background:var(--card) }
+.oprow .t { font-size:12.5px; line-height:1.5; color:var(--fg);
+  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
+  overflow:hidden }
+.oprow .m { display:flex; gap:6px; align-items:center; font-size:10.5px;
+  color:var(--muted) }
+.oprow .sw { width:7px; height:7px; border-radius:50%; flex:none }
+.oprow .d { margin-left:auto; font-family:var(--mono);
+  font-variant-numeric:tabular-nums }
+/* Embedding Atlas's search-hit highlight, to the hex. */
+mark { background:#f9ceaf; color:#111; border-radius:2px; padding:0 1px }

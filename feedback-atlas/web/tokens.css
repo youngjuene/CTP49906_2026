@@ -1,0 +1,71 @@
+/* Design tokens. The only place a colour is defined.
+ *
+ * Values are Apple's Embedding Atlas, read from its source: the slate desk, the
+ * white/black floating cards, the hairline borders, the single blue accent, and
+ * d3's category10 for categories. Two deliberate departures, both for Korean,
+ * are marked below.
+ *
+ * Three theme states, not two. An explicit choice stamps data-theme on <html>;
+ * the default "system" setting stamps nothing, so only prefers-color-scheme
+ * separates light from dark there. Every token is defined in the bare :root
+ * block first and only redefined afterwards.
+ */
+:root {
+  --desk:#e2e8f0;  --card:#ffffff;  --panel:#f1f5f9;  --hair:#cbd5e1;
+  /* slate-600, not slate-500. Muted text sits on the slate-100 panel as often as
+   * on white, and slate-500 measures 4.34:1 there -- close enough to look fine
+   * and still short of the 4.5:1 that 11-12px text needs. This is read from the
+   * back of a classroom. */
+  --fg:#1e293b;    --muted:#475569; --accent:#3b82f6; --other:#9eabc2;
+  /* A darker accent for white text on a filled button. Embedding Atlas's
+   * #3b82f6 is a *mark* colour -- it never carries text there -- and white on it
+   * measures 3.68:1, under the 4.5:1 that body-sized text needs. The mark colour
+   * and the focus ring stay #3b82f6; only text-on-fill uses this. */
+  --accent-strong:#2563eb; --on-accent:#ffffff;
+  --halo:rgba(255,255,255,.85);  --label:#0f172a;
+  --tip-bg:rgba(255,255,255,.78); --chip:#f1f5f9;
+  --ok:#16a34a;    --warn:#d97706;  --bad:#dc2626;
+  --shadow:0 10px 24px -12px rgba(15,23,42,.28);
+  --shadow-sm:0 4px 12px -6px rgba(15,23,42,.25);
+
+  /* No webfont. The mockup loaded Noto Sans KR from Google Fonts; this app is
+   * served to a classroom whose network is exactly what may be failing, and a
+   * blocking stylesheet from a CDN is the wrong dependency for a tool that
+   * embeds text locally to avoid network calls in the first place. Every one of
+   * these faces ships with the OS that reads Korean. */
+  --sans:system-ui,-apple-system,"Apple SD Gothic Neo",Pretendard,
+         "Noto Sans KR","Malgun Gothic","맑은 고딕",sans-serif;
+  --mono:ui-monospace,Menlo,Consolas,monospace;
+
+  /* Embedding Atlas runs a 13px base, which is why it reads dense and tool-like.
+   * Kept for chrome; opinion text is 14px/1.6 because Hangul carries more
+   * strokes per em than Latin and this is read from across a room. */
+  --fs-chrome:13px;
+  --fs-body:14px;
+  --lh-body:1.6;
+}
+
+@media (prefers-color-scheme:dark) {
+  :root:not([data-theme="light"]) {
+    --desk:#1e293b;  --card:#000000;  --panel:#0f172a;  --hair:#334155;
+    /* Lighter, not darker. The polarity was inverted: slate-500 muted text on a
+     * near-black panel measured 3.75:1, worse than the light theme it mirrored. */
+    --fg:#e2e8f0;    --muted:#94a3b8; --other:#9eabc2;
+    --accent-strong:#60a5fa; --on-accent:#0b1220;
+    --halo:rgba(0,0,0,.85);  --label:#cbd5e1;
+    --tip-bg:rgba(30,41,59,.78); --chip:#0f172a;
+    --ok:#4ade80;    --warn:#fbbf24;  --bad:#f87171;
+    --shadow:0 10px 24px -12px rgba(0,0,0,.7);
+    --shadow-sm:0 4px 12px -6px rgba(0,0,0,.6);
+  }
+}
+:root[data-theme="dark"] {
+  --desk:#1e293b;  --card:#000000;  --panel:#0f172a;  --hair:#334155;
+  --fg:#e2e8f0;    --muted:#94a3b8; --other:#9eabc2;
+  --accent-strong:#60a5fa; --on-accent:#0b1220;
+  --halo:rgba(0,0,0,.85);  --label:#cbd5e1;
+  --tip-bg:rgba(30,41,59,.78); --chip:#0f172a;
+  --ok:#4ade80;    --warn:#fbbf24;  --bad:#f87171;
+  --shadow:0 10px 24px -12px rgba(0,0,0,.7);
+  --shadow-sm:0 4px 12px -6px rgba(0,0,0,.6);
+}
