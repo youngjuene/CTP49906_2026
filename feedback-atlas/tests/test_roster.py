@@ -108,8 +108,19 @@ def test_two_ids_differing_only_in_case_are_a_load_error():
         raise AssertionError("duplicate ids after folding must not load")
 
 
+def test_a_teaching_assistant_may_write_but_is_never_a_target():
+    """PRD 3 lists 조교 as a user who may submit feedback, and submitting needs a
+    roster entry -- but a TA is not presenting a project, so they must not appear
+    in the compose form's target list."""
+    roster = Roster.from_csv_text(CSV + "ta.hyunwoo,조교현우,ta\n")
+    entry = roster.resolve("ta.hyunwoo")
+    assert entry is not None and entry.role == "ta"
+    assert "ta.hyunwoo" not in {t["id"] for t in roster.targets()}
+
+
 def test_targets_are_students_only():
-    """Auditors write feedback but are not presenting, so they are not targets."""
+    """Auditors and TAs write feedback but are not presenting, so neither is a
+    target."""
     targets = Roster.from_csv_text(CSV).targets()
     assert [t["id"] for t in targets] == ["kim.seoyeon", "park.junho"]
     assert all(set(t) == {"id", "display_name"} for t in targets)
@@ -126,9 +137,9 @@ def test_a_hand_edited_csv_with_a_bom_crlf_and_a_blank_last_line_loads():
 def test_an_unknown_role_and_an_empty_roster_both_refuse_to_load():
     """Both mean nobody can get in, which is never what was meant."""
     try:
-        Roster.from_csv_text("id,display_name,role\na,A,ta\n")
+        Roster.from_csv_text("id,display_name,role\na,A,studnet\n")
     except ValueError as e:
-        assert "ta" in str(e)
+        assert "studnet" in str(e)
     else:
         raise AssertionError("an unknown role must not load")
 

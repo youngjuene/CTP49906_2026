@@ -19,14 +19,23 @@ from pathlib import Path
 
 from src.textnorm import match_key, normalize_text
 
-ROLES = ("student", "auditor")
+# PRD 7's table says enum(student, auditor). "ta" is a deliberate addition, for a
+# reason PRD 3 already implies: it lists 강사/조교 as a distinct kind of user who
+# may submit feedback, and submitting requires a roster entry. Without a role of
+# their own, a TA has to be registered as 청강생 -- and the admin panel, which is
+# the one screen built to attribute writing correctly, would then label them as
+# something they are not.
+#
+# TAs are not targets. targets() stays students-only, so a TA can write feedback
+# and never receive it, which is what the course actually looks like.
+ROLES = ("student", "auditor", "ta")
 
 
 @dataclass(frozen=True)
 class RosterEntry:
     id: str            # canonical id, as written in the CSV
     display_name: str  # real name. Admin surfaces only (PRD 6).
-    role: str          # "student" (수강생) | "auditor" (청강생)
+    role: str          # "student" (수강생) | "auditor" (청강생) | "ta" (조교)
 
 
 class Roster:

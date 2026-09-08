@@ -71,10 +71,19 @@ is worse than no map.
 id,display_name,role
 kim.seoyeon,김서연,student
 kang.minsu,강민수,auditor
+ta.hyunwoo,조교 · 현우,ta
 ```
 
-`student` rows are also the **targets** — the projects feedback can be *about*.
-Auditors write but do not present. Matching is forgiving about spaces, case and
+Three roles. `student` (수강생) rows are also the **targets** — the projects
+feedback can be *about*. `auditor` (청강생) and `ta` (조교) write feedback and are
+never targets, which is what the course actually looks like: a TA comments on
+work, nobody comments on the TA.
+
+PRD 7's table names only `student` and `auditor`; `ta` is a deliberate addition,
+because PRD 3 already lists 조교 as a user who may submit — and submitting needs a
+roster entry. Without a role of their own a TA has to be filed as 청강생, and the
+admin panel, which exists to attribute writing correctly, would then label them as
+something they are not. Matching is forgiving about spaces, case and
 full-width characters (a Korean IME left in 전각 mode emits `ｋｉｍ`), and about
 nothing else: an edit-distance match would let one student's id resolve to
 another's.

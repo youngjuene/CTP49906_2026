@@ -14,6 +14,11 @@
 const CAT = ["#1f77b4","#ff7f0e","#2ca02c","#d62728","#9467bd",
              "#8c564b","#e377c2","#7f7f7f","#bcbd22","#17becf"];
 
+// A lookup, not a ternary: the previous `student ? 수강생 : 청강생` labelled every
+// non-student as 청강생, so a TA appeared as an auditor in the one panel whose
+// job is saying who wrote what.
+const ROLE_LABEL = { student: "수강생", auditor: "청강생", ta: "조교" };
+
 export function mountAdmin({ state, send, atlas, renderStatus }) {
   const $ = (id) => document.getElementById(id);
   let selection = [];          // point records, in map order
@@ -220,7 +225,7 @@ export function mountAdmin({ state, send, atlas, renderStatus }) {
       name.className = "n"; name.textContent = r.display_name;
       const role = document.createElement("span");
       role.className = "rolechip";
-      role.textContent = r.role === "student" ? "수강생" : "청강생";
+      role.textContent = ROLE_LABEL[r.role] || r.role;
       const n = document.createElement("span");
       n.className = "c"; n.textContent = String(r.n);
       if (r.n === 0) row.style.opacity = "0.55";
