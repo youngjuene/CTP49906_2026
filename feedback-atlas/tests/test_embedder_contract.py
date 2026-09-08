@@ -94,6 +94,29 @@ def test_a_gated_repository_error_names_all_three_ways_out():
     assert "ATLAS_EMBEDDING_MODEL=e5-small-ko" in msg          # the ungated way out
 
 
+def test_a_gated_error_mentions_HF_TOKEN_shadowing_when_the_variable_is_set(monkeypatch):
+    """Found the hard way, on a machine where the licence *had* been accepted.
+
+    HF_TOKEN takes precedence over the token `huggingface-cli login` stored, so an
+    invalid or revoked HF_TOKEN silently shadows a working login. The hub reports
+    the result as a gated-repo error, which sends you to the licence page -- where
+    everything already looks correct, because the licence was never the problem.
+    """
+    spec = EmbedderSpec(model_id="google/embeddinggemma-300m", dim=768,
+                        prompt_name="Clustering")
+    err = RuntimeError("401 Client Error. Access to model ... is restricted.")
+
+    monkeypatch.setenv("HF_TOKEN", "hf_definitely_not_valid")
+    with_token = _load_help(spec, err)
+    assert "HF_TOKEN" in with_token and "shadow" in with_token
+    assert "env -u HF_TOKEN" in with_token
+
+    # Silent when the variable is absent: it cannot be the cause then, and an
+    # irrelevant paragraph in an error message is how error messages stop working.
+    monkeypatch.delenv("HF_TOKEN", raising=False)
+    assert "shadow" not in _load_help(spec, err)
+
+
 def test_an_ordinary_load_failure_is_not_dressed_up_as_a_licence_problem():
     """Sending somebody to a licence page over a typo'd model name wastes the one
     thing they do not have."""

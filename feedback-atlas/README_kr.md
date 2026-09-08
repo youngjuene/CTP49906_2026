@@ -49,6 +49,13 @@ uv pip install --python .venv/bin/python -r requirements.txt
 3. 첫 실행이 1.2 GB 다운로드가 되지 않도록 가중치를 미리 받아둡니다.
    `hf download google/embeddinggemma-300m`
 
+> **라이선스에 동의했는데도 계속 "gated"라고 나오면 `HF_TOKEN`을 확인하세요.**
+> 환경 변수가 `huggingface-cli login`이 저장해 둔 토큰보다 우선하므로, 만료되었거나
+> 잘못된 `HF_TOKEN`이 멀쩡한 로그인을 가려버립니다. 그리고 허브는 이를 gated 오류로
+> 보고하기 때문에, 이미 모든 것이 정상으로 보이는 라이선스 페이지로 다시 보내집니다.
+> `env -u HF_TOKEN python -m uvicorn …`으로 실행해 보면 둘을 가장 빨리 구분할 수
+> 있습니다. 이 저장소의 첫 실행에서 실제로 시간을 잡아먹은 문제입니다.
+
 게이트가 걸림돌이라면 `ATLAS_EMBEDDING_MODEL=e5-small-ko`가 있습니다. 게이트 없음,
 Apache-2.0, 384차원입니다. 서버는 스스로 다른 모델로 넘어가지 않고 읽을 수 있는 오류와
 함께 시작을 거부합니다. 아무도 고르지 않은 모델이 만든 지도는 지도가 없는 것보다 나쁩니다.

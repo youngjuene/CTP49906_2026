@@ -51,6 +51,13 @@ before the day, not during it:
 3. Pre-fetch the weights so the first start is not a 1.2 GB download:
    `hf download google/embeddinggemma-300m`
 
+> **If it still says "gated" after you have accepted the licence, check `HF_TOKEN`.**
+> The environment variable takes precedence over whatever `huggingface-cli login`
+> stored, so an invalid or revoked `HF_TOKEN` shadows a working login — and the hub
+> reports that as a gated-repo error, which sends you back to the licence page where
+> everything already looks correct. `env -u HF_TOKEN python -m uvicorn …` is the
+> quickest way to tell the two apart. This cost real time on the first run here.
+
 If the gate is in your way, `ATLAS_EMBEDDING_MODEL=e5-small-ko` is ungated,
 Apache-2.0, and 384-dimensional. The server refuses to start with a readable
 error rather than falling back on its own — a map built by a model nobody chose

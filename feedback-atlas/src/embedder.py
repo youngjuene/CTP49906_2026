@@ -135,6 +135,15 @@ def _load_help(spec: EmbedderSpec, exc: Exception) -> str:
                  "access to model", "restricted"))
     if not gated:
         return f"could not load {spec.model_id} -- {text}"
+    import os
+    shadowing = (
+        "\n  NOTE: HF_TOKEN is set in this environment, and it takes precedence "
+        "over\n        whatever `huggingface-cli login` stored. An invalid or "
+        "revoked HF_TOKEN\n        therefore shadows a perfectly good stored "
+        "login, and the hub reports\n        that as a gated-repo error -- which "
+        "sends you to the licence page when\n        the licence was never the "
+        "problem. Try: env -u HF_TOKEN <command>\n"
+        if os.environ.get("HF_TOKEN") else "")
     return (
         f"could not load {spec.model_id}: it is a gated repository.\n"
         f"  1. Accept the licence at https://huggingface.co/{spec.model_id}\n"
@@ -142,6 +151,7 @@ def _load_help(spec: EmbedderSpec, exc: Exception) -> str:
         "     A token from a different account than the one that accepted the "
         "licence fails exactly like no token at all.\n"
         "  3. Or run ungated: ATLAS_EMBEDDING_MODEL=e5-small-ko\n"
+        f"{shadowing}"
         f"original error -- {text}")
 
 
