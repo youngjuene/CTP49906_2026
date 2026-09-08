@@ -41,7 +41,7 @@ function el(name, attrs) {
  */
 const DIAMOND_K = Math.sqrt(Math.PI / 2);   // ~1.2533
 
-export function markPath(cx, cy, r) {
+function markPath(cx, cy, r) {
   const a = r * DIAMOND_K;
   return `M${cx} ${cy - a}L${cx + a} ${cy}L${cx} ${cy + a}L${cx - a} ${cy}Z`;
 }

@@ -107,7 +107,7 @@ published admin code.
 source .venv/bin/activate
 export $(grep -v '^#' .env | xargs)
 python -m uvicorn --factory src.server:create_app \
-  --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips='*'
+  --host 0.0.0.0 --port 8100 --proxy-headers --forwarded-allow-ips='*'
 ```
 
 Start it **five minutes early**. The first run loads the model and warms UMAP's
@@ -120,12 +120,12 @@ use and the connection counts. It never reports the access code.
 ### Getting the room connected
 
 **Try the LAN first.** Lowest latency, no quotas, no third party: share
-`http://<your-ip>:8000` and a QR code. Test it from a phone on the same SSID *the
+`http://<your-ip>:8100` and a QR code. Test it from a phone on the same SSID *the
 day before* — many campus and guest networks enable client isolation, which
 silently blocks phone-to-laptop traffic and looks exactly like the server being
 down.
 
-**An SSH tunnel is not a classroom path.** `ssh -L 8000:127.0.0.1:8000 …` forwards
+**An SSH tunnel is not a classroom path.** `ssh -L 8100:127.0.0.1:8100 …` forwards
 the port to *one* machine — the laptop you typed it on. It is the right way to
 preview the map yourself over SSH, and it does nothing for thirty phones.
 
@@ -160,7 +160,7 @@ makes its length irrelevant.
 hands back an HTTPS URL any device can open from any network:
 
 ```bash
-cloudflared tunnel --url http://localhost:8000
+cloudflared tunnel --url http://localhost:8100
 # → https://<random-words>.trycloudflare.com   share this, or a QR of it
 ```
 

@@ -102,7 +102,7 @@ kill -HUP $(pgrep -f 'uvicorn.*src.server')
 source .venv/bin/activate
 export $(grep -v '^#' .env | xargs)
 python -m uvicorn --factory src.server:create_app \
-  --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips='*'
+  --host 0.0.0.0 --port 8100 --proxy-headers --forwarded-allow-ips='*'
 ```
 
 **5분 일찍** 켜세요. 첫 실행은 모델을 불러오고 UMAP의 numba 커널을 예열합니다. 수업 시작에
@@ -114,11 +114,11 @@ python -m uvicorn --factory src.server:create_app \
 ### 강의실 접속
 
 **먼저 내부망을 시도하세요.** 지연이 가장 낮고, 할당량도 제3자도 없습니다.
-`http://<내 IP>:8000`과 QR 코드를 공유하면 됩니다. **전날** 같은 SSID의 휴대폰에서
+`http://<내 IP>:8100`과 QR 코드를 공유하면 됩니다. **전날** 같은 SSID의 휴대폰에서
 반드시 시험해 보세요. 많은 캠퍼스·게스트 네트워크가 클라이언트 격리를 켜두는데, 이는
 휴대폰↔노트북 통신을 조용히 차단하며 증상이 서버가 죽은 것과 똑같습니다.
 
-**SSH 터널은 수업용 경로가 아닙니다.** `ssh -L 8000:127.0.0.1:8000 …`은 명령을 입력한
+**SSH 터널은 수업용 경로가 아닙니다.** `ssh -L 8100:127.0.0.1:8100 …`은 명령을 입력한
 *그 노트북 한 대에만* 포트를 전달합니다. 강사가 SSH 너머로 지도를 미리 보는 데는 맞는
 방법이고, 학생 휴대폰 30대에는 아무 역할도 하지 않습니다.
 
@@ -152,7 +152,7 @@ HTTP이며, 관리자 엔드포인트가 같은 포트에 함께 열립니다. �
 HTTPS 주소를 돌려줍니다.
 
 ```bash
-cloudflared tunnel --url http://localhost:8000
+cloudflared tunnel --url http://localhost:8100
 # → https://<무작위-단어>.trycloudflare.com   이 주소나 QR을 공유
 ```
 

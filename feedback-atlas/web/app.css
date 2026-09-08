@@ -148,10 +148,6 @@ textarea { resize:vertical; min-height:90px; line-height:var(--lh-body); word-br
 .seg svg { width:11px; height:11px }
 .row2 { display:flex; gap:8px; align-items:flex-end }
 
-.toast { position:fixed; left:50%; bottom:20px; transform:translateX(-50%);
-  background:var(--card); border:1px solid var(--hair); border-radius:6px;
-  padding:8px 14px; box-shadow:var(--shadow); font-size:12.5px; z-index:40 }
-
 /* ---------- admin reviewer panel ---------- */
 .revlist { display:flex; flex-direction:column; gap:1px; overflow:auto; flex:1; min-height:0 }
 .revrow { display:flex; align-items:center; gap:8px; padding:6px 7px; min-height:24px; border-radius:5px;

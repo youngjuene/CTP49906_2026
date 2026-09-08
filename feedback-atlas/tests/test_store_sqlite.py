@@ -113,7 +113,7 @@ def test_swapping_a_model_and_swapping_back_costs_nothing(tmp_path):
     assert store.get_embeddings([text_hash(op.text)], GEMMA)[text_hash(op.text)].shape == (768,)
 
 
-def test_a_vector_whose_width_does_not_match_the_declared_dim_raises(tmp_path):
+def test_a_vector_whose_width_does_not_match_the_declared_dim_raises():
     """Fail loudly at the read, where the cause is still visible, rather than
     later inside numpy."""
     try:

@@ -13,7 +13,7 @@ import { mountAdmin } from "./admin.js";
 const PROTOCOL = 1;
 const OTHER = "var(--other)";
 
-export const state = {
+const state = {
   channel: "participant",
   identity: null, adminCode: null,
   rev: 0, layoutRev: 0,
@@ -205,7 +205,7 @@ function wsUrl(path) {
   return `${proto}//${location.host}${path}`;
 }
 
-export function send(message) {
+function send(message) {
   if (socket && socket.readyState === WebSocket.OPEN) {
     socket.send(JSON.stringify(message));
     return true;
