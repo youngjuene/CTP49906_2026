@@ -71,7 +71,7 @@ is worse than no map.
 id,display_name,role
 kim.seoyeon,김서연,student
 kang.minsu,강민수,auditor
-ta.hyunwoo,조교 · 현우,ta
+ta.youngjune,영준,ta
 ```
 
 Three roles. `student` (수강생) rows are also the **targets** — the projects
@@ -125,11 +125,23 @@ day before* — many campus and guest networks enable client isolation, which
 silently blocks phone-to-laptop traffic and looks exactly like the server being
 down.
 
-**Fall back to a Cloudflare quick tunnel.** No account, one command:
+**An SSH tunnel is not a classroom path.** `ssh -L 8000:127.0.0.1:8000 …` forwards
+the port to *one* machine — the laptop you typed it on. It is the right way to
+preview the map yourself over SSH, and it does nothing for thirty phones.
+
+**For the room, use a Cloudflare quick tunnel.** No account, one command, and it
+hands back an HTTPS URL any device can open from any network:
 
 ```bash
 cloudflared tunnel --url http://localhost:8000
+# → https://<random-words>.trycloudflare.com   share this, or a QR of it
 ```
+
+Verified end to end on this codebase: HTTPS page load, **WebSocket connected
+through the tunnel**, snapshot delivered, a submit round-tripped and acknowledged,
+and no reviewer id in the participant page — all from a phone-sized client. The
+URL changes on every restart, so generate it before the session and put it on a
+slide, not during.
 
 This is also why the app speaks WebSocket rather than Server-Sent Events:
 `trycloudflare.com` buffers `text/event-stream`, so SSE never arrives through it.

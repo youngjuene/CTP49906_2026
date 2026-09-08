@@ -68,7 +68,7 @@ Apache-2.0, 384차원입니다. 서버는 스스로 다른 모델로 넘어가�
 id,display_name,role
 kim.seoyeon,김서연,student
 kang.minsu,강민수,auditor
-ta.hyunwoo,조교 · 현우,ta
+ta.youngjune,영준,ta
 ```
 
 역할은 세 가지입니다. `student`(수강생) 행은 **대상**이기도 합니다. 즉 피드백을 받을 수
@@ -118,11 +118,22 @@ python -m uvicorn --factory src.server:create_app \
 반드시 시험해 보세요. 많은 캠퍼스·게스트 네트워크가 클라이언트 격리를 켜두는데, 이는
 휴대폰↔노트북 통신을 조용히 차단하며 증상이 서버가 죽은 것과 똑같습니다.
 
-**대안은 Cloudflare 임시 터널입니다.** 계정 없이 한 줄입니다.
+**SSH 터널은 수업용 경로가 아닙니다.** `ssh -L 8000:127.0.0.1:8000 …`은 명령을 입력한
+*그 노트북 한 대에만* 포트를 전달합니다. 강사가 SSH 너머로 지도를 미리 보는 데는 맞는
+방법이고, 학생 휴대폰 30대에는 아무 역할도 하지 않습니다.
+
+**강의실용은 Cloudflare 임시 터널입니다.** 계정 없이 한 줄이고, 어떤 네트워크에서든 열리는
+HTTPS 주소를 돌려줍니다.
 
 ```bash
 cloudflared tunnel --url http://localhost:8000
+# → https://<무작위-단어>.trycloudflare.com   이 주소나 QR을 공유
 ```
+
+이 저장소에서 실제로 확인했습니다. HTTPS 페이지 로드, **터널을 통과하는 WebSocket 연결**,
+스냅샷 수신, 제출 왕복과 ack, 그리고 참가자 화면에 작성자 ID 없음 — 전부 휴대폰 크기
+화면에서 통과했습니다. 주소는 재시작할 때마다 바뀌므로 수업 중이 아니라 시작 전에 만들어
+슬라이드에 올려두세요.
 
 이 앱이 SSE 대신 WebSocket을 쓰는 이유이기도 합니다. `trycloudflare.com`은
 `text/event-stream`을 버퍼링하므로 SSE는 터널을 통과하지 못합니다. 터널 트래픽은
