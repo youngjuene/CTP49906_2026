@@ -129,6 +129,23 @@ down.
 the port to *one* machine — the laptop you typed it on. It is the right way to
 preview the map yourself over SSH, and it does nothing for thirty phones.
 
+### On the day
+
+```bash
+scripts/class.sh start     # server + tunnel, both detached; prints the URL
+scripts/class.sh url       # the URL again, for the slide
+scripts/class.sh status    # what is running, how many opinions, who is connected
+scripts/class.sh stop
+```
+
+Run it five minutes early. `setsid` on both processes is the load-bearing part:
+started from a plain shell, `cloudflared` dies the moment the laptop sleeps or the
+wifi drops, and the address the room is looking at disappears mid-session. The
+server survives that on its own; the tunnel does not.
+
+An `ssh -L` forward is **not** part of this. Once the tunnel is up its HTTPS URL
+works from your laptop too, so the forward has nothing left to do.
+
 **For the room, use a Cloudflare quick tunnel.** No account, one command, and it
 hands back an HTTPS URL any device can open from any network:
 
