@@ -64,9 +64,14 @@ start() {
 url() {
   [ -s "$URL_FILE" ] || { echo "열린 터널이 없습니다. scripts/class.sh start"; exit 1; }
   local u; u=$(cat "$URL_FILE")
+  # 주소를 눈으로 읽어 옮겨 적게 하지 않습니다. 무작위 네 단어짜리 HTTPS 주소는
+  # 안전하지만 강의실 뒤에서 읽을 물건이 아니고, 서른 명이 오타를 내는 것이 실제
+  # 실패 지점입니다. QR 하나면 사라집니다.
+  .venv/bin/python scripts/make_qr.py "$u" "$RUN/qr.png"
   echo
   echo "  학생 공유 주소 :  $u"
   echo "  관리자          :  $u/#admin"
+  echo "  슬라이드용 QR  :  $(pwd)/$RUN/qr.png"
   echo
   echo "  주소는 재시작할 때마다 바뀝니다. 지금 슬라이드에 붙여두세요."
 }

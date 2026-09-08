@@ -132,8 +132,8 @@ preview the map yourself over SSH, and it does nothing for thirty phones.
 ### On the day
 
 ```bash
-scripts/class.sh start     # server + tunnel, both detached; prints the URL
-scripts/class.sh url       # the URL again, for the slide
+scripts/class.sh start     # server + tunnel, both detached; prints URL and QR
+scripts/class.sh url       # the URL and QR again, for the slide
 scripts/class.sh status    # what is running, how many opinions, who is connected
 scripts/class.sh stop
 ```
@@ -143,8 +143,18 @@ started from a plain shell, `cloudflared` dies the moment the laptop sleeps or t
 wifi drops, and the address the room is looking at disappears mid-session. The
 server survives that on its own; the tunnel does not.
 
+The address is four random words, which is fine to scan and hopeless to read from
+the back of a room — so `start` also prints a QR to the terminal and writes
+`.run/qr.png` for the slide. Put the QR up; nobody should be typing this.
+
 An `ssh -L` forward is **not** part of this. Once the tunnel is up its HTTPS URL
 works from your laptop too, so the forward has nothing left to do.
+
+A short `http://<host-ip>:8100` is tempting instead, and on this host it is the
+wrong trade: the address is publicly routable, so binding to `0.0.0.0` publishes
+the app to the internet rather than to the room, over plain HTTP, with the admin
+endpoint on the same port. The tunnel gives HTTPS and opens no port, and the QR
+makes its length irrelevant.
 
 **For the room, use a Cloudflare quick tunnel.** No account, one command, and it
 hands back an HTTPS URL any device can open from any network:

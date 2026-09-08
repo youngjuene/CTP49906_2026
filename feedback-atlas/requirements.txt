@@ -58,6 +58,14 @@ llvmlite==0.49.0
 # error at install time. Pinning all three makes that failure impossible instead
 # of unlikely.
 
+# --- classroom ops ----------------------------------------------------------
+segno==1.6.6
+# For the QR code scripts/class.sh puts on a slide. The tunnel hands back a
+# random four-word HTTPS address, which is safe and unreadable from the back of a
+# room -- thirty people mistyping it is a real failure mode, and a QR removes it
+# entirely. Chosen over `qrcode` because on Python >= 3.10 it has no runtime
+# dependencies at all and writes PNG without Pillow.
+
 # --- tests ------------------------------------------------------------------
 pytest==9.1.1
 httpx==0.28.1
