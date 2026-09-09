@@ -24,6 +24,17 @@ import numpy as np
 # without changing project()'s signature or making it return a tuple.
 _last_reducer = None
 
+# The k-NN graph the last fit was built on, in umap's `precomputed_knn` shape.
+# None when the corpus was too small for one, or when umap built its own.
+#
+# This is the half of embedding-atlas's analysis its viewer reads directly. Their
+# projection module is not called -- see src/ea_projection -- but the sequence is
+# theirs: graph first, then a fit on it. Keeping the graph the fit consumed costs
+# nothing here and means the neighbours the viewer shows are the ones the layout
+# was built from, rather than a second search with different parameters that
+# disagrees with the picture.
+_last_knn = None
+
 
 def choose_projector(n: int, threshold: int = 80) -> str:
     """"pca" below the threshold, "umap" at or above it.
@@ -65,18 +76,42 @@ def _umap_2d(X: np.ndarray, n_neighbors: int, seed: int) -> np.ndarray:
 
     import umap  # optional, and slow to import: keep it out of module scope
 
+    from src.ea_projection import knn_graph
+
     n = X.shape[0]
-    global _last_reducer
+    global _last_reducer, _last_knn
+    # Cleared before the fit, not after it. Both are read by Layout immediately
+    # after this returns, and a fit that raises would otherwise leave the previous
+    # run's reducer and graph in place -- so Layout would adopt a reducer fitted on
+    # a corpus that no longer matches its row order, and transform new opinions
+    # against it. Clearing first turns that into "refit next pass", which is what
+    # _should_refit already does with a None reducer.
+    _last_reducer = None
+    _last_knn = None
+    # n_neighbors must stay below the sample count or umap truncates it and
+    # warns; clamp here so the warning never reaches a classroom log.
+    k = max(2, min(n_neighbors, n - 1))
+
+    # embedding-atlas's own two-step: build the k-NN graph first, then fit UMAP on
+    # it. Same algorithm and same parameters as fitting directly -- what it buys is
+    # the graph itself, which the viewer needs and a plain fit throws away. None
+    # when umap cannot build one, in which case umap builds its own internally and
+    # only the viewer's neighbour panel goes without.
+    knn = knn_graph(X, n_neighbors=k, metric="cosine", random_state=seed)
+    if knn is not None:
+        # Take k back from the graph rather than trusting the clamp twice: umap
+        # rejects a precomputed graph whose width disagrees with n_neighbors.
+        k = int(np.asarray(knn[0]).shape[1])
+
     reducer = umap.UMAP(
         n_components=2,
-        # n_neighbors must stay below the sample count or umap truncates it and
-        # warns; clamp here so the warning never reaches a classroom log.
-        n_neighbors=max(2, min(n_neighbors, n - 1)),
+        n_neighbors=k,
         min_dist=0.1,
         metric="cosine",
         random_state=seed,
         init="spectral",
         verbose=False,
+        **({"precomputed_knn": knn} if knn is not None else {}),
     )
     with warnings.catch_warnings():
         # Setting random_state makes umap single-threaded and it says so, every
@@ -89,6 +124,7 @@ def _umap_2d(X: np.ndarray, n_neighbors: int, seed: int) -> np.ndarray:
             "ignore", message=".*n_jobs value .* overridden.*", category=UserWarning)
         out = np.asarray(reducer.fit_transform(X), dtype=float)
     _last_reducer = reducer
+    _last_knn = knn
     return out
 
 
@@ -284,6 +320,16 @@ class Layout:
         self._reducer = None
         self._ids: list[str] = []          # every id placed so far, in row order
         self._coords: np.ndarray | None = None
+        # The k-NN graph behind the last actual fit, and the ids it was fitted on,
+        # in that fit's row order. Replaced with the reducer or not at all: a graph
+        # whose row order no longer matches the reducer's would attribute one
+        # opinion's neighbours to another and look entirely reasonable doing it.
+        #
+        # knn_ids is shorter than _ids between refits, because points arriving via
+        # transform() are placed on the manifold without joining the graph. The
+        # caller fills those in; see AtlasState._neighbor_column.
+        self.knn = None
+        self.knn_ids: list[str] = []
         # Rows covered by the last *actual* fit. Tracked separately from _ids,
         # which grows with every transform: measuring growth against _ids would
         # move the baseline forward on each arrival, so the corpus could never
@@ -318,6 +364,7 @@ class Layout:
             # instant, and a snapshot is a few kilobytes. Keep no state.
             self._reducer, self._coords, self._ids = None, None, []
             self._fit_size = 0
+            self.knn, self.knn_ids = None, []
             return project(X, threshold=self.threshold,
                            n_neighbors=self.n_neighbors, seed=self.seed), True
 
@@ -328,6 +375,7 @@ class Layout:
             self._ids = list(ids)
             self._coords = coords.copy()
             self._fit_size = n
+            self.knn, self.knn_ids = _last_knn, list(ids)
             return coords, True
 
         n_fitted = len(self._ids)
@@ -342,6 +390,7 @@ class Layout:
                              n_neighbors=self.n_neighbors, seed=self.seed)
             self._reducer, self._ids = _last_reducer, list(ids)
             self._coords, self._fit_size = coords.copy(), n
+            self.knn, self.knn_ids = _last_knn, list(ids)
             return coords, True
 
         coords = np.vstack([self._coords, fresh])

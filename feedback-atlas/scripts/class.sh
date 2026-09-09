@@ -24,6 +24,7 @@ SRV_LOG="$RUN/server.log"; CF_LOG="$RUN/tunnel.log"; URL_FILE="$RUN/url.txt"
 
 srv_pid() { pgrep -f "uvicorn --factory src.server:create_app .*--port $PORT" | head -1; }
 cf_pid()  { pgrep -f "cloudflared tunnel --url http://localhost:$PORT" | head -1; }
+health_ok() { curl -sf --max-time 2 "http://127.0.0.1:$PORT/healthz" >/dev/null; }
 
 start() {
   [ -x .venv/bin/python ] || { echo "먼저 venv를 만드세요: uv venv --python 3.12 --seed .venv"; exit 1; }
@@ -37,12 +38,14 @@ start() {
     setsid env -u HF_TOKEN .venv/bin/python -m uvicorn --factory src.server:create_app \
       --host 127.0.0.1 --port "$PORT" --proxy-headers >"$SRV_LOG" 2>&1 </dev/null &
     for _ in $(seq 1 60); do
-      curl -sf --max-time 2 "http://127.0.0.1:$PORT/healthz" >/dev/null && break
+      health_ok && break
       sleep 2
       [ -z "$(srv_pid)" ] && { echo "서버 기동 실패:"; tail -20 "$SRV_LOG"; exit 1; }
     done
+    health_ok || { echo "서버가 /healthz에 응답하지 않아 터널을 열지 않습니다:"; tail -20 "$SRV_LOG"; exit 1; }
   else
     echo "서버는 이미 돌고 있습니다 (pid $(srv_pid))"
+    health_ok || { echo "이미 실행 중인 서버가 /healthz에 응답하지 않아 터널을 열지 않습니다."; exit 1; }
   fi
 
   if [ -z "$(cf_pid)" ]; then

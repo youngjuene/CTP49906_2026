@@ -14,6 +14,10 @@ human**. That second channel is the point: the session asks how far a model can
 describe subjective experience, and this puts both kinds of comment in one
 semantic space so the room can see whether they land in the same place.
 
+Two front ends sit on that one corpus: a hand-written map built for a phone and a
+projector, and Apple's Embedding Atlas viewer for the table, the linked charts and
+the cross-filtering. Both read the same rows.
+
 The specification is [`realtime-feedback-atlas-prd.md`](realtime-feedback-atlas-prd.md).
 
 ## What it is not
@@ -194,6 +198,53 @@ Four tools, all admin-only:
 | **Nearest opinions** | click a point for its eight nearest by cosine distance. The workshop's own question, asked per point: given what a person wrote, what did the model write that lands nearest to it? |
 | **CSV export** | the whole corpus or just the current selection, with authorship and coordinates |
 
+## The Embedding Atlas viewer
+
+Alongside the map, the app serves Apple's
+[Embedding Atlas](https://github.com/apple/embedding-atlas) viewer itself —
+the real component, not a lookalike: a sortable table, distribution charts for
+every column that cross-filter each other, SQL predicates, full-text search, and
+its WebGPU embedding view with density contours and automatic cluster labels.
+
+Toggle it with the panel button in the left rail. It turns itself on at startup on
+a wide screen with a capable browser, and stays off on a phone, where the job is
+to write a sentence rather than to explore a dashboard.
+
+**It is a Mosaic application, so it queries rather than receives.** The server
+keeps an in-memory DuckDB holding the corpus and answers `POST /data/query`, which
+is `embedding_atlas.server`'s own endpoint with its three command types, so the
+component talks to it unmodified. Every recompute reloads that relation before the
+websocket broadcast goes out, so the charts and the map never disagree.
+
+**There are two databases, and the endpoint picks one before parsing any SQL.**
+The client writes the query, so no filter on the way out could hold —
+`SELECT reviewer_id FROM dataset` is an ordinary Mosaic-shaped request. The
+participant database therefore does not contain the column, and asking for it
+returns a DuckDB binder error rather than data. The admin code travels in the
+request body, never the URL, exactly as with CSV export.
+
+**AI versus human moved from shape to filter.** `EmbeddingView` encodes one
+channel, category colour, so the map's second channel has no equivalent here.
+Instead the `source` chart cross-filters the whole dashboard: click `ai` and every
+other chart, the table and the embedding view narrow to it. Comparing the two
+clusters is a click rather than a legend.
+
+**Rebuilding the bundle.** `web/vendor/` is committed and nothing fetches it at
+class time. After changing a version:
+
+```bash
+cd frontend && npm install && npm run build   # -> ../web/vendor
+```
+
+Node is needed for that build and for nothing else. The server never runs it.
+
+The same package also gives you the official CLI over an exported CSV, which needs
+no server at all:
+
+```bash
+embedding-atlas feedback-atlas.csv --text text --x x --y y
+```
+
 ## Bulk AI import (PRD 4.3)
 
 The submit path is rate-limited to about one message a second per connection —
@@ -254,6 +305,18 @@ only hoped for:
   server and asserts that, of a single broadcast, the admin sees `reviewer_id`
   and the participant does not. Every per-module test passed while that leak was
   live; it only exists when both channels are connected at once.
+- `test_viewer_pipeline.py` submits sentences over a real websocket and then asks
+  the running server for them in SQL, which is the only honest way to test the
+  viewer's half: it asks for `reviewer_id` over HTTP and requires DuckDB to refuse
+  because the column is absent, and it asks for `/etc/passwd` and requires the
+  same. It skips without duckdb, pyarrow or embedding-atlas.
+
+Browser lifecycle checks are opt-in: from `feedback-atlas/`, run
+`.venv/bin/python -m pytest tests/browser_viewer.py -q` with Playwright and its
+Chromium browser installed. They use a temporary database and a local test server
+to check the WebGPU fallback, viewer choices during reconnects and delayed probes,
+and roster reload notifications. The viewer is stubbed for lifecycle checks;
+these tests do not verify hardware rendering.
 
 ## Known limits
 
@@ -270,20 +333,55 @@ only hoped for:
   this and the app does not try to detect it.
 - **Keep the database on local disk.** SQLite's WAL mode is unreliable over
   NFS/SMB.
+- **The viewer needs WebGPU, and `shader-f16` with it.** Embedding Atlas 0.24
+  dropped the WebGL2 fallback, and its renderer asks for a device with that
+  feature — so software adapters and older integrated drivers hand out an adapter
+  and still cannot draw. The app checks for the feature rather than just the
+  adapter, and falls back to the hand-written map; checking only for the adapter
+  is how this was written first, and it fails on exactly the machines it is meant
+  to catch.
+- **`/data/query` runs client SQL, and that is what a Mosaic application is.**
+  File and network reads are off (`enable_external_access = false`, then
+  `lock_configuration = true`, which is what Apple's own server does), and the
+  participant database physically lacks the reviewer columns. What is *not*
+  prevented is a participant issuing DDL — Mosaic legitimately creates temporary
+  tables, so the endpoint cannot be read-only. The relation is rebuilt from state
+  on every recompute, so damage lasts one recompute. Set `ATLAS_DISABLE_VIEWER=1`
+  if that trade is wrong for your room.
 
 ## Design notes
 
-The visual language is Apple's
-[Embedding Atlas](https://github.com/apple/embedding-atlas) (MIT) — the slate
-desk, the white/black cards, the hairline borders, the single blue accent, d3's
-`category10`, the translucent tooltip, the halo'd map labels. Its *code* is not
-used, for three measured reasons: its `EmbeddingView` encodes only colour and
-this needs colour and shape at once; v0.24 is WebGPU-only, which on a room of
-assorted laptops means a blank canvas for some of them; and at a few hundred
-points its density contours and automatic labels compute to zero alpha and render
-nothing anyway. Two departures for Korean: opinion text at 14px/1.6 rather than
-13px, and `word-break: keep-all`, without which browsers break Korean mid-word.
+Apple's [Embedding Atlas](https://github.com/apple/embedding-atlas) (MIT) is used
+three ways here, and only the third is cosmetic.
 
-No npm, no bundler, no webfont. The frontend is plain ES modules served straight
-from `web/`, which is deliberate for a tool whose failing network is the thing it
-has to survive.
+**Its analysis recipe, reproduced rather than called.** `src/ea_projection.py`
+builds the approximate k-NN graph with umap's `nearest_neighbors` and hands it to
+UMAP as `precomputed_knn`, which is the sequence and the parameters
+`embedding_atlas.projection` uses. Their function is deliberately not called: it
+builds a dataframe, wraps the work in a file cache keyed on the inputs, and throws
+away the fitted reducer — and without the reducer every later opinion forces a
+full refit, which is the one thing a map being read during a presentation cannot
+afford. So the algorithm and its defaults are theirs; the call is ours. The graph
+that fit produces is what fills the `neighbors` column.
+
+Worth stating plainly because the two are easy to conflate: on the live path the
+only upstream Python that executes is its Arrow writer, which `/data/query`
+answers chart queries with.
+
+**Its viewer and renderer.** Vendored into `web/vendor/` and mounted against a
+server-side DuckDB. See the section above.
+
+**Its visual language**, for the hand-written map — the slate desk, the
+white/black cards, the hairline borders, the single blue accent, d3's
+`category10`, the translucent tooltip, the halo'd map labels. Two departures for
+Korean: opinion text at 14px/1.6 rather than 13px, and `word-break: keep-all`,
+without which browsers break Korean mid-word.
+
+The hand-written scatter in `web/atlas.js` stays, and is not redundant. It
+encodes two channels where `EmbeddingView` encodes one, it runs without WebGPU,
+and it animates an opinion arriving. It is what a phone gets, and what any laptop
+gets when the viewer cannot draw.
+
+No CDN, no webfont, and nothing fetched at class time. The frontend is still
+plain ES modules served straight from `web/`; the bundler runs once in
+`frontend/`, at development time, and its output is committed.

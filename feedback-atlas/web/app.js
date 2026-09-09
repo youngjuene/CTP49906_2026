@@ -9,6 +9,7 @@
 import { Atlas, CATEGORY10 } from "./atlas.js";
 import { mountCompose } from "./compose.js";
 import { mountAdmin } from "./admin.js";
+import * as viewer from "./viewer.js";
 
 const PROTOCOL = 1;
 const OTHER = "var(--other)";
@@ -46,7 +47,16 @@ $("btn-theme").addEventListener("click", () => {
     : matchMedia("(prefers-color-scheme: dark)").matches;
   root.dataset.theme = dark ? "light" : "dark";
   try { localStorage.setItem(THEME_KEY, root.dataset.theme); } catch { /* ignore */ }
+  // The viewer paints its own chrome and is told the scheme rather than reading
+  // it: it renders into a canvas, so a CSS variable change never reaches it.
+  viewer.setColorScheme(colorScheme());
 });
+
+function colorScheme() {
+  const root = document.documentElement;
+  if (root.dataset.theme) return root.dataset.theme;
+  return matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
 
 /* ---------------- the map ---------------- */
 const atlas = new Atlas($("map"), { onHover: showTip });
@@ -165,6 +175,104 @@ function toggleSide(button, id) {
   $(id).hidden = !on;
 }
 
+/* ---------------- Embedding Atlas viewer ----------------
+ *
+ * Two front ends over one corpus, and the choice between them is a capability
+ * question rather than a preference. Apple's renderer has been WebGPU-only since
+ * 0.24.0, which dropped the WebGL2 fallback -- so on a machine without it the
+ * embedding view is a blank canvas rather than an error. That is unacceptable in
+ * a room of assorted laptops, so the hand-written scatter stays as the fallback
+ * and the button disables itself where the viewer cannot draw.
+ *
+ * The default is also deliberate: the viewer is a dashboard, and a phone held by
+ * somebody who is there to write a sentence is not where it earns its space. Wide
+ * screen and a working adapter, or it stays off until asked for.
+ */
+const viewerBtn = $("tab-viewer");
+let viewerUsable = null;         // null until probed; probing costs an adapter request
+let viewerOn = false;
+// null until the reader says so, then their answer. Kept separate from viewerOn
+// because the two mean different things: viewerOn is what is on screen right now,
+// this is what the reader asked for. Without the distinction, auto-enable runs
+// again on every reconnect and reopens a viewer somebody closed on purpose -- and
+// a quick tunnel drops an idle socket about every hundred seconds, so "every
+// reconnect" means several times per presentation.
+let viewerChoice = null;
+
+async function viewerIsUsable() {
+  if (viewerUsable === null) viewerUsable = await viewer.rendererAvailable();
+  return viewerUsable;
+}
+
+function viewerNote(text) {
+  const note = $("viewer-note");
+  note.hidden = !text;
+  note.textContent = text || "";
+}
+
+/* Say once that this browser cannot open the viewer, and stop offering it.
+ *
+ * The map is never touched here. An earlier version hid it and put the
+ * explanation in the viewer's own panel, so a reader on a laptop without WebGPU
+ * pressed the button and lost the map behind a note telling them the map still
+ * worked. The message belongs in the status bar, which sits under the map that
+ * is still there. */
+function markViewerUnavailable() {
+  viewerBtn.disabled = true;
+  viewerBtn.setAttribute("aria-pressed", "false");
+  viewerBtn.title = "분석 보기: 이 브라우저에서는 열 수 없습니다";
+  $("status-msg").textContent =
+    "이 브라우저는 분석 보기를 지원하지 않습니다 (WebGPU 필요). 지도는 그대로 쓸 수 있습니다.";
+}
+
+async function setViewer(on) {
+  if (on && !(await viewerIsUsable())) {
+    markViewerUnavailable();
+    return;                       // the map stays exactly where it was
+  }
+  if (on && viewerChoice === false) return; // a later click cancelled this probe
+  viewerOn = on;
+  viewerBtn.setAttribute("aria-pressed", String(on));
+  $("viewer-card").hidden = !on;
+  $("map-card").hidden = on;
+  if (!on) return;
+  viewerNote("");
+  try {
+    await viewer.mount($("viewer-mount"), {
+      // A function, not a value: this page can become an admin connection after
+      // the viewer was mounted, and a captured null would keep the admin looking
+      // at the participant relation.
+      getCode: () => (state.channel === "admin" ? state.adminCode : null),
+      colorScheme: colorScheme(),
+    });
+    viewer.refresh();
+  } catch (err) {
+    viewerNote(`분석 보기를 불러오지 못했습니다. ${String(err.message || err)}`);
+  }
+}
+
+viewerBtn.addEventListener("click", () => {
+  // Pressing the button is the reader stating a preference, and it outranks the
+  // default from here on.
+  viewerChoice = !(viewerChoice ?? viewerOn);
+  setViewer(viewerChoice);
+});
+
+async function autoEnableViewer() {
+  // Runs on every handshake, including the ones after a dropped tunnel.
+  if (viewerChoice !== null) return;      // the reader has already decided
+  if (viewerOn) return;
+  // Probed regardless of screen width, because the answer also decides whether
+  // the button is worth offering at all -- and a narrow screen with a capable
+  // browser should still be able to open it by hand.
+  if (!(await viewerIsUsable())) {
+    markViewerUnavailable();
+    return;
+  }
+  if (viewerChoice !== null || viewerOn) return; // a click can arrive while probing
+  if (window.innerWidth >= 1024) setViewer(true);
+}
+
 function setConn(kind, text) {
   const node = $("conn");
   node.className = "conn" + (kind === "ok" ? "" : ` ${kind}`);
@@ -278,6 +386,7 @@ function handle(frame) {
       $("adminpanel").hidden = frame.channel !== "admin";
       renderLegend();
       document.dispatchEvent(new CustomEvent("atlas:hello", { detail: frame }));
+      autoEnableViewer();
       break;
     }
     case "snapshot": {
@@ -316,6 +425,9 @@ function handle(frame) {
     case "ack":
       state.rev = Math.max(state.rev, frame.rev);
       document.dispatchEvent(new CustomEvent("atlas:ack", { detail: frame }));
+      break;
+    case "viewer_refresh":
+      if (viewerOn) viewer.refresh();
       break;
     case "ping":
       send({ t: "pong" });          // keeps the tunnel from calling us idle
@@ -418,6 +530,9 @@ $("admin-back").addEventListener("click", (e) => {
 mountCompose({ state, send, atlas });
 mountAdmin({ state, send, atlas, renderStatus });
 document.addEventListener("atlas:data", renderStatus);
+// The server updates its DuckDB relation before it broadcasts, so by the time a
+// frame lands here the rows behind the viewer are already the new ones.
+document.addEventListener("atlas:data", () => { if (viewerOn) viewer.refresh(); });
 
 if (location.hash === "#admin") {
   show("admin");

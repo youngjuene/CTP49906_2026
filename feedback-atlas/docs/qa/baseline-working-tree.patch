@@ -1,0 +1,1699 @@
+diff --git a/feedback-atlas/.env.example b/feedback-atlas/.env.example
+index 5b4032e..144dd67 100644
+--- a/feedback-atlas/.env.example
++++ b/feedback-atlas/.env.example
+@@ -33,6 +33,12 @@ ATLAS_DEFAULT_WEEK=1
+ # sessions rather than mid-presentation.
+ ATLAS_PCA_UMAP_THRESHOLD=80
+ 
++# Set to 1 to turn off the Embedding Atlas viewer and serve only the
++# hand-written map. The viewer needs duckdb and pyarrow on the server and a
++# WebGPU browser on the client; with it off, neither is touched and /data/query
++# answers 503.
++# ATLAS_DISABLE_VIEWER=1
++
+ # Development only. Replaces the embedding model with a deterministic hash, so
+ # the pipeline runs with no weights and no download. The map it produces is
+ # meaningless; it is never reachable by mistyping a model name.
+diff --git a/feedback-atlas/.gitignore b/feedback-atlas/.gitignore
+index 63b62dc..c5b9623 100644
+--- a/feedback-atlas/.gitignore
++++ b/feedback-atlas/.gitignore
+@@ -20,3 +20,8 @@ roster.csv
+ 
+ # scripts/class.sh 의 런타임 상태(pid 로그, 터널 주소)
+ .run/
++
++# The Embedding Atlas build. node_modules is dev-time only and never shipped;
++# web/vendor/ is its committed output and MUST stay tracked -- it is what makes
++# the frontend work with no npm, no bundler and no network at class time.
++frontend/node_modules/
+diff --git a/feedback-atlas/README.md b/feedback-atlas/README.md
+index 8c14e75..15784a8 100644
+--- a/feedback-atlas/README.md
++++ b/feedback-atlas/README.md
+@@ -14,6 +14,10 @@ human**. That second channel is the point: the session asks how far a model can
+ describe subjective experience, and this puts both kinds of comment in one
+ semantic space so the room can see whether they land in the same place.
+ 
++Two front ends sit on that one corpus: a hand-written map built for a phone and a
++projector, and Apple's Embedding Atlas viewer for the table, the linked charts and
++the cross-filtering. Both read the same rows.
++
+ The specification is [`realtime-feedback-atlas-prd.md`](realtime-feedback-atlas-prd.md).
+ 
+ ## What it is not
+@@ -194,6 +198,53 @@ Four tools, all admin-only:
+ | **Nearest opinions** | click a point for its eight nearest by cosine distance. The workshop's own question, asked per point: given what a person wrote, what did the model write that lands nearest to it? |
+ | **CSV export** | the whole corpus or just the current selection, with authorship and coordinates |
+ 
++## The Embedding Atlas viewer
++
++Alongside the map, the app serves Apple's
++[Embedding Atlas](https://github.com/apple/embedding-atlas) viewer itself —
++the real component, not a lookalike: a sortable table, distribution charts for
++every column that cross-filter each other, SQL predicates, full-text search, and
++its WebGPU embedding view with density contours and automatic cluster labels.
++
++Toggle it with the panel button in the left rail. It turns itself on at startup on
++a wide screen with a capable browser, and stays off on a phone, where the job is
++to write a sentence rather than to explore a dashboard.
++
++**It is a Mosaic application, so it queries rather than receives.** The server
++keeps an in-memory DuckDB holding the corpus and answers `POST /data/query`, which
++is `embedding_atlas.server`'s own endpoint with its three command types, so the
++component talks to it unmodified. Every recompute reloads that relation before the
++websocket broadcast goes out, so the charts and the map never disagree.
++
++**There are two databases, and the endpoint picks one before parsing any SQL.**
++The client writes the query, so no filter on the way out could hold —
++`SELECT reviewer_id FROM dataset` is an ordinary Mosaic-shaped request. The
++participant database therefore does not contain the column, and asking for it
++returns a DuckDB binder error rather than data. The admin code travels in the
++request body, never the URL, exactly as with CSV export.
++
++**AI versus human moved from shape to filter.** `EmbeddingView` encodes one
++channel, category colour, so the map's second channel has no equivalent here.
++Instead the `source` chart cross-filters the whole dashboard: click `ai` and every
++other chart, the table and the embedding view narrow to it. Comparing the two
++clusters is a click rather than a legend.
++
++**Rebuilding the bundle.** `web/vendor/` is committed and nothing fetches it at
++class time. After changing a version:
++
++```bash
++cd frontend && npm install && npm run build   # -> ../web/vendor
++```
++
++Node is needed for that build and for nothing else. The server never runs it.
++
++The same package also gives you the official CLI over an exported CSV, which needs
++no server at all:
++
++```bash
++embedding-atlas feedback-atlas.csv --text text --x x --y y
++```
++
+ ## Bulk AI import (PRD 4.3)
+ 
+ The submit path is rate-limited to about one message a second per connection —
+@@ -254,6 +305,18 @@ only hoped for:
+   server and asserts that, of a single broadcast, the admin sees `reviewer_id`
+   and the participant does not. Every per-module test passed while that leak was
+   live; it only exists when both channels are connected at once.
++- `test_viewer_pipeline.py` submits sentences over a real websocket and then asks
++  the running server for them in SQL, which is the only honest way to test the
++  viewer's half: it asks for `reviewer_id` over HTTP and requires DuckDB to refuse
++  because the column is absent, and it asks for `/etc/passwd` and requires the
++  same. It skips without duckdb, pyarrow or embedding-atlas.
++
++Browser lifecycle checks are opt-in: from `feedback-atlas/`, run
++`.venv/bin/python -m pytest tests/browser_viewer.py -q` with Playwright and its
++Chromium browser installed. They use a temporary database and a local test server
++to check the WebGPU fallback, viewer choices during reconnects and delayed probes,
++and roster reload notifications. The viewer is stubbed for lifecycle checks;
++these tests do not verify hardware rendering.
+ 
+ ## Known limits
+ 
+@@ -270,20 +333,55 @@ only hoped for:
+   this and the app does not try to detect it.
+ - **Keep the database on local disk.** SQLite's WAL mode is unreliable over
+   NFS/SMB.
++- **The viewer needs WebGPU, and `shader-f16` with it.** Embedding Atlas 0.24
++  dropped the WebGL2 fallback, and its renderer asks for a device with that
++  feature — so software adapters and older integrated drivers hand out an adapter
++  and still cannot draw. The app checks for the feature rather than just the
++  adapter, and falls back to the hand-written map; checking only for the adapter
++  is how this was written first, and it fails on exactly the machines it is meant
++  to catch.
++- **`/data/query` runs client SQL, and that is what a Mosaic application is.**
++  File and network reads are off (`enable_external_access = false`, then
++  `lock_configuration = true`, which is what Apple's own server does), and the
++  participant database physically lacks the reviewer columns. What is *not*
++  prevented is a participant issuing DDL — Mosaic legitimately creates temporary
++  tables, so the endpoint cannot be read-only. The relation is rebuilt from state
++  on every recompute, so damage lasts one recompute. Set `ATLAS_DISABLE_VIEWER=1`
++  if that trade is wrong for your room.
+ 
+ ## Design notes
+ 
+-The visual language is Apple's
+-[Embedding Atlas](https://github.com/apple/embedding-atlas) (MIT) — the slate
+-desk, the white/black cards, the hairline borders, the single blue accent, d3's
+-`category10`, the translucent tooltip, the halo'd map labels. Its *code* is not
+-used, for three measured reasons: its `EmbeddingView` encodes only colour and
+-this needs colour and shape at once; v0.24 is WebGPU-only, which on a room of
+-assorted laptops means a blank canvas for some of them; and at a few hundred
+-points its density contours and automatic labels compute to zero alpha and render
+-nothing anyway. Two departures for Korean: opinion text at 14px/1.6 rather than
+-13px, and `word-break: keep-all`, without which browsers break Korean mid-word.
+-
+-No npm, no bundler, no webfont. The frontend is plain ES modules served straight
+-from `web/`, which is deliberate for a tool whose failing network is the thing it
+-has to survive.
++Apple's [Embedding Atlas](https://github.com/apple/embedding-atlas) (MIT) is used
++three ways here, and only the third is cosmetic.
++
++**Its analysis recipe, reproduced rather than called.** `src/ea_projection.py`
++builds the approximate k-NN graph with umap's `nearest_neighbors` and hands it to
++UMAP as `precomputed_knn`, which is the sequence and the parameters
++`embedding_atlas.projection` uses. Their function is deliberately not called: it
++builds a dataframe, wraps the work in a file cache keyed on the inputs, and throws
++away the fitted reducer — and without the reducer every later opinion forces a
++full refit, which is the one thing a map being read during a presentation cannot
++afford. So the algorithm and its defaults are theirs; the call is ours. The graph
++that fit produces is what fills the `neighbors` column.
++
++Worth stating plainly because the two are easy to conflate: on the live path the
++only upstream Python that executes is its Arrow writer, which `/data/query`
++answers chart queries with.
++
++**Its viewer and renderer.** Vendored into `web/vendor/` and mounted against a
++server-side DuckDB. See the section above.
++
++**Its visual language**, for the hand-written map — the slate desk, the
++white/black cards, the hairline borders, the single blue accent, d3's
++`category10`, the translucent tooltip, the halo'd map labels. Two departures for
++Korean: opinion text at 14px/1.6 rather than 13px, and `word-break: keep-all`,
++without which browsers break Korean mid-word.
++
++The hand-written scatter in `web/atlas.js` stays, and is not redundant. It
++encodes two channels where `EmbeddingView` encodes one, it runs without WebGPU,
++and it animates an opinion arriving. It is what a phone gets, and what any laptop
++gets when the viewer cannot draw.
++
++No CDN, no webfont, and nothing fetched at class time. The frontend is still
++plain ES modules served straight from `web/`; the bundler runs once in
++`frontend/`, at development time, and its output is committed.
+diff --git a/feedback-atlas/README_kr.md b/feedback-atlas/README_kr.md
+index 0251401..169fac9 100644
+--- a/feedback-atlas/README_kr.md
++++ b/feedback-atlas/README_kr.md
+@@ -13,6 +13,9 @@ CTP49906 *Multimodal AI* 워크숍용 강의실 도구입니다. 학생이 발
+ 묻고, 이 지도는 두 종류의 코멘트를 같은 의미 공간에 놓아 둘이 같은 자리에 떨어지는지를
+ 눈으로 확인하게 합니다.
+ 
++하나의 코퍼스 위에 화면이 둘입니다. 휴대폰과 프로젝터를 위해 손으로 쓴 지도, 그리고 표와
++연동 차트와 교차 필터를 위한 Apple의 Embedding Atlas 뷰어. 둘은 같은 행을 읽습니다.
++
+ 명세는 [`realtime-feedback-atlas-prd.md`](realtime-feedback-atlas-prd.md)입니다.
+ 
+ ## 이것이 아닌 것
+@@ -184,6 +187,48 @@ HTTPS이므로 페이지는 그에 맞춰 `wss://`로 접속합니다.
+ | **가까운 의견** | 점을 누르면 코사인 거리 기준 가장 가까운 8건. 이 워크숍의 질문을 점 하나 단위로 묻는 것입니다. 사람이 쓴 이 문장에 가장 가까이 떨어진 모델의 문장은 무엇인가? |
+ | **CSV 내보내기** | 전체 또는 현재 선택분을, 작성자와 좌표까지 포함해서 |
+ 
++## Embedding Atlas 뷰어
++
++지도와 나란히, 이 앱은 Apple의
++[Embedding Atlas](https://github.com/apple/embedding-atlas) 뷰어 자체를 서빙합니다.
++비슷하게 만든 것이 아니라 실제 컴포넌트입니다. 정렬 가능한 표, 칼럼마다의 분포 차트와
++상호 교차 필터, SQL 조건식, 전문 검색, 그리고 밀도 등고선과 자동 군집 이름표를 갖춘
++WebGPU 임베딩 뷰가 들어 있습니다.
++
++왼쪽 레일의 패널 버튼으로 전환합니다. 넓은 화면과 지원되는 브라우저에서는 시작할 때 켜지고,
++휴대폰에서는 꺼진 채로 둡니다. 휴대폰에서 할 일은 대시보드 탐색이 아니라 한 문장 쓰기입니다.
++
++**Mosaic 애플리케이션이라 데이터를 받는 게 아니라 질의합니다.** 서버가 코퍼스를 담은
++인메모리 DuckDB를 두고 `POST /data/query`로 답합니다. `embedding_atlas.server`의 엔드포인트를
++명령 세 종류까지 그대로 따랐기 때문에 컴포넌트는 수정 없이 붙습니다. 재계산 때마다 웹소켓
++브로드캐스트 **전에** 이 릴레이션을 갱신하므로 차트와 지도가 어긋나지 않습니다.
++
++**데이터베이스는 둘이고, 엔드포인트는 SQL을 파싱하기 전에 하나를 고릅니다.** 질의를
++작성하는 쪽이 클라이언트이므로 내보내는 쪽의 필터는 버틸 수 없습니다.
++`SELECT reviewer_id FROM dataset`은 Mosaic 입장에서 평범한 요청입니다. 그래서 참가자용
++데이터베이스에는 그 칼럼이 아예 없고, 요청하면 데이터가 아니라 DuckDB의 바인더 오류가
++돌아옵니다. 관리자 코드는 URL이 아니라 요청 본문으로 전달됩니다. CSV 내보내기와 같습니다.
++
++**AI/사람 구분은 모양에서 필터로 옮겨졌습니다.** `EmbeddingView`는 범주 색 하나만
++인코딩하므로 지도의 두 번째 채널에 대응하는 것이 없습니다. 대신 `source` 차트가 대시보드
++전체를 교차 필터합니다. `ai`를 누르면 다른 모든 차트와 표와 임베딩 뷰가 거기에 맞춰
++좁혀집니다. 두 군집 비교가 범례가 아니라 클릭 한 번이 됩니다.
++
++**번들 다시 만들기.** `web/vendor/`는 커밋되어 있고 수업 중에 받아오는 것은 없습니다.
++버전을 바꾼 뒤에는:
++
++```bash
++cd frontend && npm install && npm run build   # -> ../web/vendor
++```
++
++Node는 이 빌드에만 필요하고 다른 곳에는 필요 없습니다. 서버는 실행하지 않습니다.
++
++같은 패키지로 내보낸 CSV를 공식 CLI로 열 수도 있습니다. 서버가 전혀 필요 없습니다:
++
++```bash
++embedding-atlas feedback-atlas.csv --text text --x x --y y
++```
++
+ ## AI 의견 일괄 등록 (PRD 4.3)
+ 
+ 제출 경로는 연결당 초당 한 건 정도로 제한됩니다. 사람에게는 맞고 스크립트에는 맞지 않는
+@@ -227,7 +272,7 @@ python -m pytest feedback-atlas
+ ```
+ 
+ CPU만 사용하고, 모델 가중치도 네트워크도 쓰지 않습니다. 저장소의 다른 부분과 같은
+-규칙입니다. 필수 의존성은 numpy와 pytest뿐이며, umap·fastapi·httpx가 필요한 테스트는
++규칙입니다. 필수 의존성은 numpy와 pytest뿐이며, umap·fastapi·httpx·duckdb가 필요한 테스트는
+ 실패가 아니라 건너뜁니다. 그래서 맨 인터프리터에서도 전체 suite가 돌아갑니다.
+ 
+ 그중 둘은 알아둘 값어치가 있습니다. 보통은 "그러길 바라는" 수준에 그치는 것을 실제로
+@@ -241,6 +286,16 @@ CPU만 사용하고, 모델 가중치도 네트워크도 쓰지 않습니다. 
+   브로드캐스트에서 관리자에게는 `reviewer_id`가 보이고 참가자에게는 보이지 않음을
+   확인합니다. 이 누출이 살아 있는 동안에도 모듈별 테스트는 전부 통과했습니다. 두 채널이
+   동시에 연결되어 있을 때만 존재하는 결함이기 때문입니다.
++- `test_viewer_pipeline.py`는 실제 웹소켓으로 문장을 제출한 뒤 돌아가는 서버에 SQL로 그
++  문장을 되묻습니다. 뷰어 쪽을 정직하게 검사하는 방법은 이것뿐입니다. HTTP로
++  `reviewer_id`를 요청해 칼럼이 없어서 DuckDB가 거절하는지 확인하고, `/etc/passwd`를
++  요청해 같은 거절을 확인합니다. duckdb·pyarrow·embedding-atlas가 없으면 건너뜁니다.
++
++브라우저 동작 검사는 별도로 실행합니다. Playwright와 Chromium이 설치된 환경에서
++`feedback-atlas/` 디렉터리의 `.venv/bin/python -m pytest tests/browser_viewer.py -q`를
++실행하세요. 임시 데이터베이스와 로컬 테스트 서버로 WebGPU 미지원 시 지도 유지,
++재연결·지연된 기능 검사 중 뷰어 선택 유지, 명단 변경 알림을 확인합니다.
++뷰어 동작을 대체한 테스트이므로 실제 GPU 렌더링은 검증하지 않습니다.
+ 
+ ## 알려진 한계
+ 
+@@ -260,15 +315,34 @@ CPU만 사용하고, 모델 가중치도 네트워크도 쓰지 않습니다. 
+ 
+ ## 설계 노트
+ 
+-시각 언어는 Apple의 [Embedding Atlas](https://github.com/apple/embedding-atlas)(MIT)를
+-따랐습니다. 슬레이트 바탕, 흰색/검정 카드, 1px 테두리, 단일 파란 강조색, d3의
+-`category10`, 반투명 툴팁, 후광 처리된 지도 이름표까지 그대로입니다. 다만 *코드*는 쓰지
+-않았고, 이유는 셋 다 측정된 것입니다. `EmbeddingView`는 색 하나만 인코딩하는데 이 앱은
+-색과 모양이 동시에 필요합니다. v0.24는 WebGPU 전용이라, 제각각인 노트북이 모인 강의실에서는
+-일부에게 빈 화면이 됩니다. 그리고 수백 개 규모에서는 밀도 등고선과 자동 이름표가 알파 0으로
+-계산되어 어차피 아무것도 그리지 않습니다. 한국어를 위한 두 가지 변경: 의견 본문을 13px이
+-아닌 14px/1.6로, 그리고 `word-break: keep-all` — 없으면 브라우저가 한국어를 단어 중간에서
+-끊습니다.
+-
+-npm도, 번들러도, 웹폰트도 없습니다. 프런트엔드는 `web/`에서 그대로 서빙되는 순수 ES
+-모듈입니다. 네트워크가 무너지는 상황을 견뎌야 하는 도구에는 의도적인 선택입니다.
++Apple의 [Embedding Atlas](https://github.com/apple/embedding-atlas)(MIT)는 여기서
++세 가지로 쓰이며, 그중 마지막만 겉모습입니다.
++
++**분석 방식 — 호출이 아니라 재현입니다.** `src/ea_projection.py`는 umap의
++`nearest_neighbors`로 근사 k-NN 그래프를 만들고 그것을 `precomputed_knn`으로 넘겨
++UMAP을 학습시킵니다. `embedding_atlas.projection`이 쓰는 것과 같은 순서, 같은
++파라미터입니다. 다만 그쪽 함수를 부르지는 않습니다. 그 함수는 데이터프레임을 만들고,
++입력을 키로 하는 파일 캐시로 감싸고, 학습된 reducer를 버립니다. reducer가 없으면 의견이
++하나 들어올 때마다 전체를 다시 학습해야 하고, 발표 중에 읽히는 지도는 그 비용을 감당할 수
++없습니다. 그래서 알고리즘과 기본값은 그쪽 것이고, 호출은 이쪽 것입니다. 그 학습이 만들어낸
++그래프가 `neighbors` 칼럼을 채웁니다.
++
++혼동하기 쉬우니 분명히 적어 둡니다. 실행 경로에서 실제로 도는 상위 패키지의 파이썬 코드는
++`/data/query`가 차트 질의에 답할 때 쓰는 Arrow 작성기 하나뿐입니다.
++
++**뷰어와 렌더러.** `web/vendor/`에 번들로 넣고 서버의 DuckDB에 붙였습니다. 위 절을
++보세요.
++
++**시각 언어** — 손으로 쓴 지도 쪽입니다. 슬레이트 바탕, 흰색/검정 카드, 1px 테두리,
++단일 파란 강조색, d3의 `category10`, 반투명 툴팁, 후광 처리된 지도 이름표. 한국어를
++위한 두 가지 변경: 의견 본문을 13px이 아닌 14px/1.6로, 그리고
++`word-break: keep-all` — 없으면 브라우저가 한국어를 단어 중간에서 끊습니다.
++
++`web/atlas.js`의 손으로 쓴 산점도는 남아 있고, 중복이 아닙니다. `EmbeddingView`가
++채널 하나를 인코딩하는 자리에서 둘을 인코딩하고, WebGPU 없이 동작하며, 의견이 도착하는
++순간에 애니메이션을 줍니다. 휴대폰이 받는 화면이자, 뷰어를 그릴 수 없는 노트북이 받는
++화면입니다.
++
++CDN도, 웹폰트도, 수업 중에 받아오는 것도 없습니다. 프런트엔드는 여전히 `web/`에서
++그대로 서빙되는 순수 ES 모듈이고, 번들러는 개발 시점에 `frontend/`에서 한 번만 돌며 그
++결과물은 저장소에 커밋되어 있습니다.
+diff --git a/feedback-atlas/pytest.ini b/feedback-atlas/pytest.ini
+index 26d42d0..c55fc68 100644
+--- a/feedback-atlas/pytest.ini
++++ b/feedback-atlas/pytest.ini
+@@ -17,3 +17,6 @@ markers =
+     needs_umap: needs the optional umap-learn dependency; auto-skipped by tests/conftest.py when it is absent.
+     needs_fastapi: needs the optional fastapi dependency; auto-skipped by tests/conftest.py when it is absent.
+     needs_httpx: needs the optional httpx dependency; auto-skipped by tests/conftest.py when it is absent.
++    needs_duckdb: needs the optional duckdb dependency; auto-skipped by tests/conftest.py when it is absent.
++    needs_pyarrow: needs the optional pyarrow dependency; auto-skipped by tests/conftest.py when it is absent.
++    needs_embedding_atlas: needs the optional embedding-atlas dependency; auto-skipped by tests/conftest.py when it is absent.
+diff --git a/feedback-atlas/requirements.txt b/feedback-atlas/requirements.txt
+index 5b98e16..13d0eb7 100644
+--- a/feedback-atlas/requirements.txt
++++ b/feedback-atlas/requirements.txt
+@@ -58,6 +58,32 @@ llvmlite==0.49.0
+ # error at install time. Pinning all three makes that failure impossible instead
+ # of unlikely.
+ 
++# --- the Embedding Atlas viewer ---------------------------------------------
++embedding-atlas==0.24.0
++# Apple's own package. Be precise about what runs from it, because it is easy to
++# overstate:
++#
++#   1. `embedding_atlas.utils.arrow_to_bytes` -- the Arrow IPC writer /data/query
++#      answers every chart query with. This is the only upstream Python executed
++#      on the live path.
++#   2. The `embedding-atlas` CLI, for exploring an exported CSV after the session.
++#
++# Its *projection* module is deliberately NOT called. Its entry points build a
++# dataframe, wrap the work in a file cache keyed on the inputs, and discard the
++# fitted UMAP reducer -- and without the reducer every later opinion forces a full
++# refit, which the live map cannot afford. src/ea_projection.py reproduces the
++# recipe instead (`umap.umap_.nearest_neighbors`, then a fit with
++# `precomputed_knn`), so the algorithm and its defaults are theirs and the call is
++# ours. Nothing here breaks if their private helpers are renamed.
++#
++# It brings pandas 3, pyarrow 25 and duckdb 1.5 with it, which is most of the
++# weight; the resolver leaves numpy, umap-learn, numba and llvmlite on the pins
++# above. It also brings litellm and openai, which this project never calls -- they
++# are its optional hosted-embedder backends, and there is no extra that omits them.
++#
++# Optional in the same sense as umap. Absent, the server logs that the viewer is
++# off and serves the hand-written map, and the tests for it skip.
++
+ # --- classroom ops ----------------------------------------------------------
+ segno==1.6.6
+ # For the QR code scripts/class.sh puts on a slide. The tunnel hands back a
+diff --git a/feedback-atlas/scripts/class.sh b/feedback-atlas/scripts/class.sh
+index c2119f9..34b05b9 100755
+--- a/feedback-atlas/scripts/class.sh
++++ b/feedback-atlas/scripts/class.sh
+@@ -24,6 +24,7 @@ SRV_LOG="$RUN/server.log"; CF_LOG="$RUN/tunnel.log"; URL_FILE="$RUN/url.txt"
+ 
+ srv_pid() { pgrep -f "uvicorn --factory src.server:create_app .*--port $PORT" | head -1; }
+ cf_pid()  { pgrep -f "cloudflared tunnel --url http://localhost:$PORT" | head -1; }
++health_ok() { curl -sf --max-time 2 "http://127.0.0.1:$PORT/healthz" >/dev/null; }
+ 
+ start() {
+   [ -x .venv/bin/python ] || { echo "먼저 venv를 만드세요: uv venv --python 3.12 --seed .venv"; exit 1; }
+@@ -37,12 +38,14 @@ start() {
+     setsid env -u HF_TOKEN .venv/bin/python -m uvicorn --factory src.server:create_app \
+       --host 127.0.0.1 --port "$PORT" --proxy-headers >"$SRV_LOG" 2>&1 </dev/null &
+     for _ in $(seq 1 60); do
+-      curl -sf --max-time 2 "http://127.0.0.1:$PORT/healthz" >/dev/null && break
++      health_ok && break
+       sleep 2
+       [ -z "$(srv_pid)" ] && { echo "서버 기동 실패:"; tail -20 "$SRV_LOG"; exit 1; }
+     done
++    health_ok || { echo "서버가 /healthz에 응답하지 않아 터널을 열지 않습니다:"; tail -20 "$SRV_LOG"; exit 1; }
+   else
+     echo "서버는 이미 돌고 있습니다 (pid $(srv_pid))"
++    health_ok || { echo "이미 실행 중인 서버가 /healthz에 응답하지 않아 터널을 열지 않습니다."; exit 1; }
+   fi
+ 
+   if [ -z "$(cf_pid)" ]; then
+diff --git a/feedback-atlas/src/atlas_state.py b/feedback-atlas/src/atlas_state.py
+index 9ef9e96..09fc10f 100644
+--- a/feedback-atlas/src/atlas_state.py
++++ b/feedback-atlas/src/atlas_state.py
+@@ -25,6 +25,7 @@ import numpy as np
+ 
+ from src.config import AtlasConfig, cache_key, resolve_spec
+ from src.deltas import diff_layout, should_send_snapshot
++from src.ea_projection import exact_neighbors, neighbors_from_graph
+ from src.hub import Channel, Hub
+ from src.models import Opinion
+ from src.payloads import admin_points, participant_points
+@@ -57,6 +58,12 @@ class RecomputeResult:
+     # query would be work we have already done.
+     vector_ids: list[str] | None = None
+     vectors: object | None = None
++    # embedding-atlas's `neighbors` column for every opinion in this pass, keyed by
++    # opinion id. Built in the worker beside the projection rather than on demand,
++    # because that is where the k-NN graph already exists: the viewer reads this
++    # column off each row instead of asking a question, so there is no request to
++    # answer later and no second search to disagree with the layout.
++    neighbors: dict[str, dict] | None = None
+ 
+ 
+ class Debouncer:
+@@ -144,6 +151,15 @@ class AtlasState:
+         self._vector_row: dict[str, int] = {}
+         self._row_ids: list[str] = []
+         self._vectors = None
++        # The last computed `neighbors` column, keyed by opinion id. Held on state
++        # rather than rebuilt per frame because a reconnect mid-session asks for a
++        # full snapshot, and recomputing a thousand rows' neighbours to answer a
++        # phone that changed network is work already done.
++        self.neighbors_by_id: dict[str, dict] = {}
++        # The relation Embedding Atlas's viewer queries, when that front end is
++        # available. Optional on purpose: duckdb and pyarrow are heavy, the map
++        # does not need them, and a server without them still runs the class.
++        self.mosaic = None
+ 
+     # --- startup ------------------------------------------------------------
+     def load(self) -> None:
+@@ -177,6 +193,8 @@ class AtlasState:
+ 
+     def commit(self, result: RecomputeResult) -> None:
+         self.server_coords = result.coords
++        if result.neighbors is not None:
++            self.neighbors_by_id = result.neighbors
+         if result.vector_ids is not None and result.vectors is not None:
+             self._row_ids = list(result.vector_ids)
+             self._vector_row = {oid: i for i, oid in enumerate(self._row_ids)}
+@@ -184,6 +202,32 @@ class AtlasState:
+         self.layout_rev += 1
+         self.store.put_coords(result.coords, self.layout_rev)
+         self.store.set_meta("layout_rev", str(self.layout_rev))
++        self.refresh_mosaic()
++
++    def refresh_mosaic(self) -> None:
++        """Reload the relation Embedding Atlas's viewer queries.
++
++        Built from the two existing serialisers rather than from the opinions
++        directly, so the viewer's table and the websocket frames are the same data
++        by construction -- a field cannot appear in one and be missing from the
++        other, and payloads.py stays the single place the privacy rule is written.
++
++        Never raises. The viewer is one of two front ends; a DuckDB that failed to
++        reload should cost the room its charts, not its map and not its ability to
++        take another opinion.
++        """
++        if self.mosaic is None:
++            return
++        try:
++            self.mosaic.replace(
++                participant_points(self.opinions, self.server_coords,
++                                   self.neighbors_by_id),
++                admin_points(self.opinions, self.server_coords, self.roster,
++                             self.neighbors_by_id),
++                {t["id"]: t["display_name"] for t in self.roster.targets()},
++            )
++        except Exception as exc:      # noqa: BLE001
++            self.last_error = f"mosaic reload failed: {type(exc).__name__}: {exc}"
+ 
+     # --- the blocking half (worker thread) ----------------------------------
+     def recompute(self, snap: RecomputeInput) -> RecomputeResult:
+@@ -214,7 +258,8 @@ class AtlasState:
+             return RecomputeResult(rev=snap.rev, coords=placed, drift=drift,
+                                    refit=refit, encoded=encoded,
+                                    seconds=time.monotonic() - started,
+-                                   vector_ids=ids, vectors=X)
++                                   vector_ids=ids, vectors=X,
++                                   neighbors=self._neighbor_column(ids, X))
+         except Exception as exc:      # noqa: BLE001
+             # A failed recompute must leave server_coords untouched, so the anchor
+             # frame never half-updates and the next attempt retries cleanly.
+@@ -222,6 +267,42 @@ class AtlasState:
+                                    seconds=time.monotonic() - started,
+                                    error=f"{type(exc).__name__}: {exc}")
+ 
++    def _neighbor_column(self, ids: list[str], X) -> dict[str, dict]:
++        """embedding-atlas's `neighbors` column for the whole corpus.
++
++        Two sources, in this order, and the order is the point:
++
++        1. **The graph UMAP was fitted on.** src/projection.py keeps it beside the
++           reducer, so these are the neighbours that actually shaped the layout.
++           Reading them back costs nothing -- the work happened during the fit.
++        2. **An exact cosine matmul, for the rest.** Opinions that arrived since
++           the last fit were placed by `transform()` and never joined the graph, so
++           it has no row for them. Below the analyser's floor there is no graph at
++           all. Both cases land here.
++
++        Both report 1 - cosine, so a panel can list neighbours from either source
++        without the numbers meaning different things.
++
++        Never raises: a corrupt or mismatched graph costs the neighbour panel, and
++        the map is worth more than the panel.
++        """
++        k = self.cfg.neighbors_k
++        out: dict[str, dict] = {}
++        knn, knn_ids = self.layout.knn, self.layout.knn_ids
++        if knn is not None and knn_ids and len(knn_ids) <= len(ids) \
++                and list(ids[:len(knn_ids)]) == list(knn_ids):
++            try:
++                out.update(neighbors_from_graph(knn[0], knn[1], knn_ids, k=k))
++            except Exception:      # noqa: BLE001
++                out = {}
++        missing = [i for i, oid in enumerate(ids) if oid not in out]
++        if missing:
++            try:
++                out.update(exact_neighbors(X, ids, missing, k=k))
++            except Exception:      # noqa: BLE001
++                pass
++        return out
++
+     @property
+     def vectors_ready(self) -> bool:
+         """Whether a layout has been computed yet.
+@@ -270,11 +351,13 @@ class AtlasState:
+     # --- serialisation ------------------------------------------------------
+     def participant_snapshot(self) -> dict:
+         return snapshot(rev=self.rev, layout_rev=self.layout_rev,
+-                        points=participant_points(self.opinions, self.server_coords))
++                        points=participant_points(self.opinions, self.server_coords,
++                                                  self.neighbors_by_id))
+ 
+     def admin_snapshot(self) -> dict:
+         return snapshot(rev=self.rev, layout_rev=self.layout_rev,
+-                        points=admin_points(self.opinions, self.server_coords, self.roster))
++                        points=admin_points(self.opinions, self.server_coords,
++                                            self.roster, self.neighbors_by_id))
+ 
+     def mark_all_sent(self) -> None:
+         self.sent_coords = dict(self.server_coords)
+@@ -359,9 +442,11 @@ class RecomputeLoop:
+         common = dict(from_rev=state.sent_rev, rev=result.rev,
+                       layout_rev=state.layout_rev, moved=moved, drift=result.drift)
+         await self.hub.broadcast(Channel.PARTICIPANT, delta(
+-            added=participant_points(fresh, result.coords), **common))
++            added=participant_points(fresh, result.coords, result.neighbors),
++            **common))
+         await self.hub.broadcast(Channel.ADMIN, delta(
+-            added=admin_points(fresh, result.coords, state.roster), **common))
++            added=admin_points(fresh, result.coords, state.roster, result.neighbors),
++            **common))
+ 
+         for oid in added_ids:
+             state.sent_coords[oid] = result.coords[oid]
+diff --git a/feedback-atlas/src/config.py b/feedback-atlas/src/config.py
+index 92b3604..cbd4c97 100644
+--- a/feedback-atlas/src/config.py
++++ b/feedback-atlas/src/config.py
+@@ -141,6 +141,13 @@ class AtlasConfig:
+     # map once* -- see README: cross it between sessions, not mid-presentation.
+     pca_umap_threshold: int = 80
+     n_neighbors: int = 15
++    # How many neighbours ride on each point in the payload. This is
++    # embedding-atlas's `neighbors` column, which its viewer reads directly rather
++    # than asking for; there is no request to answer, so the number is a bandwidth
++    # decision. Eight fills the panel and costs roughly 200 bytes a point. The
++    # graph itself is still built at n_neighbors, because that is what UMAP was
++    # fitted on and shrinking it would change the layout.
++    neighbors_k: int = 8
+     # Trailing-edge debounce, with a cap. Without the cap a continuous stream --
+     # a whole class typing at once -- never fires at all.
+     debounce_s: float = 0.4
+@@ -149,6 +156,12 @@ class AtlasConfig:
+     move_epsilon: float = MOVE_EPSILON
+     fake_embedder: bool = False
+     warm_umap: bool = True
++    # Whether to stand up the DuckDB relation Embedding Atlas's viewer queries.
++    # On by default and switchable off, because the viewer is the heavier of the
++    # two front ends in every sense -- it needs duckdb and pyarrow on the server, a
++    # vendored bundle on the client, and WebGPU in the browser -- and a room where
++    # any of those is missing should still get its map.
++    enable_viewer: bool = True
+ 
+ 
+ def _int_env(env: Mapping[str, str], name: str, default: int) -> int:
+@@ -215,4 +228,5 @@ def load_config(env: Mapping[str, str] | None = None) -> AtlasConfig:
+         pca_umap_threshold=threshold,
+         fake_embedder=env.get("ATLAS_UNSAFE_FAKE_EMBEDDER", "") == "1",
+         warm_umap=env.get("ATLAS_SKIP_WARMUP", "") != "1",
++        enable_viewer=env.get("ATLAS_DISABLE_VIEWER", "") != "1",
+     )
+diff --git a/feedback-atlas/src/hub.py b/feedback-atlas/src/hub.py
+index db44db1..1a76764 100644
+--- a/feedback-atlas/src/hub.py
++++ b/feedback-atlas/src/hub.py
+@@ -66,9 +66,6 @@ class Hub:
+     def counts(self) -> dict[str, int]:
+         return {c.value: len(ids) for c, ids in self._by_channel.items()}
+ 
+-    def connections(self, channel: Channel) -> list[Connection]:
+-        return [self._conns[i] for i in list(self._by_channel[channel]) if i in self._conns]
+-
+     async def send(self, conn_id: str, message: dict) -> bool:
+         conn = self._conns.get(conn_id)
+         if conn is None:
+diff --git a/feedback-atlas/src/payloads.py b/feedback-atlas/src/payloads.py
+index acb3f55..6521613 100644
+--- a/feedback-atlas/src/payloads.py
++++ b/feedback-atlas/src/payloads.py
+@@ -29,11 +29,23 @@ from src.models import Opinion
+ from src.roster import Roster
+ 
+ # What a participant may see. Also the contract test_payload_privacy.py pins.
++#
++# `neighbors` is on this list rather than the admin one on purpose. It is
++# embedding-atlas's own column format -- {"ids": [...], "distances": [...]} -- and
++# it relates opinions to opinions. Every id in it names a point already on the
++# participant's screen, and the distances are between texts they can already read,
++# so it carries nothing about authorship. The rule this file exists to enforce is
++# about reviewer identity, not about the corpus being interconnected.
+ PARTICIPANT_KEYS = frozenset(
+-    {"id", "target_id", "text", "source", "week", "timestamp", "x", "y"}
++    {"id", "target_id", "text", "source", "week", "timestamp", "x", "y", "neighbors"}
+ )
+ ADMIN_KEYS = PARTICIPANT_KEYS | {"reviewer_id", "reviewer_name"}
+ 
++# What an opinion with no computed neighbours carries. Present and empty rather
++# than absent: embedding-atlas's viewer reads the column off every row, and a
++# missing key makes the whole row's struct null in DuckDB rather than one field.
++EMPTY_NEIGHBORS = {"ids": [], "distances": []}
++
+ 
+ def _finite(value) -> float:
+     """A coordinate that is safe to put on the wire.
+@@ -53,7 +65,9 @@ def _finite(value) -> float:
+     return f if math.isfinite(f) else 0.0
+ 
+ 
+-def participant_point(op: Opinion, xy: Sequence[float] | None) -> dict:
++def participant_point(
++    op: Opinion, xy: Sequence[float] | None, nb: Mapping | None = None
++) -> dict:
+     """One map point as a participant may see it.
+ 
+     Every key is written out below. If you add a field to Opinion, it does not
+@@ -69,10 +83,18 @@ def participant_point(op: Opinion, xy: Sequence[float] | None) -> dict:
+         "timestamp": op.timestamp,
+         "x": x,
+         "y": y,
++        # embedding-atlas's neighbours contract, verbatim: ids are row ids as given
++        # by the viewer's id column, sorted nearest first, with the matching
++        # distances alongside. Copied rather than referenced so a later mutation of
++        # the shared dict cannot rewrite a frame already queued for the socket.
++        "neighbors": {"ids": list(nb.get("ids", [])),
++                      "distances": list(nb.get("distances", []))}
++        if nb else dict(EMPTY_NEIGHBORS),
+     }
+ 
+ 
+-def admin_point(op: Opinion, xy: Sequence[float] | None, roster: Roster) -> dict:
++def admin_point(op: Opinion, xy: Sequence[float] | None, roster: Roster,
++                nb: Mapping | None = None) -> dict:
+     """The same point, plus authorship, for the admin channel only (PRD 5.6).
+ 
+     Same map, same data, wider exposure -- PRD 5.6 forbids a separate dataset,
+@@ -80,19 +102,26 @@ def admin_point(op: Opinion, xy: Sequence[float] | None, roster: Roster) -> dict
+     than building a parallel record that could drift out of step.
+     """
+     entry = roster.resolve(op.reviewer_id)
+-    point = participant_point(op, xy)
++    point = participant_point(op, xy, nb)
+     point["reviewer_id"] = op.reviewer_id
+     point["reviewer_name"] = entry.display_name if entry else op.reviewer_id
+     return point
+ 
+ 
+ def participant_points(
+-    ops: Iterable[Opinion], coords: Mapping[str, Sequence[float]]
++    ops: Iterable[Opinion],
++    coords: Mapping[str, Sequence[float]],
++    neighbors: Mapping[str, Mapping] | None = None,
+ ) -> list[dict]:
+-    return [participant_point(op, coords.get(op.id)) for op in ops]
++    nb = neighbors or {}
++    return [participant_point(op, coords.get(op.id), nb.get(op.id)) for op in ops]
+ 
+ 
+ def admin_points(
+-    ops: Iterable[Opinion], coords: Mapping[str, Sequence[float]], roster: Roster
++    ops: Iterable[Opinion],
++    coords: Mapping[str, Sequence[float]],
++    roster: Roster,
++    neighbors: Mapping[str, Mapping] | None = None,
+ ) -> list[dict]:
+-    return [admin_point(op, coords.get(op.id), roster) for op in ops]
++    nb = neighbors or {}
++    return [admin_point(op, coords.get(op.id), roster, nb.get(op.id)) for op in ops]
+diff --git a/feedback-atlas/src/projection.py b/feedback-atlas/src/projection.py
+index 4c546d9..14330da 100644
+--- a/feedback-atlas/src/projection.py
++++ b/feedback-atlas/src/projection.py
+@@ -24,6 +24,17 @@ import numpy as np
+ # without changing project()'s signature or making it return a tuple.
+ _last_reducer = None
+ 
++# The k-NN graph the last fit was built on, in umap's `precomputed_knn` shape.
++# None when the corpus was too small for one, or when umap built its own.
++#
++# This is the half of embedding-atlas's analysis its viewer reads directly. Their
++# projection module is not called -- see src/ea_projection -- but the sequence is
++# theirs: graph first, then a fit on it. Keeping the graph the fit consumed costs
++# nothing here and means the neighbours the viewer shows are the ones the layout
++# was built from, rather than a second search with different parameters that
++# disagrees with the picture.
++_last_knn = None
++
+ 
+ def choose_projector(n: int, threshold: int = 80) -> str:
+     """"pca" below the threshold, "umap" at or above it.
+@@ -65,18 +76,42 @@ def _umap_2d(X: np.ndarray, n_neighbors: int, seed: int) -> np.ndarray:
+ 
+     import umap  # optional, and slow to import: keep it out of module scope
+ 
++    from src.ea_projection import knn_graph
++
+     n = X.shape[0]
+-    global _last_reducer
++    global _last_reducer, _last_knn
++    # Cleared before the fit, not after it. Both are read by Layout immediately
++    # after this returns, and a fit that raises would otherwise leave the previous
++    # run's reducer and graph in place -- so Layout would adopt a reducer fitted on
++    # a corpus that no longer matches its row order, and transform new opinions
++    # against it. Clearing first turns that into "refit next pass", which is what
++    # _should_refit already does with a None reducer.
++    _last_reducer = None
++    _last_knn = None
++    # n_neighbors must stay below the sample count or umap truncates it and
++    # warns; clamp here so the warning never reaches a classroom log.
++    k = max(2, min(n_neighbors, n - 1))
++
++    # embedding-atlas's own two-step: build the k-NN graph first, then fit UMAP on
++    # it. Same algorithm and same parameters as fitting directly -- what it buys is
++    # the graph itself, which the viewer needs and a plain fit throws away. None
++    # when umap cannot build one, in which case umap builds its own internally and
++    # only the viewer's neighbour panel goes without.
++    knn = knn_graph(X, n_neighbors=k, metric="cosine", random_state=seed)
++    if knn is not None:
++        # Take k back from the graph rather than trusting the clamp twice: umap
++        # rejects a precomputed graph whose width disagrees with n_neighbors.
++        k = int(np.asarray(knn[0]).shape[1])
++
+     reducer = umap.UMAP(
+         n_components=2,
+-        # n_neighbors must stay below the sample count or umap truncates it and
+-        # warns; clamp here so the warning never reaches a classroom log.
+-        n_neighbors=max(2, min(n_neighbors, n - 1)),
++        n_neighbors=k,
+         min_dist=0.1,
+         metric="cosine",
+         random_state=seed,
+         init="spectral",
+         verbose=False,
++        **({"precomputed_knn": knn} if knn is not None else {}),
+     )
+     with warnings.catch_warnings():
+         # Setting random_state makes umap single-threaded and it says so, every
+@@ -89,6 +124,7 @@ def _umap_2d(X: np.ndarray, n_neighbors: int, seed: int) -> np.ndarray:
+             "ignore", message=".*n_jobs value .* overridden.*", category=UserWarning)
+         out = np.asarray(reducer.fit_transform(X), dtype=float)
+     _last_reducer = reducer
++    _last_knn = knn
+     return out
+ 
+ 
+@@ -284,6 +320,16 @@ class Layout:
+         self._reducer = None
+         self._ids: list[str] = []          # every id placed so far, in row order
+         self._coords: np.ndarray | None = None
++        # The k-NN graph behind the last actual fit, and the ids it was fitted on,
++        # in that fit's row order. Replaced with the reducer or not at all: a graph
++        # whose row order no longer matches the reducer's would attribute one
++        # opinion's neighbours to another and look entirely reasonable doing it.
++        #
++        # knn_ids is shorter than _ids between refits, because points arriving via
++        # transform() are placed on the manifold without joining the graph. The
++        # caller fills those in; see AtlasState._neighbor_column.
++        self.knn = None
++        self.knn_ids: list[str] = []
+         # Rows covered by the last *actual* fit. Tracked separately from _ids,
+         # which grows with every transform: measuring growth against _ids would
+         # move the baseline forward on each arrival, so the corpus could never
+@@ -318,6 +364,7 @@ class Layout:
+             # instant, and a snapshot is a few kilobytes. Keep no state.
+             self._reducer, self._coords, self._ids = None, None, []
+             self._fit_size = 0
++            self.knn, self.knn_ids = None, []
+             return project(X, threshold=self.threshold,
+                            n_neighbors=self.n_neighbors, seed=self.seed), True
+ 
+@@ -328,6 +375,7 @@ class Layout:
+             self._ids = list(ids)
+             self._coords = coords.copy()
+             self._fit_size = n
++            self.knn, self.knn_ids = _last_knn, list(ids)
+             return coords, True
+ 
+         n_fitted = len(self._ids)
+@@ -342,6 +390,7 @@ class Layout:
+                              n_neighbors=self.n_neighbors, seed=self.seed)
+             self._reducer, self._ids = _last_reducer, list(ids)
+             self._coords, self._fit_size = coords.copy(), n
++            self.knn, self.knn_ids = _last_knn, list(ids)
+             return coords, True
+ 
+         coords = np.vstack([self._coords, fresh])
+diff --git a/feedback-atlas/src/server.py b/feedback-atlas/src/server.py
+index 57d6345..161ab8f 100644
+--- a/feedback-atlas/src/server.py
++++ b/feedback-atlas/src/server.py
+@@ -16,12 +16,13 @@ import contextlib
+ import csv
+ import hmac
+ import io
++import json
+ import logging
+ import signal
+ import time
+ from pathlib import Path
+ 
+-from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
++from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+ from fastapi.responses import HTMLResponse, JSONResponse, Response
+ from fastapi.staticfiles import StaticFiles
+ 
+@@ -30,6 +31,7 @@ from src.config import AtlasConfig, cache_key, load_config, resolve_spec
+ from src.embedder import build_embedder
+ from src.hub import Channel, Hub
+ from src.models import validate_submission
++from src.mosaic_db import MosaicService, available as mosaic_available
+ from src.projection import warm_jit
+ from src.protocol import (
+     MAX_FRAME_BYTES, PROTOCOL_VERSION, ack, error, hello_ok, neighbors,
+@@ -42,6 +44,33 @@ from src.textnorm import text_hash
+ log = logging.getLogger("atlas")
+ WEB_DIR = Path(__file__).resolve().parents[1] / "web"
+ HEARTBEAT_S = 25.0          # comfortably inside the ~100s tunnel idle timeout
++MAX_HTTP_BODY_BYTES = 256 * 1024
++
++
++async def _request_json(request: Request):
++    body = bytearray()
++    async for chunk in request.stream():
++        if len(body) + len(chunk) > MAX_HTTP_BODY_BYTES:
++            raise HTTPException(status_code=413, detail="request body is too large")
++        body.extend(chunk)
++    return json.loads(body)
++
++
++def _valid_admin_code(supplied, expected: str) -> bool:
++    if not isinstance(supplied, str):
++        return False
++    try:
++        return hmac.compare_digest(supplied.encode("utf-8"), expected.encode("utf-8"))
++    except UnicodeEncodeError:
++        return False
++
++
++def _csv_cell(value):
++    # CSV quoting does not prevent Excel from interpreting feedback as a formula.
++    if isinstance(value, str) and (value.lstrip().startswith(("=", "+", "-", "@"))
++                                   or value.startswith(("\t", "\r", "\n"))):
++        return "'" + value
++    return value
+ 
+ 
+ class RateLimiter:
+@@ -79,8 +108,10 @@ class Atlas:
+         self.limiter = RateLimiter()
+         self.store: Store | None = None
+         self.state: AtlasState | None = None
++        self.mosaic: MosaicService | None = None
+         self.loop: RecomputeLoop | None = None
+         self.roster: Roster | None = None
++        self.viewer_changed = asyncio.Event()
+         self.started_at = time.time()
+ 
+     def startup(self) -> None:
+@@ -105,6 +136,15 @@ class Atlas:
+         self.store = Store(cfg.db_path)
+         self.store.migrate()
+         self.state = AtlasState(cfg, self.store, self.roster, embedder)
++        # Stood up before load(), because load() recomputes and commits, and
++        # commit() is what refreshes the relation. Built after the store so a
++        # missing database file fails on the cheap path.
++        if cfg.enable_viewer and mosaic_available():
++            self.mosaic = MosaicService()
++            self.state.mosaic = self.mosaic
++            log.info("embedding-atlas viewer: dataset relation ready")
++        elif cfg.enable_viewer:
++            log.warning("embedding-atlas viewer disabled: duckdb/pyarrow missing")
+         self.state.load()
+         log.info("loaded %d opinions, layout_rev %d",
+                  self.state.rev, self.state.layout_rev)
+@@ -138,6 +178,10 @@ class Atlas:
+         self.roster = fresh
+         if self.state is not None:
+             self.state.roster = fresh
++            # Refresh the relation before asking open viewers to drop cached queries.
++            self.state.refresh_mosaic()
++            if self.mosaic is not None:
++                self.viewer_changed.set()
+         log.info("roster reloaded: %d entries", len(fresh))
+ 
+ 
+@@ -169,6 +213,7 @@ def create_app(cfg: AtlasConfig | None = None, *, atlas: Atlas | None = None) ->
+         await asyncio.to_thread(atlas.startup)   # keeps Ctrl-C alive during a download
+         task = atlas.loop.start()
+         beat = asyncio.create_task(_heartbeat(atlas))
++        viewer_updates = asyncio.create_task(_viewer_updates(atlas))
+         # Best-effort. Unavailable when the loop is not on the main thread (a
+         # TestClient, an embedded runner) and on platforms without SIGHUP, and
+         # none of those is a reason to refuse to serve -- it only costs the
+@@ -182,10 +227,15 @@ def create_app(cfg: AtlasConfig | None = None, *, atlas: Atlas | None = None) ->
+             yield
+         finally:
+             beat.cancel()
++            viewer_updates.cancel()
++            with contextlib.suppress(asyncio.CancelledError):
++                await viewer_updates
+             await atlas.loop.aclose()
+             with contextlib.suppress(asyncio.CancelledError, Exception):
+                 await task
+             await atlas.hub.close_all()
++            if atlas.mosaic is not None:
++                atlas.mosaic.close()
+             if atlas.store is not None:
+                 atlas.store.close()
+ 
+@@ -206,6 +256,13 @@ def create_app(cfg: AtlasConfig | None = None, *, atlas: Atlas | None = None) ->
+             "projector": ("umap" if state and state.rev >= atlas.cfg.pca_umap_threshold
+                           else "pca"),
+             "connections": atlas.hub.counts(),
++            # Which front end the room can actually use, and how much the viewer's
++            # relation currently holds. Reported because "the charts are empty" and
++            # "the viewer never loaded" look identical from the back of a room.
++            "viewer": {
++                "enabled": atlas.mosaic is not None,
++                "rows": atlas.mosaic.participant.rows if atlas.mosaic else 0,
++            },
+             "uptime_s": round(time.time() - atlas.started_at, 1),
+             "last_error": state.last_error if state else None,
+         })
+@@ -220,15 +277,22 @@ def create_app(cfg: AtlasConfig | None = None, *, atlas: Atlas | None = None) ->
+         this one unlocks authorship.
+         """
+         try:
+-            body = await request.json()
++            body = await _request_json(request)
++        except HTTPException:
++            raise
+         except Exception:      # noqa: BLE001
+             return JSONResponse(error("MALFORMED"), status_code=400)
+-        if not hmac.compare_digest(str(body.get("code") or ""), atlas.cfg.admin_code):
++        if not isinstance(body, dict):
++            return JSONResponse(error("MALFORMED"), status_code=400)
++        if not _valid_admin_code(body.get("code"), atlas.cfg.admin_code):
+             await asyncio.sleep(0.5)
+             return JSONResponse(error("BAD_ACCESS_CODE"), status_code=403)
+ 
+         state = atlas.state
+         wanted = body.get("ids")
++        if wanted is not None and (not isinstance(wanted, list)
++                                   or any(not isinstance(value, str) for value in wanted)):
++            return JSONResponse(error("MALFORMED"), status_code=400)
+         keep = set(wanted) if isinstance(wanted, list) else None
+         names = {t["id"]: t["display_name"] for t in atlas.roster.targets()}
+ 
+@@ -242,10 +306,10 @@ def create_app(cfg: AtlasConfig | None = None, *, atlas: Atlas | None = None) ->
+                 continue
+             entry = atlas.roster.resolve(op.reviewer_id)
+             x, y = state.server_coords.get(op.id, (0.0, 0.0))
+-            writer.writerow([op.id, op.reviewer_id,
++            writer.writerow([_csv_cell(value) for value in [op.id, op.reviewer_id,
+                              entry.display_name if entry else op.reviewer_id,
+                              op.target_id, names.get(op.target_id, op.target_id),
+-                             op.text, op.source, op.week, op.timestamp, x, y])
++                             op.text, op.source, op.week, op.timestamp, x, y]])
+         # A BOM so Excel opens Korean as UTF-8 instead of mojibake. The
+         # instructor opening this is the whole audience for the feature.
+         payload = ("\ufeff" + buf.getvalue()).encode("utf-8")
+@@ -254,6 +318,65 @@ def create_app(cfg: AtlasConfig | None = None, *, atlas: Atlas | None = None) ->
+             headers={"Content-Disposition":
+                      'attachment; filename="feedback-atlas.csv"'})
+ 
++    @app.post("/data/query")
++    async def data_query(request: Request):
++        """The SQL endpoint Embedding Atlas's viewer runs on.
++
++        Mosaic applications do not receive data, they issue queries: every chart,
++        the table, the cross-filter and the embedding view itself are SQL against
++        one relation. This is `embedding_atlas.server`'s `/data/query` with the
++        same three command types, so the viewer talks to it unmodified.
++
++        Two departures, both forced by this being a classroom rather than a
++        notebook on somebody's laptop:
++
++        * **The audience is chosen before the SQL is parsed.** The admin code
++          arrives in the body -- never a query string, same reason as
++          /api/export.csv -- and picks which of two physically separate databases
++          answers. The participant one does not contain `reviewer_id`, so the
++          question cannot be asked rather than being asked and refused. See
++          src/mosaic_db.py.
++        * **A wrong code is a refusal, not a downgrade.** Silently answering from
++          the participant relation would show an instructor a viewer that looks
++          right and is quietly missing the authorship they opened it for.
++        """
++        if atlas.mosaic is None:
++            return JSONResponse(
++                {"error": "the viewer is not enabled on this server"},
++                status_code=503)
++        try:
++            body = await _request_json(request)
++        except HTTPException:
++            raise
++        except Exception:      # noqa: BLE001
++            return JSONResponse(error("MALFORMED"), status_code=400)
++
++        if not isinstance(body, dict):
++            return JSONResponse(error("MALFORMED"), status_code=400)
++        supplied = body.get("code")
++        admin = False
++        if supplied not in (None, ""):
++            if not _valid_admin_code(supplied, atlas.cfg.admin_code):
++                await asyncio.sleep(0.5)
++                return JSONResponse(error("BAD_ACCESS_CODE"), status_code=403)
++            admin = True
++
++        sql = body.get("sql")
++        if not isinstance(sql, str) or not sql.strip():
++            return JSONResponse({"error": "query must carry sql"}, status_code=400)
++        kind = str(body.get("type") or "arrow")
++
++        database = atlas.mosaic.database(admin=admin)
++        try:
++            # Off the event loop: DuckDB blocks, and thirty phones share this loop
++            # with the websocket that is delivering the map.
++            payload, ctype = await asyncio.to_thread(database.query, sql, kind)
++        except Exception as exc:      # noqa: BLE001
++            # Mosaic reads `error` off a non-2xx body and surfaces it in the
++            # viewer, so a bad query says what was wrong instead of going blank.
++            return JSONResponse({"error": str(exc)}, status_code=500)
++        return Response(content=payload, media_type=ctype)
++
+     @app.websocket("/ws")
+     async def participant_ws(socket: WebSocket):
+         await _participant(atlas, socket)
+@@ -276,6 +399,16 @@ def create_app(cfg: AtlasConfig | None = None, *, atlas: Atlas | None = None) ->
+     return app
+ 
+ 
++async def _viewer_updates(atlas: Atlas) -> None:
++    """A roster edit changes viewer data without changing the opinion revision."""
++    while True:
++        await atlas.viewer_changed.wait()
++        atlas.viewer_changed.clear()
++        # Only invalidate caches; no roster or authorship crosses channels.
++        await atlas.hub.broadcast(Channel.PARTICIPANT, {"t": "viewer_refresh"})
++        await atlas.hub.broadcast(Channel.ADMIN, {"t": "viewer_refresh"})
++
++
+ async def _heartbeat(atlas: Atlas) -> None:
+     while True:
+         await asyncio.sleep(HEARTBEAT_S)
+@@ -348,8 +481,8 @@ async def _admin(atlas: Atlas, socket: WebSocket) -> None:
+     # The code arrives in the frame body, never a query string: a query string
+     # lands in tunnel logs, proxy logs and browser history. compare_digest so a
+     # wrong code costs the same time as a right one.
+-    supplied = str(body.get("code") or "")
+-    if not hmac.compare_digest(supplied, atlas.cfg.admin_code):
++    supplied = body.get("code")
++    if not _valid_admin_code(supplied, atlas.cfg.admin_code):
+         await asyncio.sleep(0.5)        # flat cost on failure, no probing signal
+         return await _refuse(socket, "BAD_ACCESS_CODE")
+ 
+@@ -416,6 +549,11 @@ async def _serve(atlas: Atlas, socket: WebSocket, conn_id: str, entry,
+             if channel is not Channel.PARTICIPANT or entry is None:
+                 await socket.send_json(error("NOT_AUTHENTICATED"))
+                 continue
++            nonce = body.get("nonce")
++            recorded = state.store.submission_receipt(entry.id, nonce)
++            if recorded is not None:
++                await socket.send_json(ack(nonce=nonce, id=recorded, rev=state.rev))
++                continue
+             if not atlas.limiter.allow(conn_id):
+                 await socket.send_json(error("RATE_LIMITED"))
+                 continue
+@@ -429,11 +567,13 @@ async def _serve(atlas: Atlas, socket: WebSocket, conn_id: str, entry,
+                 continue
+             # Durable before acknowledged: a crash between the two would otherwise
+             # tell somebody their opinion landed when it did not.
+-            state.store.insert_opinion(op, text_hash(op.text))
+-            rev = state.add(op)
++            inserted, opinion_id = state.store.insert_opinion_with_receipt(
++                op, text_hash(op.text), nonce)
++            rev = state.add(op) if inserted else state.rev
+             await socket.send_json(ack(nonce=str(body.get("nonce") or ""),
+-                                       id=op.id, rev=rev))
+-            atlas.loop.request()
++                                       id=opinion_id, rev=rev))
++            if inserted:
++                atlas.loop.request()
+         else:
+             await socket.send_json(error("MALFORMED"))
+ 
+diff --git a/feedback-atlas/src/store.py b/feedback-atlas/src/store.py
+index 1e6cce1..a490e3c 100644
+--- a/feedback-atlas/src/store.py
++++ b/feedback-atlas/src/store.py
+@@ -42,6 +42,14 @@ CREATE TABLE IF NOT EXISTS opinions (
+ );
+ CREATE INDEX IF NOT EXISTS opinions_order ON opinions(timestamp, id);
+ 
++CREATE TABLE IF NOT EXISTS submission_receipts (
++  reviewer_id TEXT NOT NULL,
++  nonce       TEXT NOT NULL,
++  opinion_id  TEXT NOT NULL,
++  PRIMARY KEY (reviewer_id, nonce),
++  FOREIGN KEY (opinion_id) REFERENCES opinions(id)
++);
++
+ CREATE TABLE IF NOT EXISTS embeddings (
+   text_hash TEXT NOT NULL,
+   cache_key TEXT NOT NULL,
+@@ -134,6 +142,57 @@ class Store:
+             self._db.commit()
+             return cur.rowcount > 0
+ 
++    def submission_receipt(self, reviewer_id: str, nonce) -> str | None:
++        nonce = _bounded_nonce(nonce)
++        if nonce is None:
++            return None
++        with self._lock:
++            row = self._db.execute(
++                "SELECT opinion_id FROM submission_receipts "
++                "WHERE reviewer_id=? AND nonce=?",
++                (reviewer_id, nonce)).fetchone()
++        return row["opinion_id"] if row else None
++
++    def insert_opinion_with_receipt(
++        self, op: Opinion, text_hash: str, nonce
++    ) -> tuple[bool, str]:
++        """Insert an opinion and its replay receipt in one transaction.
++
++        Returns (inserted, opinion_id). Empty or oversized nonces keep the older
++        best-effort insert behavior so stale clients are still accepted.
++        """
++        nonce = _bounded_nonce(nonce)
++        if nonce is None:
++            return self.insert_opinion(op, text_hash), op.id
++
++        with self._lock:
++            self._db.execute("BEGIN IMMEDIATE")
++            try:
++                row = self._db.execute(
++                    "SELECT opinion_id FROM submission_receipts "
++                    "WHERE reviewer_id=? AND nonce=?",
++                    (op.reviewer_id, nonce)).fetchone()
++                if row:
++                    self._db.commit()
++                    return False, row["opinion_id"]
++
++                cur = self._db.execute(
++                    "INSERT OR IGNORE INTO opinions"
++                    "(id,reviewer_id,target_id,text,source,week,timestamp,text_hash)"
++                    " VALUES(?,?,?,?,?,?,?,?)",
++                    (op.id, op.reviewer_id, op.target_id, op.text, op.source,
++                     op.week, op.timestamp, text_hash))
++                if cur.rowcount > 0:
++                    self._db.execute(
++                        "INSERT INTO submission_receipts"
++                        "(reviewer_id,nonce,opinion_id) VALUES(?,?,?)",
++                        (op.reviewer_id, nonce, op.id))
++                self._db.commit()
++                return cur.rowcount > 0, op.id
++            except Exception:
++                self._db.rollback()
++                raise
++
+     def all_opinions(self) -> list[Opinion]:
+         with self._lock:
+             rows = self._db.execute(
+@@ -211,3 +270,12 @@ class Store:
+                 " layout_rev=excluded.layout_rev",
+                 [(k, float(v[0]), float(v[1]), layout_rev) for k, v in coords.items()])
+             self._db.commit()
++
++
++def _bounded_nonce(value) -> str | None:
++    if not isinstance(value, str):
++        return None
++    nonce = value.strip()
++    if not nonce or len(nonce) > 128:
++        return None
++    return nonce
+diff --git a/feedback-atlas/tests/conftest.py b/feedback-atlas/tests/conftest.py
+index 8fb2167..a864d93 100644
+--- a/feedback-atlas/tests/conftest.py
++++ b/feedback-atlas/tests/conftest.py
+@@ -36,6 +36,14 @@ _OPTIONAL = {
+     "needs_umap": "umap",
+     "needs_fastapi": "fastapi",
+     "needs_httpx": "httpx",
++    # The viewer half. duckdb and pyarrow are what the Mosaic relation is made
++    # of, and embedding_atlas supplies both the analyser and the Arrow IPC
++    # writer the query endpoint answers with. All three are optional in exactly
++    # the same sense as umap: absent, the server still runs the class on the
++    # hand-written map, so their tests skip rather than fail.
++    "needs_duckdb": "duckdb",
++    "needs_pyarrow": "pyarrow",
++    "needs_embedding_atlas": "embedding_atlas",
+ }
+ 
+ MISSING = {
+diff --git a/feedback-atlas/tests/test_payload_privacy.py b/feedback-atlas/tests/test_payload_privacy.py
+index c7048b5..9099c15 100644
+--- a/feedback-atlas/tests/test_payload_privacy.py
++++ b/feedback-atlas/tests/test_payload_privacy.py
+@@ -55,20 +55,66 @@ def _op(**kw):
+     return Opinion(**base)
+ 
+ 
+-def test_participant_point_emits_exactly_the_eight_public_keys():
++def test_participant_point_emits_exactly_the_nine_public_keys():
+     """The key set is spelled out here, not imported from PARTICIPANT_KEYS.
+ 
+     Importing the constant would let a single edit widen the contract and the
+-    test agree with it in the same commit. Writing the eight keys literally means
+-    adding a ninth has to be argued for twice, in two files.
++    test agree with it in the same commit. Writing the keys literally means adding
++    one has to be argued for twice, in two files.
++
++    `neighbors` is the ninth, added when embedding-atlas's viewer replaced the
++    hand-written scatter: its component reads that column off every row rather
++    than requesting it. Here is the argument the second time. The field holds
++    `{"ids": [...], "distances": [...]}` where every id names another opinion and
++    every distance is between two texts. Both halves are already on this channel --
++    the ids are points drawn on the participant's own screen, and the distances
++    are computed from text the participant can read. Nothing in it is derived from
++    who wrote anything, which is the only question this file asks.
++
++    The test below is the one that would catch it if that reasoning were wrong: it
++    searches the serialised bytes of a frame carrying a populated neighbours
++    column, so a reviewer id smuggled inside the nested lists fails there.
+     """
+     point = participant_point(_op(), (0.5, -0.25))
+     assert set(point) == {
+         "id", "target_id", "text", "source", "week", "timestamp", "x", "y",
++        "neighbors",
+     }
+     assert PARTICIPANT_KEYS == set(point)  # and the constant still describes reality
+ 
+ 
++def test_neighbors_column_is_present_and_shaped_even_with_nothing_to_report():
++    """Empty, never absent, and never a bare list.
++
++    embedding-atlas's contract is a dict of two parallel arrays per row. A row
++    that omits the key makes the whole struct null in the viewer's DuckDB table
++    rather than one field, which disables the neighbours panel for the entire
++    corpus rather than for the one opinion that has no neighbours yet -- and the
++    corpus is in that state for the first minutes of every session.
++    """
++    bare = participant_point(_op(), (0.0, 0.0))
++    assert bare["neighbors"] == {"ids": [], "distances": []}
++
++    filled = participant_point(_op(), (0.0, 0.0),
++                               {"ids": ["o_x", "o_y"], "distances": [0.1, 0.2]})
++    assert filled["neighbors"] == {"ids": ["o_x", "o_y"], "distances": [0.1, 0.2]}
++    assert len(filled["neighbors"]["ids"]) == len(filled["neighbors"]["distances"])
++
++
++def test_neighbors_column_is_copied_not_aliased():
++    """A frame already queued for a socket must not change under it.
++
++    The same neighbours dict is handed to both serialisers for every point in a
++    broadcast. Storing it by reference would mean the next recompute's mutation
++    reaching a frame that has been built but not yet flushed -- which shows up as
++    one client seeing another revision's neighbours, intermittently, under load.
++    """
++    shared = {"ids": ["o_x"], "distances": [0.1]}
++    point = participant_point(_op(), (0.0, 0.0), shared)
++    shared["ids"].append("o_LATER")
++    assert point["neighbors"]["ids"] == ["o_x"]
++
++
+ def test_reviewer_id_appears_nowhere_in_any_participant_frame():
+     """Serialise every message type and search the JSON text, not just the keys.
+ 
+@@ -78,7 +124,12 @@ def test_reviewer_id_appears_nowhere_in_any_participant_frame():
+     """
+     op = _op()
+     coords = {op.id: (0.1, 0.2)}
+-    points = participant_points([op], coords)
++    # A populated neighbours column, so the search covers the nested arrays
++    # embedding-atlas's viewer reads rather than only the flat fields.
++    neighbors = {op.id: {"ids": ["o_neighbour1", "o_neighbour2"],
++                         "distances": [0.11, 0.42]}}
++    points = participant_points([op], coords, neighbors)
++    assert points[0]["neighbors"]["ids"], "the nested column must actually be filled"
+ 
+     frames = [
+         protocol.snapshot(rev=1, layout_rev=1, points=points),
+diff --git a/feedback-atlas/web/app.css b/feedback-atlas/web/app.css
+index a4c443c..6f14315 100644
+--- a/feedback-atlas/web/app.css
++++ b/feedback-atlas/web/app.css
+@@ -79,7 +79,10 @@ textarea { resize:vertical; min-height:90px; line-height:var(--lh-body); word-br
+ .rail { display:flex; flex-direction:column; gap:8px; padding:2px; flex:none }
+ .rail button { width:28px; height:28px; border-radius:6px; border:0; background:none;
+   color:var(--muted); display:grid; place-items:center; cursor:pointer }
+-.rail button:hover { color:var(--fg) }
++.rail button:hover:not(:disabled) { color:var(--fg) }
++/* The viewer button turns itself off on a browser that cannot draw the view.
++ * `.btn:disabled` above does not reach here: rail buttons are not `.btn`. */
++.rail button:disabled { opacity:.35; cursor:not-allowed }
+ .rail button[aria-pressed="true"] { background:var(--panel); color:var(--fg);
+   box-shadow:inset 0 0 0 1px var(--hair) }
+ .rail .spacer { flex:1 }
+@@ -230,3 +233,29 @@ textarea { resize:vertical; min-height:90px; line-height:var(--lh-body); word-br
+   font-variant-numeric:tabular-nums }
+ /* Embedding Atlas's search-hit highlight, to the hex. */
+ mark { background:#f9ceaf; color:#111; border-radius:2px; padding:0 1px }
++
++/* ---------- Embedding Atlas viewer ----------
++ * The viewer owns its own layout, chrome and theming; this only gives it a box
++ * with a definite height. It is a flex child of .body, and a Mosaic application
++ * measures its container on mount -- inside a flex parent with no explicit
++ * min-height that measurement is the content height, which is zero before the
++ * first query returns, so it lays out at zero and never recovers.
++ */
++.viewer-card {
++  flex:1; min-width:0; min-height:0; position:relative;
++  background:var(--card); border:1px solid var(--hair); border-radius:6px;
++  overflow:hidden; display:flex; flex-direction:column;
++}
++.viewer-mount { flex:1; min-height:0; position:relative }
++.viewer-note {
++  padding:10px 12px; font-size:12.5px; color:var(--muted);
++  border-top:1px solid var(--hair); background:var(--panel);
++}
++.viewer-note b { color:var(--fg) }
++.viewer-card .empty { z-index:1 }
++
++@media (max-width:1023px) {
++  /* Same trade as the map: on a phone the form is the primary surface. The
++   * viewer is a dashboard and cannot usefully shrink below this. */
++  .viewer-card { flex:none; height:60vh; min-height:320px }
++}
+diff --git a/feedback-atlas/web/app.js b/feedback-atlas/web/app.js
+index f04156a..7fa0cd8 100644
+--- a/feedback-atlas/web/app.js
++++ b/feedback-atlas/web/app.js
+@@ -9,6 +9,7 @@
+ import { Atlas, CATEGORY10 } from "./atlas.js";
+ import { mountCompose } from "./compose.js";
+ import { mountAdmin } from "./admin.js";
++import * as viewer from "./viewer.js";
+ 
+ const PROTOCOL = 1;
+ const OTHER = "var(--other)";
+@@ -46,8 +47,17 @@ $("btn-theme").addEventListener("click", () => {
+     : matchMedia("(prefers-color-scheme: dark)").matches;
+   root.dataset.theme = dark ? "light" : "dark";
+   try { localStorage.setItem(THEME_KEY, root.dataset.theme); } catch { /* ignore */ }
++  // The viewer paints its own chrome and is told the scheme rather than reading
++  // it: it renders into a canvas, so a CSS variable change never reaches it.
++  viewer.setColorScheme(colorScheme());
+ });
+ 
++function colorScheme() {
++  const root = document.documentElement;
++  if (root.dataset.theme) return root.dataset.theme;
++  return matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
++}
++
+ /* ---------------- the map ---------------- */
+ const atlas = new Atlas($("map"), { onHover: showTip });
+ atlas.colorOf = (p) => {
+@@ -165,6 +175,104 @@ function toggleSide(button, id) {
+   $(id).hidden = !on;
+ }
+ 
++/* ---------------- Embedding Atlas viewer ----------------
++ *
++ * Two front ends over one corpus, and the choice between them is a capability
++ * question rather than a preference. Apple's renderer has been WebGPU-only since
++ * 0.24.0, which dropped the WebGL2 fallback -- so on a machine without it the
++ * embedding view is a blank canvas rather than an error. That is unacceptable in
++ * a room of assorted laptops, so the hand-written scatter stays as the fallback
++ * and the button disables itself where the viewer cannot draw.
++ *
++ * The default is also deliberate: the viewer is a dashboard, and a phone held by
++ * somebody who is there to write a sentence is not where it earns its space. Wide
++ * screen and a working adapter, or it stays off until asked for.
++ */
++const viewerBtn = $("tab-viewer");
++let viewerUsable = null;         // null until probed; probing costs an adapter request
++let viewerOn = false;
++// null until the reader says so, then their answer. Kept separate from viewerOn
++// because the two mean different things: viewerOn is what is on screen right now,
++// this is what the reader asked for. Without the distinction, auto-enable runs
++// again on every reconnect and reopens a viewer somebody closed on purpose -- and
++// a quick tunnel drops an idle socket about every hundred seconds, so "every
++// reconnect" means several times per presentation.
++let viewerChoice = null;
++
++async function viewerIsUsable() {
++  if (viewerUsable === null) viewerUsable = await viewer.rendererAvailable();
++  return viewerUsable;
++}
++
++function viewerNote(text) {
++  const note = $("viewer-note");
++  note.hidden = !text;
++  note.textContent = text || "";
++}
++
++/* Say once that this browser cannot open the viewer, and stop offering it.
++ *
++ * The map is never touched here. An earlier version hid it and put the
++ * explanation in the viewer's own panel, so a reader on a laptop without WebGPU
++ * pressed the button and lost the map behind a note telling them the map still
++ * worked. The message belongs in the status bar, which sits under the map that
++ * is still there. */
++function markViewerUnavailable() {
++  viewerBtn.disabled = true;
++  viewerBtn.setAttribute("aria-pressed", "false");
++  viewerBtn.title = "분석 보기: 이 브라우저에서는 열 수 없습니다";
++  $("status-msg").textContent =
++    "이 브라우저는 분석 보기를 지원하지 않습니다 (WebGPU 필요). 지도는 그대로 쓸 수 있습니다.";
++}
++
++async function setViewer(on) {
++  if (on && !(await viewerIsUsable())) {
++    markViewerUnavailable();
++    return;                       // the map stays exactly where it was
++  }
++  if (on && viewerChoice === false) return; // a later click cancelled this probe
++  viewerOn = on;
++  viewerBtn.setAttribute("aria-pressed", String(on));
++  $("viewer-card").hidden = !on;
++  $("map-card").hidden = on;
++  if (!on) return;
++  viewerNote("");
++  try {
++    await viewer.mount($("viewer-mount"), {
++      // A function, not a value: this page can become an admin connection after
++      // the viewer was mounted, and a captured null would keep the admin looking
++      // at the participant relation.
++      getCode: () => (state.channel === "admin" ? state.adminCode : null),
++      colorScheme: colorScheme(),
++    });
++    viewer.refresh();
++  } catch (err) {
++    viewerNote(`분석 보기를 불러오지 못했습니다. ${String(err.message || err)}`);
++  }
++}
++
++viewerBtn.addEventListener("click", () => {
++  // Pressing the button is the reader stating a preference, and it outranks the
++  // default from here on.
++  viewerChoice = !(viewerChoice ?? viewerOn);
++  setViewer(viewerChoice);
++});
++
++async function autoEnableViewer() {
++  // Runs on every handshake, including the ones after a dropped tunnel.
++  if (viewerChoice !== null) return;      // the reader has already decided
++  if (viewerOn) return;
++  // Probed regardless of screen width, because the answer also decides whether
++  // the button is worth offering at all -- and a narrow screen with a capable
++  // browser should still be able to open it by hand.
++  if (!(await viewerIsUsable())) {
++    markViewerUnavailable();
++    return;
++  }
++  if (viewerChoice !== null || viewerOn) return; // a click can arrive while probing
++  if (window.innerWidth >= 1024) setViewer(true);
++}
++
+ function setConn(kind, text) {
+   const node = $("conn");
+   node.className = "conn" + (kind === "ok" ? "" : ` ${kind}`);
+@@ -278,6 +386,7 @@ function handle(frame) {
+       $("adminpanel").hidden = frame.channel !== "admin";
+       renderLegend();
+       document.dispatchEvent(new CustomEvent("atlas:hello", { detail: frame }));
++      autoEnableViewer();
+       break;
+     }
+     case "snapshot": {
+@@ -317,6 +426,9 @@ function handle(frame) {
+       state.rev = Math.max(state.rev, frame.rev);
+       document.dispatchEvent(new CustomEvent("atlas:ack", { detail: frame }));
+       break;
++    case "viewer_refresh":
++      if (viewerOn) viewer.refresh();
++      break;
+     case "ping":
+       send({ t: "pong" });          // keeps the tunnel from calling us idle
+       break;
+@@ -418,6 +530,9 @@ $("admin-back").addEventListener("click", (e) => {
+ mountCompose({ state, send, atlas });
+ mountAdmin({ state, send, atlas, renderStatus });
+ document.addEventListener("atlas:data", renderStatus);
++// The server updates its DuckDB relation before it broadcasts, so by the time a
++// frame lands here the rows behind the viewer are already the new ones.
++document.addEventListener("atlas:data", () => { if (viewerOn) viewer.refresh(); });
+ 
+ if (location.hash === "#admin") {
+   show("admin");
+diff --git a/feedback-atlas/web/compose.js b/feedback-atlas/web/compose.js
+index 67c53a1..2750309 100644
+--- a/feedback-atlas/web/compose.js
++++ b/feedback-atlas/web/compose.js
+@@ -21,6 +21,8 @@ export function mountCompose({ state, send, atlas }) {
+   const hint = $("c-hint");
+   let source = "ai";                       // PRD 5.3: the default is AI
+   let pending = null;
++  let initialized = false;
++  let targetNeedsChoice = false;
+ 
+   seg.addEventListener("click", (e) => {
+     const button = e.target.closest("button");
+@@ -30,26 +32,50 @@ export function mountCompose({ state, send, atlas }) {
+       b.setAttribute("aria-pressed", String(b === button));
+   });
+ 
++  target.addEventListener("change", () => {
++    if (target.value) targetNeedsChoice = false;
++  });
++
+   document.addEventListener("atlas:hello", () => {
++    const wantedTarget = initialized ? target.value : "";
++    const wantedWeek = initialized ? Number(week.value) : state.defaults.week;
++    const wantedSource = initialized ? source : state.defaults.source;
++    let targetFound = false;
+     target.replaceChildren();
+     for (const t of state.targets) {
+       const option = document.createElement("option");
+       option.value = t.id;
+       option.textContent = t.display_name;
++      if (initialized && t.id === wantedTarget) {
++        option.selected = true;
++        targetFound = true;
++      }
+       target.appendChild(option);
+     }
++    targetNeedsChoice = targetNeedsChoice || (initialized && wantedTarget && !targetFound);
++    if (targetNeedsChoice) {
++      const option = document.createElement("option");
++      option.value = "";
++      option.textContent = "대상을 다시 선택해 주세요";
++      option.selected = true;
++      option.disabled = true;
++      target.prepend(option);
++      hint.textContent = "대상이 바뀌었습니다. 다시 선택해 주세요.";
++      hint.style.color = "var(--bad)";
++    }
+     week.replaceChildren();
+     for (const w of [1, 2, 3, 4]) {
+       const option = document.createElement("option");
+       option.value = String(w);
+       option.textContent = `${w}주차`;
+-      option.selected = w === state.defaults.week;
++      option.selected = w === wantedWeek;
+       week.appendChild(option);
+     }
+-    source = state.defaults.source;
++    source = wantedSource;
+     for (const b of seg.children)
+       b.setAttribute("aria-pressed", String(b.dataset.value === source));
+     text.maxLength = state.defaults.maxChars;
++    initialized = true;
+     // The admin channel observes; it does not write. Hide the whole section, not
+     // just the form -- leaving the wrapper visible parks an empty 330px column
+     // with a heading over nothing between the map and the admin tools.
+@@ -64,12 +90,14 @@ export function mountCompose({ state, send, atlas }) {
+     // Says why it is disabled. A submission silently swallowed while a phone
+     // reconnects is the worst outcome available here.
+     submit.textContent = online ? (pending ? "보내는 중…" : "보내기") : "재연결 중";
++    if (online && pending) send(pending.frame);
+   });
+ 
+   document.addEventListener("atlas:ack", (e) => {
+     if (pending && e.detail.nonce === pending.nonce) {
++      const sentDraft = pending.draft;
+       pending = null;
+-      text.value = "";
++      if (text.value === sentDraft) text.value = "";
+       submit.disabled = !state.connected;
+       submit.textContent = "보내기";
+       hint.textContent = "보냈습니다. 지도에 곧 나타납니다.";
+@@ -88,6 +116,7 @@ export function mountCompose({ state, send, atlas }) {
+ 
+   form.addEventListener("submit", (e) => {
+     e.preventDefault();
++    if (pending) return;
+     const body = text.value.trim();
+     if (!body) {
+       hint.textContent = "의견을 입력해 주세요.";
+@@ -95,31 +124,37 @@ export function mountCompose({ state, send, atlas }) {
+       text.focus();
+       return;
+     }
++    if (!target.value) {
++      hint.textContent = "대상을 다시 선택해 주세요.";
++      hint.style.color = "var(--bad)";
++      target.focus();
++      return;
++    }
+     hint.style.color = "";
+     const nonce = `c-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+-    pending = { nonce };
+-    submit.disabled = true;
+-    submit.textContent = "보내는 중…";
+     // No reviewer_id. Authorship is the connection's, and the server would
+     // ignore the field anyway -- sending one would only imply it mattered.
+-    const ok = send({
++    const frame = {
+       t: "submit", nonce,
+       target_id: target.value,
+       text: body,
+       source,
+       week: Number(week.value),
+-    });
++    };
++    pending = { nonce, frame, draft: text.value };
++    submit.disabled = true;
++    submit.textContent = state.connected ? "보내는 중…" : "재연결 중";
++    const ok = send(frame);
+     if (!ok) {
+-      pending = null;
+-      submit.disabled = false;
+       submit.textContent = "재연결 중";
+-      hint.textContent = "연결이 끊겼습니다. 잠시 후 다시 시도해 주세요.";
++      hint.textContent = "연결이 끊겼습니다. 잠시 후 다시 보내겠습니다.";
+       hint.style.color = "var(--bad)";
+     }
+   });
+ 
+   // Ctrl/Cmd+Enter sends, so a phone keyboard's newline still works.
+   text.addEventListener("keydown", (e) => {
+-    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") form.requestSubmit();
++    if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && !pending)
++      form.requestSubmit();
+   });
+ }
+diff --git a/feedback-atlas/web/index.html b/feedback-atlas/web/index.html
+index e8e5e07..22b0f55 100644
+--- a/feedback-atlas/web/index.html
++++ b/feedback-atlas/web/index.html
+@@ -82,6 +82,11 @@
+         <svg viewBox="0 0 24 24" aria-hidden="true">
+           <path d="M4 9V5a1 1 0 0 1 1-1h4M20 9V5a1 1 0 0 0-1-1h-4M4 15v4a1 1 0 0 0 1 1h4M20 15v4a1 1 0 0 1-1 1h-4"/></svg>
+       </button>
++      <!-- Embedding Atlas 뷰어 전환. WebGPU가 없으면 자동으로 비활성화됩니다. -->
++      <button type="button" id="tab-viewer" aria-pressed="false" title="분석 보기">
++        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/>
++          <path d="M3 9h18M9 9v12"/></svg>
++      </button>
+       <div class="spacer"></div>
+       <button type="button" id="btn-theme" title="밝기 전환">
+         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/>
+@@ -105,6 +110,13 @@
+       </div>
+     </div>
+ 
++    <!-- Apple Embedding Atlas 뷰어. 표·연동 차트·교차 필터·검색·최근접 의견을
++         모두 포함하며, 서버의 dataset 릴레이션에 SQL로 질의합니다. -->
++    <section class="viewer-card" id="viewer-card" hidden>
++      <div class="viewer-mount" id="viewer-mount"></div>
++      <div class="viewer-note" id="viewer-note" hidden></div>
++    </section>
++
+     <!-- 의견 입력 (PRD 5.2, 5.3) -->
+     <section class="side" id="compose">
+       <h2>의견 쓰기</h2>

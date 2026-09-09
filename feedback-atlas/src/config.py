@@ -141,6 +141,13 @@ class AtlasConfig:
     # map once* -- see README: cross it between sessions, not mid-presentation.
     pca_umap_threshold: int = 80
     n_neighbors: int = 15
+    # How many neighbours ride on each point in the payload. This is
+    # embedding-atlas's `neighbors` column, which its viewer reads directly rather
+    # than asking for; there is no request to answer, so the number is a bandwidth
+    # decision. Eight fills the panel and costs roughly 200 bytes a point. The
+    # graph itself is still built at n_neighbors, because that is what UMAP was
+    # fitted on and shrinking it would change the layout.
+    neighbors_k: int = 8
     # Trailing-edge debounce, with a cap. Without the cap a continuous stream --
     # a whole class typing at once -- never fires at all.
     debounce_s: float = 0.4
@@ -149,6 +156,12 @@ class AtlasConfig:
     move_epsilon: float = MOVE_EPSILON
     fake_embedder: bool = False
     warm_umap: bool = True
+    # Whether to stand up the DuckDB relation Embedding Atlas's viewer queries.
+    # On by default and switchable off, because the viewer is the heavier of the
+    # two front ends in every sense -- it needs duckdb and pyarrow on the server, a
+    # vendored bundle on the client, and WebGPU in the browser -- and a room where
+    # any of those is missing should still get its map.
+    enable_viewer: bool = True
 
 
 def _int_env(env: Mapping[str, str], name: str, default: int) -> int:
@@ -215,4 +228,5 @@ def load_config(env: Mapping[str, str] | None = None) -> AtlasConfig:
         pca_umap_threshold=threshold,
         fake_embedder=env.get("ATLAS_UNSAFE_FAKE_EMBEDDER", "") == "1",
         warm_umap=env.get("ATLAS_SKIP_WARMUP", "") != "1",
+        enable_viewer=env.get("ATLAS_DISABLE_VIEWER", "") != "1",
     )

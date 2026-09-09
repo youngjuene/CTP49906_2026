@@ -20,3 +20,8 @@ roster.csv
 
 # scripts/class.sh 의 런타임 상태(pid 로그, 터널 주소)
 .run/
+
+# The Embedding Atlas build. node_modules is dev-time only and never shipped;
+# web/vendor/ is its committed output and MUST stay tracked -- it is what makes
+# the frontend work with no npm, no bundler and no network at class time.
+frontend/node_modules/

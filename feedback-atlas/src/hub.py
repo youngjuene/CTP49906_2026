@@ -66,9 +66,6 @@ class Hub:
     def counts(self) -> dict[str, int]:
         return {c.value: len(ids) for c, ids in self._by_channel.items()}
 
-    def connections(self, channel: Channel) -> list[Connection]:
-        return [self._conns[i] for i in list(self._by_channel[channel]) if i in self._conns]
-
     async def send(self, conn_id: str, message: dict) -> bool:
         conn = self._conns.get(conn_id)
         if conn is None:

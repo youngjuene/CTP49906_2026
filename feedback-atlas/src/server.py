@@ -16,12 +16,13 @@ import contextlib
 import csv
 import hmac
 import io
+import json
 import logging
 import signal
 import time
 from pathlib import Path
 
-from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
@@ -30,6 +31,7 @@ from src.config import AtlasConfig, cache_key, load_config, resolve_spec
 from src.embedder import build_embedder
 from src.hub import Channel, Hub
 from src.models import validate_submission
+from src.mosaic_db import MosaicService, available as mosaic_available
 from src.projection import warm_jit
 from src.protocol import (
     MAX_FRAME_BYTES, PROTOCOL_VERSION, ack, error, hello_ok, neighbors,
@@ -42,6 +44,33 @@ from src.textnorm import text_hash
 log = logging.getLogger("atlas")
 WEB_DIR = Path(__file__).resolve().parents[1] / "web"
 HEARTBEAT_S = 25.0          # comfortably inside the ~100s tunnel idle timeout
+MAX_HTTP_BODY_BYTES = 256 * 1024
+
+
+async def _request_json(request: Request):
+    body = bytearray()
+    async for chunk in request.stream():
+        if len(body) + len(chunk) > MAX_HTTP_BODY_BYTES:
+            raise HTTPException(status_code=413, detail="request body is too large")
+        body.extend(chunk)
+    return json.loads(body)
+
+
+def _valid_admin_code(supplied, expected: str) -> bool:
+    if not isinstance(supplied, str):
+        return False
+    try:
+        return hmac.compare_digest(supplied.encode("utf-8"), expected.encode("utf-8"))
+    except UnicodeEncodeError:
+        return False
+
+
+def _csv_cell(value):
+    # CSV quoting does not prevent Excel from interpreting feedback as a formula.
+    if isinstance(value, str) and (value.lstrip().startswith(("=", "+", "-", "@"))
+                                   or value.startswith(("\t", "\r", "\n"))):
+        return "'" + value
+    return value
 
 
 class RateLimiter:
@@ -79,8 +108,10 @@ class Atlas:
         self.limiter = RateLimiter()
         self.store: Store | None = None
         self.state: AtlasState | None = None
+        self.mosaic: MosaicService | None = None
         self.loop: RecomputeLoop | None = None
         self.roster: Roster | None = None
+        self.viewer_changed = asyncio.Event()
         self.started_at = time.time()
 
     def startup(self) -> None:
@@ -105,6 +136,15 @@ class Atlas:
         self.store = Store(cfg.db_path)
         self.store.migrate()
         self.state = AtlasState(cfg, self.store, self.roster, embedder)
+        # Stood up before load(), because load() recomputes and commits, and
+        # commit() is what refreshes the relation. Built after the store so a
+        # missing database file fails on the cheap path.
+        if cfg.enable_viewer and mosaic_available():
+            self.mosaic = MosaicService()
+            self.state.mosaic = self.mosaic
+            log.info("embedding-atlas viewer: dataset relation ready")
+        elif cfg.enable_viewer:
+            log.warning("embedding-atlas viewer disabled: duckdb/pyarrow missing")
         self.state.load()
         log.info("loaded %d opinions, layout_rev %d",
                  self.state.rev, self.state.layout_rev)
@@ -138,6 +178,10 @@ class Atlas:
         self.roster = fresh
         if self.state is not None:
             self.state.roster = fresh
+            # Refresh the relation before asking open viewers to drop cached queries.
+            self.state.refresh_mosaic()
+            if self.mosaic is not None:
+                self.viewer_changed.set()
         log.info("roster reloaded: %d entries", len(fresh))
 
 
@@ -169,6 +213,7 @@ def create_app(cfg: AtlasConfig | None = None, *, atlas: Atlas | None = None) ->
         await asyncio.to_thread(atlas.startup)   # keeps Ctrl-C alive during a download
         task = atlas.loop.start()
         beat = asyncio.create_task(_heartbeat(atlas))
+        viewer_updates = asyncio.create_task(_viewer_updates(atlas))
         # Best-effort. Unavailable when the loop is not on the main thread (a
         # TestClient, an embedded runner) and on platforms without SIGHUP, and
         # none of those is a reason to refuse to serve -- it only costs the
@@ -182,10 +227,15 @@ def create_app(cfg: AtlasConfig | None = None, *, atlas: Atlas | None = None) ->
             yield
         finally:
             beat.cancel()
+            viewer_updates.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await viewer_updates
             await atlas.loop.aclose()
             with contextlib.suppress(asyncio.CancelledError, Exception):
                 await task
             await atlas.hub.close_all()
+            if atlas.mosaic is not None:
+                atlas.mosaic.close()
             if atlas.store is not None:
                 atlas.store.close()
 
@@ -206,6 +256,13 @@ def create_app(cfg: AtlasConfig | None = None, *, atlas: Atlas | None = None) ->
             "projector": ("umap" if state and state.rev >= atlas.cfg.pca_umap_threshold
                           else "pca"),
             "connections": atlas.hub.counts(),
+            # Which front end the room can actually use, and how much the viewer's
+            # relation currently holds. Reported because "the charts are empty" and
+            # "the viewer never loaded" look identical from the back of a room.
+            "viewer": {
+                "enabled": atlas.mosaic is not None,
+                "rows": atlas.mosaic.participant.rows if atlas.mosaic else 0,
+            },
             "uptime_s": round(time.time() - atlas.started_at, 1),
             "last_error": state.last_error if state else None,
         })
@@ -220,15 +277,22 @@ def create_app(cfg: AtlasConfig | None = None, *, atlas: Atlas | None = None) ->
         this one unlocks authorship.
         """
         try:
-            body = await request.json()
+            body = await _request_json(request)
+        except HTTPException:
+            raise
         except Exception:      # noqa: BLE001
             return JSONResponse(error("MALFORMED"), status_code=400)
-        if not hmac.compare_digest(str(body.get("code") or ""), atlas.cfg.admin_code):
+        if not isinstance(body, dict):
+            return JSONResponse(error("MALFORMED"), status_code=400)
+        if not _valid_admin_code(body.get("code"), atlas.cfg.admin_code):
             await asyncio.sleep(0.5)
             return JSONResponse(error("BAD_ACCESS_CODE"), status_code=403)
 
         state = atlas.state
         wanted = body.get("ids")
+        if wanted is not None and (not isinstance(wanted, list)
+                                   or any(not isinstance(value, str) for value in wanted)):
+            return JSONResponse(error("MALFORMED"), status_code=400)
         keep = set(wanted) if isinstance(wanted, list) else None
         names = {t["id"]: t["display_name"] for t in atlas.roster.targets()}
 
@@ -242,10 +306,10 @@ def create_app(cfg: AtlasConfig | None = None, *, atlas: Atlas | None = None) ->
                 continue
             entry = atlas.roster.resolve(op.reviewer_id)
             x, y = state.server_coords.get(op.id, (0.0, 0.0))
-            writer.writerow([op.id, op.reviewer_id,
+            writer.writerow([_csv_cell(value) for value in [op.id, op.reviewer_id,
                              entry.display_name if entry else op.reviewer_id,
                              op.target_id, names.get(op.target_id, op.target_id),
-                             op.text, op.source, op.week, op.timestamp, x, y])
+                             op.text, op.source, op.week, op.timestamp, x, y]])
         # A BOM so Excel opens Korean as UTF-8 instead of mojibake. The
         # instructor opening this is the whole audience for the feature.
         payload = ("\ufeff" + buf.getvalue()).encode("utf-8")
@@ -253,6 +317,65 @@ def create_app(cfg: AtlasConfig | None = None, *, atlas: Atlas | None = None) ->
             content=payload, media_type="text/csv; charset=utf-8",
             headers={"Content-Disposition":
                      'attachment; filename="feedback-atlas.csv"'})
+
+    @app.post("/data/query")
+    async def data_query(request: Request):
+        """The SQL endpoint Embedding Atlas's viewer runs on.
+
+        Mosaic applications do not receive data, they issue queries: every chart,
+        the table, the cross-filter and the embedding view itself are SQL against
+        one relation. This is `embedding_atlas.server`'s `/data/query` with the
+        same three command types, so the viewer talks to it unmodified.
+
+        Two departures, both forced by this being a classroom rather than a
+        notebook on somebody's laptop:
+
+        * **The audience is chosen before the SQL is parsed.** The admin code
+          arrives in the body -- never a query string, same reason as
+          /api/export.csv -- and picks which of two physically separate databases
+          answers. The participant one does not contain `reviewer_id`, so the
+          question cannot be asked rather than being asked and refused. See
+          src/mosaic_db.py.
+        * **A wrong code is a refusal, not a downgrade.** Silently answering from
+          the participant relation would show an instructor a viewer that looks
+          right and is quietly missing the authorship they opened it for.
+        """
+        if atlas.mosaic is None:
+            return JSONResponse(
+                {"error": "the viewer is not enabled on this server"},
+                status_code=503)
+        try:
+            body = await _request_json(request)
+        except HTTPException:
+            raise
+        except Exception:      # noqa: BLE001
+            return JSONResponse(error("MALFORMED"), status_code=400)
+
+        if not isinstance(body, dict):
+            return JSONResponse(error("MALFORMED"), status_code=400)
+        supplied = body.get("code")
+        admin = False
+        if supplied not in (None, ""):
+            if not _valid_admin_code(supplied, atlas.cfg.admin_code):
+                await asyncio.sleep(0.5)
+                return JSONResponse(error("BAD_ACCESS_CODE"), status_code=403)
+            admin = True
+
+        sql = body.get("sql")
+        if not isinstance(sql, str) or not sql.strip():
+            return JSONResponse({"error": "query must carry sql"}, status_code=400)
+        kind = str(body.get("type") or "arrow")
+
+        database = atlas.mosaic.database(admin=admin)
+        try:
+            # Off the event loop: DuckDB blocks, and thirty phones share this loop
+            # with the websocket that is delivering the map.
+            payload, ctype = await asyncio.to_thread(database.query, sql, kind)
+        except Exception as exc:      # noqa: BLE001
+            # Mosaic reads `error` off a non-2xx body and surfaces it in the
+            # viewer, so a bad query says what was wrong instead of going blank.
+            return JSONResponse({"error": str(exc)}, status_code=500)
+        return Response(content=payload, media_type=ctype)
 
     @app.websocket("/ws")
     async def participant_ws(socket: WebSocket):
@@ -274,6 +397,16 @@ def create_app(cfg: AtlasConfig | None = None, *, atlas: Atlas | None = None) ->
                 "</p>", status_code=200)
 
     return app
+
+
+async def _viewer_updates(atlas: Atlas) -> None:
+    """A roster edit changes viewer data without changing the opinion revision."""
+    while True:
+        await atlas.viewer_changed.wait()
+        atlas.viewer_changed.clear()
+        # Only invalidate caches; no roster or authorship crosses channels.
+        await atlas.hub.broadcast(Channel.PARTICIPANT, {"t": "viewer_refresh"})
+        await atlas.hub.broadcast(Channel.ADMIN, {"t": "viewer_refresh"})
 
 
 async def _heartbeat(atlas: Atlas) -> None:
@@ -348,8 +481,8 @@ async def _admin(atlas: Atlas, socket: WebSocket) -> None:
     # The code arrives in the frame body, never a query string: a query string
     # lands in tunnel logs, proxy logs and browser history. compare_digest so a
     # wrong code costs the same time as a right one.
-    supplied = str(body.get("code") or "")
-    if not hmac.compare_digest(supplied, atlas.cfg.admin_code):
+    supplied = body.get("code")
+    if not _valid_admin_code(supplied, atlas.cfg.admin_code):
         await asyncio.sleep(0.5)        # flat cost on failure, no probing signal
         return await _refuse(socket, "BAD_ACCESS_CODE")
 
@@ -416,6 +549,11 @@ async def _serve(atlas: Atlas, socket: WebSocket, conn_id: str, entry,
             if channel is not Channel.PARTICIPANT or entry is None:
                 await socket.send_json(error("NOT_AUTHENTICATED"))
                 continue
+            nonce = body.get("nonce")
+            recorded = state.store.submission_receipt(entry.id, nonce)
+            if recorded is not None:
+                await socket.send_json(ack(nonce=nonce, id=recorded, rev=state.rev))
+                continue
             if not atlas.limiter.allow(conn_id):
                 await socket.send_json(error("RATE_LIMITED"))
                 continue
@@ -429,11 +567,13 @@ async def _serve(atlas: Atlas, socket: WebSocket, conn_id: str, entry,
                 continue
             # Durable before acknowledged: a crash between the two would otherwise
             # tell somebody their opinion landed when it did not.
-            state.store.insert_opinion(op, text_hash(op.text))
-            rev = state.add(op)
+            inserted, opinion_id = state.store.insert_opinion_with_receipt(
+                op, text_hash(op.text), nonce)
+            rev = state.add(op) if inserted else state.rev
             await socket.send_json(ack(nonce=str(body.get("nonce") or ""),
-                                       id=op.id, rev=rev))
-            atlas.loop.request()
+                                       id=opinion_id, rev=rev))
+            if inserted:
+                atlas.loop.request()
         else:
             await socket.send_json(error("MALFORMED"))
 

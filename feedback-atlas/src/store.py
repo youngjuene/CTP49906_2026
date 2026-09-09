@@ -42,6 +42,14 @@ CREATE TABLE IF NOT EXISTS opinions (
 );
 CREATE INDEX IF NOT EXISTS opinions_order ON opinions(timestamp, id);
 
+CREATE TABLE IF NOT EXISTS submission_receipts (
+  reviewer_id TEXT NOT NULL,
+  nonce       TEXT NOT NULL,
+  opinion_id  TEXT NOT NULL,
+  PRIMARY KEY (reviewer_id, nonce),
+  FOREIGN KEY (opinion_id) REFERENCES opinions(id)
+);
+
 CREATE TABLE IF NOT EXISTS embeddings (
   text_hash TEXT NOT NULL,
   cache_key TEXT NOT NULL,
@@ -134,6 +142,57 @@ class Store:
             self._db.commit()
             return cur.rowcount > 0
 
+    def submission_receipt(self, reviewer_id: str, nonce) -> str | None:
+        nonce = _bounded_nonce(nonce)
+        if nonce is None:
+            return None
+        with self._lock:
+            row = self._db.execute(
+                "SELECT opinion_id FROM submission_receipts "
+                "WHERE reviewer_id=? AND nonce=?",
+                (reviewer_id, nonce)).fetchone()
+        return row["opinion_id"] if row else None
+
+    def insert_opinion_with_receipt(
+        self, op: Opinion, text_hash: str, nonce
+    ) -> tuple[bool, str]:
+        """Insert an opinion and its replay receipt in one transaction.
+
+        Returns (inserted, opinion_id). Empty or oversized nonces keep the older
+        best-effort insert behavior so stale clients are still accepted.
+        """
+        nonce = _bounded_nonce(nonce)
+        if nonce is None:
+            return self.insert_opinion(op, text_hash), op.id
+
+        with self._lock:
+            self._db.execute("BEGIN IMMEDIATE")
+            try:
+                row = self._db.execute(
+                    "SELECT opinion_id FROM submission_receipts "
+                    "WHERE reviewer_id=? AND nonce=?",
+                    (op.reviewer_id, nonce)).fetchone()
+                if row:
+                    self._db.commit()
+                    return False, row["opinion_id"]
+
+                cur = self._db.execute(
+                    "INSERT OR IGNORE INTO opinions"
+                    "(id,reviewer_id,target_id,text,source,week,timestamp,text_hash)"
+                    " VALUES(?,?,?,?,?,?,?,?)",
+                    (op.id, op.reviewer_id, op.target_id, op.text, op.source,
+                     op.week, op.timestamp, text_hash))
+                if cur.rowcount > 0:
+                    self._db.execute(
+                        "INSERT INTO submission_receipts"
+                        "(reviewer_id,nonce,opinion_id) VALUES(?,?,?)",
+                        (op.reviewer_id, nonce, op.id))
+                self._db.commit()
+                return cur.rowcount > 0, op.id
+            except Exception:
+                self._db.rollback()
+                raise
+
     def all_opinions(self) -> list[Opinion]:
         with self._lock:
             rows = self._db.execute(
@@ -211,3 +270,12 @@ class Store:
                 " layout_rev=excluded.layout_rev",
                 [(k, float(v[0]), float(v[1]), layout_rev) for k, v in coords.items()])
             self._db.commit()
+
+
+def _bounded_nonce(value) -> str | None:
+    if not isinstance(value, str):
+        return None
+    nonce = value.strip()
+    if not nonce or len(nonce) > 128:
+        return None
+    return nonce

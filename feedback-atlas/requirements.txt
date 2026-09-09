@@ -58,6 +58,32 @@ llvmlite==0.49.0
 # error at install time. Pinning all three makes that failure impossible instead
 # of unlikely.
 
+# --- the Embedding Atlas viewer ---------------------------------------------
+embedding-atlas==0.24.0
+# Apple's own package. Be precise about what runs from it, because it is easy to
+# overstate:
+#
+#   1. `embedding_atlas.utils.arrow_to_bytes` -- the Arrow IPC writer /data/query
+#      answers every chart query with. This is the only upstream Python executed
+#      on the live path.
+#   2. The `embedding-atlas` CLI, for exploring an exported CSV after the session.
+#
+# Its *projection* module is deliberately NOT called. Its entry points build a
+# dataframe, wrap the work in a file cache keyed on the inputs, and discard the
+# fitted UMAP reducer -- and without the reducer every later opinion forces a full
+# refit, which the live map cannot afford. src/ea_projection.py reproduces the
+# recipe instead (`umap.umap_.nearest_neighbors`, then a fit with
+# `precomputed_knn`), so the algorithm and its defaults are theirs and the call is
+# ours. Nothing here breaks if their private helpers are renamed.
+#
+# It brings pandas 3, pyarrow 25 and duckdb 1.5 with it, which is most of the
+# weight; the resolver leaves numpy, umap-learn, numba and llvmlite on the pins
+# above. It also brings litellm and openai, which this project never calls -- they
+# are its optional hosted-embedder backends, and there is no extra that omits them.
+#
+# Optional in the same sense as umap. Absent, the server logs that the viewer is
+# off and serves the hand-written map, and the tests for it skip.
+
 # --- classroom ops ----------------------------------------------------------
 segno==1.6.6
 # For the QR code scripts/class.sh puts on a slide. The tunnel hands back a

@@ -29,10 +29,22 @@ from src.models import Opinion
 from src.roster import Roster
 
 # What a participant may see. Also the contract test_payload_privacy.py pins.
+#
+# `neighbors` is on this list rather than the admin one on purpose. It is
+# embedding-atlas's own column format -- {"ids": [...], "distances": [...]} -- and
+# it relates opinions to opinions. Every id in it names a point already on the
+# participant's screen, and the distances are between texts they can already read,
+# so it carries nothing about authorship. The rule this file exists to enforce is
+# about reviewer identity, not about the corpus being interconnected.
 PARTICIPANT_KEYS = frozenset(
-    {"id", "target_id", "text", "source", "week", "timestamp", "x", "y"}
+    {"id", "target_id", "text", "source", "week", "timestamp", "x", "y", "neighbors"}
 )
 ADMIN_KEYS = PARTICIPANT_KEYS | {"reviewer_id", "reviewer_name"}
+
+# What an opinion with no computed neighbours carries. Present and empty rather
+# than absent: embedding-atlas's viewer reads the column off every row, and a
+# missing key makes the whole row's struct null in DuckDB rather than one field.
+EMPTY_NEIGHBORS = {"ids": [], "distances": []}
 
 
 def _finite(value) -> float:
@@ -53,7 +65,9 @@ def _finite(value) -> float:
     return f if math.isfinite(f) else 0.0
 
 
-def participant_point(op: Opinion, xy: Sequence[float] | None) -> dict:
+def participant_point(
+    op: Opinion, xy: Sequence[float] | None, nb: Mapping | None = None
+) -> dict:
     """One map point as a participant may see it.
 
     Every key is written out below. If you add a field to Opinion, it does not
@@ -69,10 +83,18 @@ def participant_point(op: Opinion, xy: Sequence[float] | None) -> dict:
         "timestamp": op.timestamp,
         "x": x,
         "y": y,
+        # embedding-atlas's neighbours contract, verbatim: ids are row ids as given
+        # by the viewer's id column, sorted nearest first, with the matching
+        # distances alongside. Copied rather than referenced so a later mutation of
+        # the shared dict cannot rewrite a frame already queued for the socket.
+        "neighbors": {"ids": list(nb.get("ids", [])),
+                      "distances": list(nb.get("distances", []))}
+        if nb else dict(EMPTY_NEIGHBORS),
     }
 
 
-def admin_point(op: Opinion, xy: Sequence[float] | None, roster: Roster) -> dict:
+def admin_point(op: Opinion, xy: Sequence[float] | None, roster: Roster,
+                nb: Mapping | None = None) -> dict:
     """The same point, plus authorship, for the admin channel only (PRD 5.6).
 
     Same map, same data, wider exposure -- PRD 5.6 forbids a separate dataset,
@@ -80,19 +102,26 @@ def admin_point(op: Opinion, xy: Sequence[float] | None, roster: Roster) -> dict
     than building a parallel record that could drift out of step.
     """
     entry = roster.resolve(op.reviewer_id)
-    point = participant_point(op, xy)
+    point = participant_point(op, xy, nb)
     point["reviewer_id"] = op.reviewer_id
     point["reviewer_name"] = entry.display_name if entry else op.reviewer_id
     return point
 
 
 def participant_points(
-    ops: Iterable[Opinion], coords: Mapping[str, Sequence[float]]
+    ops: Iterable[Opinion],
+    coords: Mapping[str, Sequence[float]],
+    neighbors: Mapping[str, Mapping] | None = None,
 ) -> list[dict]:
-    return [participant_point(op, coords.get(op.id)) for op in ops]
+    nb = neighbors or {}
+    return [participant_point(op, coords.get(op.id), nb.get(op.id)) for op in ops]
 
 
 def admin_points(
-    ops: Iterable[Opinion], coords: Mapping[str, Sequence[float]], roster: Roster
+    ops: Iterable[Opinion],
+    coords: Mapping[str, Sequence[float]],
+    roster: Roster,
+    neighbors: Mapping[str, Mapping] | None = None,
 ) -> list[dict]:
-    return [admin_point(op, coords.get(op.id), roster) for op in ops]
+    nb = neighbors or {}
+    return [admin_point(op, coords.get(op.id), roster, nb.get(op.id)) for op in ops]
