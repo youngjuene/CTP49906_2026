@@ -40,7 +40,8 @@ def _setup(tmp_path, rows, name="comments.csv"):
 def _opinions(db):
     store = Store(str(db))
     store.migrate()
-    out = store.all_opinions()
+    parents=store.recovery_records()
+    out = store.staged_opinions({p['submission_id']:p['revision'] for p in parents})
     store.close()
     return out
 
@@ -77,7 +78,7 @@ def test_a_comment_aimed_at_an_unknown_target_is_skipped_not_guessed(tmp_path):
 def test_empty_and_over_long_text_are_skipped(tmp_path):
     src, roster, db = _setup(tmp_path,
         "target_id,text\nkim.seoyeon,\nkim.seoyeon,   \n"
-        f"kim.seoyeon,{'가' * 1001}\nkim.seoyeon,좋습니다.\n")
+        f"kim.seoyeon,{'가' * 20001}\nkim.seoyeon,좋습니다.\n")
     assert _run(src, roster, db) == 1
     assert [o.text for o in _opinions(db)] == ["좋습니다."]
 
@@ -143,14 +144,84 @@ def test_a_dry_run_writes_nothing(tmp_path):
     assert not db.exists()
 
 
-def test_importing_the_same_file_twice_duplicates_it(tmp_path):
-    """Documented, not prevented. Opinion ids are fresh per row, so a second run
-    is a second set of points -- which is why the README says to use --dry-run
-    first and not to re-run a file."""
+def test_importing_the_same_file_twice_is_idempotent(tmp_path):
     src, roster, db = _setup(tmp_path, "target_id,text\nkim.seoyeon,좋습니다.\n")
-    _run(src, roster, db)
-    _run(src, roster, db)
-    assert len(_opinions(db)) == 2
+    assert _run(src, roster, db) == 0
+    assert _run(src, roster, db) == 0
+    assert len(_opinions(db)) == 1
+
+
+def test_identical_text_in_distinct_rows_keeps_distinct_parents(tmp_path):
+    src,roster,db=_setup(tmp_path,"target_id,text\nkim.seoyeon,같습니다.\nkim.seoyeon,같습니다.\n")
+    assert _run(src,roster,db)==0
+    assert len(_opinions(db))==2
+    assert len({o.submission_id for o in _opinions(db)})==2
+
+
+def test_segment_import_preserves_exact_long_raw_and_is_not_published(tmp_path,capsys):
+    import json,sqlite3
+    raw="  한글 👩🏽‍💻\r\n\r\n"+"조명이 좋았습니다. "*150+"  "
+    src,roster,db=_setup(tmp_path,json.dumps({"target_id":"kim.seoyeon","text":raw,"source":"human"})+"\n",name="comments.jsonl")
+    assert _run(src,roster,db,"--segment")==0
+    assert _run(src,roster,db,"--segment")==0
+    with sqlite3.connect(db) as conn:
+        row=conn.execute("SELECT raw_text,source,state,nonce,capability_hash FROM submissions").fetchone()
+        assert row[0:3]==(raw,"human","queued")
+        assert row[3].startswith("import:") and len(row[4])==64
+        assert conn.execute("SELECT count(*) FROM opinions").fetchone()[0]==0
+    output=capsys.readouterr().out
+    assert row[4] not in output and raw not in output
+
+
+def test_csv_embedded_newlines_and_whitespace_are_preserved(tmp_path):
+    import csv,io,sqlite3
+    raw="  원문\r\n두 번째 줄\n  "
+    buf=io.StringIO(newline="");writer=csv.writer(buf)
+    writer.writerow(["target_id","text"]);writer.writerow(["kim.seoyeon",raw])
+    src,roster,db=_setup(tmp_path,buf.getvalue())
+    assert _run(src,roster,db)==0
+    with sqlite3.connect(db) as conn:
+        assert conn.execute("SELECT raw_text FROM submissions").fetchone()[0]==raw
+        assert conn.execute("SELECT algorithm_key FROM submission_revisions").fetchone()[0]=="import-unitized-v1"
+        assert conn.execute("SELECT published_revision,state FROM submissions").fetchone()==(0,"embedding")
+
+
+def test_import_metadata_changes_are_distinct_and_reruns_resume_queue_full(tmp_path):
+    import sqlite3
+    src,roster,db=_setup(tmp_path,"target_id,text\nkim.seoyeon,하나.\nkim.seoyeon,둘.\n")
+    assert _run(src,roster,db,"--segment","--max-pending","1")==1
+    assert _run(src,roster,db,"--segment","--max-pending","1")==1
+    with sqlite3.connect(db) as conn:
+        assert conn.execute("SELECT count(*) FROM submissions").fetchone()[0]==1
+        conn.execute("UPDATE submissions SET state='failed'")
+    assert _run(src,roster,db,"--segment","--max-pending","1")==0
+    assert _run(src,roster,db,"--segment","--week","2")==0
+    with sqlite3.connect(db) as conn:
+        assert conn.execute("SELECT count(*) FROM submissions").fetchone()[0]==4
+
+
+def test_initial_unit_stage_failure_rolls_back_parent(tmp_path,monkeypatch):
+    import pytest,sqlite3
+    from src.submissions import SubmissionRequest,FeedbackSpan,SplitResult
+    db=tmp_path/'atomic.db';store=Store(str(db));store.migrate()
+    request=SubmissionRequest('instructor','kim.seoyeon',1,'ai','원문','nonce','c'*40,0)
+    def fail(*args,**kwargs): raise RuntimeError('injected stage failure')
+    monkeypatch.setattr(store,'_stage',fail)
+    with pytest.raises(RuntimeError,match='injected stage failure'):
+        store.accept_submission(request,initial_split=SplitResult((FeedbackSpan(0,2),),'import-unitized-v1'))
+    assert store._db.execute('SELECT count(*) FROM submissions').fetchone()[0]==0
+    store.close()
+
+
+def test_initial_split_mode_is_part_of_acceptance_fingerprint(tmp_path):
+    import pytest
+    from src.submissions import SubmissionRequest,FeedbackSpan,SplitResult,SubmissionError
+    store=Store(str(tmp_path/'mode.db'));store.migrate()
+    request=SubmissionRequest('instructor','kim.seoyeon',1,'ai','원문','nonce','c'*40,0)
+    store.accept_submission(request,initial_split=SplitResult((FeedbackSpan(0,2),),'import-unitized-v1'))
+    with pytest.raises(SubmissionError,match='NONCE_CONFLICT'):
+        store.accept_submission(request)
+    store.close()
 
 
 if __name__ == "__main__":

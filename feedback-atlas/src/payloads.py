@@ -37,7 +37,7 @@ from src.roster import Roster
 # so it carries nothing about authorship. The rule this file exists to enforce is
 # about reviewer identity, not about the corpus being interconnected.
 PARTICIPANT_KEYS = frozenset(
-    {"id", "target_id", "text", "source", "week", "timestamp", "x", "y", "neighbors"}
+    {"id", "target_id", "text", "source", "week", "timestamp", "x", "y", "neighbors", "submission_id", "ordinal", "revision"}
 )
 ADMIN_KEYS = PARTICIPANT_KEYS | {"reviewer_id", "reviewer_name"}
 
@@ -76,6 +76,9 @@ def participant_point(
     x, y = (_finite(xy[0]), _finite(xy[1])) if xy is not None else (0.0, 0.0)
     return {
         "id": op.id,
+        "submission_id": op.submission_id or ('s_legacy_' + op.id),
+        "ordinal": op.ordinal,
+        "revision": op.revision,
         "target_id": op.target_id,
         "text": op.text,
         "source": op.source,

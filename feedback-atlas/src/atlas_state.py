@@ -53,6 +53,8 @@ class RecomputeResult:
     encoded: int = 0
     seconds: float = 0.0
     error: str | None = None
+    projection_method: str = "pca"
+    id_remap: dict[str, str] | None = None
     # Carried out of the worker so the loop can cache it for neighbour queries.
     # The matrix already exists at this point; recomputing or re-reading it per
     # query would be work we have already done.
@@ -129,7 +131,7 @@ class AtlasState:
         self.roster = roster
         self.embedder = embedder
         self.spec = resolve_spec(cfg.embedding_model)
-        self.cache_key = cache_key(getattr(embedder, "spec", self.spec))
+        self.cache_key = getattr(embedder, "unit_cache_key", cache_key(getattr(embedder, "spec", self.spec)))
         self.dim = getattr(embedder, "dim", self.spec.dim)
 
         self.opinions: list[Opinion] = []
@@ -160,11 +162,12 @@ class AtlasState:
         # available. Optional on purpose: duckdb and pyarrow are heavy, the map
         # does not need them, and a server without them still runs the class.
         self.mosaic = None
+        self.projection_method = "pca"
 
     # --- startup ------------------------------------------------------------
     def load(self) -> None:
         self.opinions = self.store.all_opinions()
-        self.rev = len(self.opinions)
+        self.rev = self.store.data_rev
         # layout_rev is advertised in every frame and in /healthz, so it should
         # keep counting across a restart rather than starting over. It is not used
         # for gap detection (rev is), but a counter that silently goes backwards
@@ -191,7 +194,11 @@ class AtlasState:
         self.rev += 1
         return self.rev
 
-    def commit(self, result: RecomputeResult) -> None:
+    def commit(self, result: RecomputeResult, *, persist=True) -> None:
+        self.projection_method = result.projection_method
+        if result.id_remap:
+            self.layout._ids = [result.id_remap.get(i, i) for i in self.layout._ids]
+            self.layout.knn_ids = [result.id_remap.get(i, i) for i in self.layout.knn_ids]
         self.server_coords = result.coords
         if result.neighbors is not None:
             self.neighbors_by_id = result.neighbors
@@ -200,8 +207,9 @@ class AtlasState:
             self._vector_row = {oid: i for i, oid in enumerate(self._row_ids)}
             self._vectors = result.vectors
         self.layout_rev += 1
-        self.store.put_coords(result.coords, self.layout_rev)
-        self.store.set_meta("layout_rev", str(self.layout_rev))
+        if persist:
+            self.store.put_coords(result.coords, self.layout_rev)
+            self.store.set_meta("layout_rev", str(self.layout_rev))
         self.refresh_mosaic()
 
     def refresh_mosaic(self) -> None:
@@ -227,7 +235,30 @@ class AtlasState:
                 {t["id"]: t["display_name"] for t in self.roster.targets()},
             )
         except Exception as exc:      # noqa: BLE001
+            self.mosaic.valid = False
             self.last_error = f"mosaic reload failed: {type(exc).__name__}: {exc}"
+
+    def metadata_revision(self, snap):
+        """Reuse geometry when only source/target/week changed, preserving unit lineage."""
+        if len(snap.opinions) != len(self.opinions) or self._vectors is None:
+            return None
+        previous = {(o.submission_id, o.ordinal): o for o in self.opinions}
+        remap = {}
+        for op in snap.opinions:
+            old = previous.get((op.submission_id, op.ordinal))
+            if old is None or (old.text, old.start_cp, old.end_cp) != (op.text, op.start_cp, op.end_cp):
+                return None
+            if old.id not in self.server_coords or old.id not in self._vector_row:
+                return None
+            remap[old.id] = op.id
+        reverse = {new: old for old, new in remap.items()}
+        ids = [op.id for op in snap.opinions]
+        return RecomputeResult(rev=snap.rev,
+            coords={remap[i]: xy for i, xy in self.server_coords.items()},
+            vector_ids=ids, vectors=np.vstack([self._vectors[self._vector_row[reverse[i]]] for i in ids]),
+            neighbors={remap[i]: {'ids': [remap[j] for j in nb['ids']], 'distances': list(nb['distances'])}
+                       for i, nb in self.neighbors_by_id.items()},
+            id_remap=remap, projection_method=self.projection_method)
 
     # --- the blocking half (worker thread) ----------------------------------
     def recompute(self, snap: RecomputeInput) -> RecomputeResult:
@@ -239,7 +270,7 @@ class AtlasState:
 
             hashes = [text_hash(o.text) for o in ops]
             cached = self.store.get_embeddings(hashes, self.cache_key)
-            missing = [(h, t) for h, t in self.store.missing_embeddings(self.cache_key)]
+            missing = list({h: o.text for h, o in zip(hashes, ops) if h not in cached}.items())
             encoded = 0
             if missing:
                 vectors = self.embedder.encode([t for _, t in missing])
@@ -257,6 +288,7 @@ class AtlasState:
                       for oid, (x, y) in zip(ids, coords, strict=True)}
             return RecomputeResult(rev=snap.rev, coords=placed, drift=drift,
                                    refit=refit, encoded=encoded,
+                                   projection_method="umap" if self.layout._reducer is not None else "pca",
                                    seconds=time.monotonic() - started,
                                    vector_ids=ids, vectors=X,
                                    neighbors=self._neighbor_column(ids, X))
@@ -350,14 +382,20 @@ class AtlasState:
 
     # --- serialisation ------------------------------------------------------
     def participant_snapshot(self) -> dict:
-        return snapshot(rev=self.rev, layout_rev=self.layout_rev,
+        return snapshot(rev=self.rev, layout_rev=self.layout_rev, projection_method=self.projection_method,
                         points=participant_points(self.opinions, self.server_coords,
                                                   self.neighbors_by_id))
 
+    def admin_counts(self):
+        return {'units': len(self.opinions),
+                'submissions': len({o.submission_id for o in self.opinions}),
+                'submitters': len({o.reviewer_id for o in self.opinions})}
+
     def admin_snapshot(self) -> dict:
-        return snapshot(rev=self.rev, layout_rev=self.layout_rev,
+        return {**snapshot(rev=self.rev, layout_rev=self.layout_rev, projection_method=self.projection_method,
                         points=admin_points(self.opinions, self.server_coords,
-                                            self.roster, self.neighbors_by_id))
+                                            self.roster, self.neighbors_by_id)),
+                'counts': self.admin_counts()}
 
     def mark_all_sent(self) -> None:
         self.sent_coords = dict(self.server_coords)
@@ -440,13 +478,13 @@ class RecomputeLoop:
 
         fresh = [by_id[a] for a in added_ids if a in by_id]
         common = dict(from_rev=state.sent_rev, rev=result.rev,
-                      layout_rev=state.layout_rev, moved=moved, drift=result.drift)
+                      layout_rev=state.layout_rev, moved=moved, drift=result.drift, projection_method=state.projection_method)
         await self.hub.broadcast(Channel.PARTICIPANT, delta(
             added=participant_points(fresh, result.coords, result.neighbors),
             **common))
-        await self.hub.broadcast(Channel.ADMIN, delta(
+        await self.hub.broadcast(Channel.ADMIN, {**delta(
             added=admin_points(fresh, result.coords, state.roster, result.neighbors),
-            **common))
+            **common), "counts": state.admin_counts()})
 
         for oid in added_ids:
             state.sent_coords[oid] = result.coords[oid]

@@ -1,126 +1,149 @@
 #!/usr/bin/env python
-"""Build a pseudonymised archive of a finished semester (PRD 6, 7).
+"""Create a pseudonymous v2 SQLite archive and CSVs without modifying the source.
 
-Writes two new files and touches the source database not at all:
-
-    archive.csv   the opinions, with every id replaced by a random code
-    mapping.csv   code -> real id and display name
-
-The separation is the whole design. The archive is what you keep; the mapping is
-what you destroy, or store somewhere the archive is not. Keeping both in one file
-would be a rename, not a de-identification.
-
-Codes are random and assigned in shuffled order, not derived from the id. A
-derived code -- a hash of the id, or a sequential number in roster order -- is
-reversible by anyone who can guess the scheme or knows the roster, which is
-everyone the archive would ever be shared with.
-
-    uv run --python .venv/bin/python scripts/deidentify.py \\
-        --db atlas.db --roster roster.csv --out archive/ --targets
-
-**The archive is pseudonymous, not anonymous.** The opinions are unchanged, and
-people write things like "제가 발표에서 말했듯이" that identify them regardless of
-what the id column says. PRD 11 is right that the real control for research use
-is consent obtained separately from participation, and analysis only after grades
-are final. This script is the substitution step, not the ethics.
+archive.db preserves every original, revision and unit, including pending/failed
+work; archive.csv contains currently published units; originals.csv contains all
+parents. mapping.csv is separate and identifies only the randomized roster codes.
+Owner/nonces/action handles are removed. Free text is unchanged in archive.db and
+may identify people: this is pseudonymous, not anonymous. CSV cells are escaped
+for spreadsheet safety; archive.db is authoritative for exact raw strings.
 """
-
 import argparse
 import csv
+import json
+import os
+from pathlib import Path
 import secrets
 import sys
-from pathlib import Path
+import tempfile
+import uuid
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-
-from src.roster import Roster  # noqa: E402
-from src.store import Store  # noqa: E402
-
-
-def assign_codes(ids, prefix: str, rng: secrets.SystemRandom) -> dict[str, str]:
-    """One code per id, unpredictable and collision-free.
-
-    Shuffled before assignment so the code order carries nothing -- neither
-    roster order nor order of first appearance, both of which are recoverable
-    by someone who has the class list.
-    """
-    shuffled = sorted(set(ids))
-    rng.shuffle(shuffled)
-    width = max(2, len(str(len(shuffled))))
-    return {oid: f"{prefix}{i:0{width}d}" for i, oid in enumerate(shuffled, start=1)}
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+from scripts.backup_database import backup_database
+from src.exporting import csv_cell
+from src.roster import Roster
+from src.store import Store
+from src.submissions import FeedbackSpan,validate_partition
 
 
-def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--db", type=Path, required=True)
-    ap.add_argument("--roster", type=Path, required=True)
-    ap.add_argument("--out", type=Path, required=True, help="output directory")
-    ap.add_argument("--targets", action="store_true",
-                    help="also pseudonymise target_id (PRD 7 leaves this optional)")
-    args = ap.parse_args(argv)
+def assign_codes(ids,prefix,rng):
+    shuffled=sorted(set(ids));rng.shuffle(shuffled)
+    width=max(2,len(str(len(shuffled))))
+    return {oid:f'{prefix}{i:0{width}d}' for i,oid in enumerate(shuffled,1)}
 
-    if not args.db.exists():
-        raise SystemExit(f"{args.db} does not exist")
-    args.out.mkdir(parents=True, exist_ok=True)
-    archive_path = args.out / "archive.csv"
-    mapping_path = args.out / "mapping.csv"
-    for path in (archive_path, mapping_path):
-        if path.exists():
-            raise SystemExit(
-                f"{path} already exists. Refusing to overwrite: a second run "
-                "would assign different codes, and the old mapping would then "
-                "decode nothing.")
 
-    store = Store(str(args.db))
-    store.migrate()
-    opinions = store.all_opinions()
-    coords = store.all_coords()
+def sanitize_snapshot(path,*,code_targets):
+    store=Store(str(path));store.migrate()
+    db=store._db
+    known={'opinions','submission_receipts','embeddings','coords','meta','submissions',
+           'submission_revisions','submission_units','submission_actions'}
+    tables={r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")}
+    if tables-known:
+        store.close();raise RuntimeError('unknown tables in archive schema; refusing incomplete de-identification')
+    parents=[dict(r) for r in db.execute('SELECT * FROM submissions')]
+    opinions=[dict(r) for r in db.execute('SELECT * FROM opinions')]
+    revisions=[dict(r) for r in db.execute('SELECT * FROM submission_revisions')]
+    if not parents:
+        store.close();raise SystemExit(f'{path} holds no submissions')
+    rng=secrets.SystemRandom()
+    reviewers=assign_codes([r['reviewer_id'] for r in parents+opinions],'R',rng)
+    targets=assign_codes([r['target_id'] for r in parents+opinions+revisions],'P',rng) if code_targets else {}
+    parent_ids={r['id']:'s_archive_'+uuid.uuid4().hex for r in parents}
+    opinion_ids={r['id']:'o_archive_'+uuid.uuid4().hex for r in opinions}
+    preserved_meta={key:store.get_meta(key) for key in ('schema_version','data_rev','layout_rev')}
+    db.execute('PRAGMA journal_mode=DELETE')
+    db.execute('PRAGMA secure_delete=ON')
+    with store.transaction():
+        db.execute('PRAGMA defer_foreign_keys=ON')
+        db.execute('DELETE FROM submission_receipts');db.execute('DELETE FROM submission_actions')
+        db.execute('UPDATE submissions SET nonce=NULL,request_hash=NULL,capability_hash=NULL')
+        for row in parents:
+            old,new=row['id'],parent_ids[row['id']]
+            db.execute('UPDATE submissions SET id=?,reviewer_id=?,target_id=? WHERE id=?',
+                       (new,reviewers[row['reviewer_id']],targets.get(row['target_id'],row['target_id']),old))
+            db.execute('UPDATE submission_revisions SET submission_id=? WHERE submission_id=?',(new,old))
+            db.execute('UPDATE submission_units SET submission_id=? WHERE submission_id=?',(new,old))
+        for row in opinions:
+            old,new=row['id'],opinion_ids[row['id']]
+            db.execute('UPDATE opinions SET id=?,reviewer_id=?,target_id=? WHERE id=?',
+                       (new,reviewers[row['reviewer_id']],targets.get(row['target_id'],row['target_id']),old))
+            db.execute('UPDATE submission_units SET opinion_id=? WHERE opinion_id=?',(new,old))
+            db.execute('UPDATE coords SET opinion_id=? WHERE opinion_id=?',(new,old))
+        for row in revisions:
+            db.execute('UPDATE submission_revisions SET target_id=? WHERE submission_id=? AND revision=?',
+                       (targets.get(row['target_id'],row['target_id']),
+                        parent_ids[row['submission_id']],row['revision']))
+        db.execute("UPDATE submission_revisions SET actor_kind='redacted' WHERE actor_kind NOT IN ('system','admin','owner','legacy')")
+        db.execute("UPDATE submissions SET error_code='PROCESSING_FAILED' WHERE error_code IS NOT NULL")
+        db.execute('DELETE FROM meta')
+        db.executemany('INSERT INTO meta VALUES(?,?)',[(k,v) for k,v in preserved_meta.items() if v is not None])
+        db.execute("INSERT INTO meta VALUES('dataset_id',?)",('d_archive_'+uuid.uuid4().hex,))
+        db.execute("INSERT INTO meta VALUES('archive_pseudonymous','true')")
+    for row in db.execute('SELECT r.manifest,s.raw_text FROM submission_revisions r JOIN submissions s ON s.id=r.submission_id'):
+        validate_partition(row['raw_text'],tuple(FeedbackSpan(u['start'],u['end']) for u in json.loads(row['manifest'])))
+    for row in db.execute('SELECT o.text,s.raw_text,u.start_cp,u.end_cp FROM submission_units u JOIN opinions o ON o.id=u.opinion_id JOIN submissions s ON s.id=u.submission_id'):
+        if row['text']!=row['raw_text'][row['start_cp']:row['end_cp']]:
+            raise RuntimeError('archive unit text does not match original span')
+    if db.execute('PRAGMA foreign_key_check').fetchall(): raise RuntimeError('archive foreign-key failure')
+    db.execute('VACUUM')  # purge deleted credential/identifier bytes, not only rows
+    if db.execute('PRAGMA integrity_check').fetchone()[0]!='ok': raise RuntimeError('archive integrity failure')
+    published=store.all_opinions();coords=store.all_coords();originals=store.recovery_records()
     store.close()
-    if not opinions:
-        raise SystemExit(f"{args.db} holds no opinions")
+    return reviewers,targets,published,coords,originals
 
-    roster = Roster.from_path(args.roster)
-    rng = secrets.SystemRandom()
-    reviewers = assign_codes((o.reviewer_id for o in opinions), "R", rng)
-    targets = (assign_codes((o.target_id for o in opinions), "P", rng)
-               if args.targets else {})
 
-    with archive_path.open("w", encoding="utf-8", newline="") as fh:
-        writer = csv.writer(fh)
-        writer.writerow(["id", "reviewer_code", "target", "text", "source",
-                         "week", "timestamp", "x", "y"])
-        for op in opinions:
-            x, y = coords.get(op.id, ("", ""))
-            writer.writerow([
-                op.id, reviewers[op.reviewer_id],
-                targets.get(op.target_id, op.target_id),
-                op.text, op.source, op.week, op.timestamp, x, y,
-            ])
+def write_csv(path,header,rows):
+    with path.open('w',encoding='utf-8',newline='') as handle:
+        writer=csv.writer(handle);writer.writerow(header)
+        writer.writerows([[csv_cell(value) for value in row] for row in rows])
+    path.chmod(0o600)
 
-    with mapping_path.open("w", encoding="utf-8", newline="") as fh:
-        writer = csv.writer(fh)
-        writer.writerow(["code", "kind", "id", "display_name"])
-        for oid, code in sorted(reviewers.items(), key=lambda kv: kv[1]):
-            entry = roster.resolve(oid)
-            writer.writerow([code, "reviewer", oid,
-                             entry.display_name if entry else ""])
-        for oid, code in sorted(targets.items(), key=lambda kv: kv[1]):
-            entry = roster.resolve(oid)
-            writer.writerow([code, "target", oid,
-                             entry.display_name if entry else ""])
 
-    print(f"archive : {archive_path}  ({len(opinions)} opinions, "
-          f"{len(reviewers)} reviewers"
-          + (f", {len(targets)} targets" if targets else "") + ")")
-    print(f"mapping : {mapping_path}")
-    print(f"source  : {args.db} unchanged")
-    print()
-    print("Keep these apart. The mapping is the only thing that re-identifies the")
-    print("archive; destroy it, or store it where the archive is not.")
-    print("The archive is pseudonymous, not anonymous -- the opinions still say")
-    print("whatever their authors wrote about themselves.")
+def main(argv=None):
+    ap=argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument('--db',type=Path,required=True)
+    ap.add_argument('--roster',type=Path,required=True)
+    ap.add_argument('--out',type=Path,required=True)
+    ap.add_argument('--targets',action='store_true')
+    args=ap.parse_args(argv)
+    if not args.db.exists(): raise SystemExit(f'{args.db} does not exist')
+    names=('archive.db','archive.csv','originals.csv','mapping.csv')
+    args.out.mkdir(parents=True,exist_ok=True,mode=0o700)
+    for name in names:
+        if (args.out/name).exists(): raise SystemExit(f'{args.out/name} already exists; refusing to overwrite')
+    roster=Roster.from_path(args.roster)
+    with tempfile.TemporaryDirectory(prefix='.archive-',dir=args.out) as directory:
+        temporary=Path(directory)
+        backup_database(args.db,temporary/'archive.db')
+        reviewers,targets,opinions,coords,originals=sanitize_snapshot(temporary/'archive.db',code_targets=args.targets)
+        write_csv(temporary/'archive.csv',
+            ['id','reviewer_code','target','text','source','week','timestamp','x','y','submission_id','ordinal','revision','start_cp','end_cp'],
+            ([o.id,o.reviewer_id,o.target_id,o.text,o.source,o.week,o.timestamp,*coords.get(o.id,('','')),
+              o.submission_id,o.ordinal,o.revision,o.start_cp,o.end_cp] for o in opinions))
+        write_csv(temporary/'originals.csv',
+            ['submission_id','reviewer_code','target','raw_text','source','week','state','revision','published_revision','history_json','timestamp'],
+            ([d['submission_id'],d['reviewer_id'],d['target_id'],d['raw_text'],d['source'],d['week'],d['state'],d['revision'],d['published_revision'],
+              json.dumps(d['history'],ensure_ascii=False),d['timestamp']] for d in originals))
+        mapping=[]
+        for kind,entries in [('reviewer',reviewers),('target',targets)]:
+            for oid,code in sorted(entries.items(),key=lambda item:item[1]):
+                entry=roster.resolve(oid)
+                mapping.append([code,kind,oid,entry.display_name if entry else ''])
+        write_csv(temporary/'mapping.csv',['code','kind','id','display_name'],mapping)
+        published=[]
+        try:
+            for name in names:
+                os.link(temporary/name,args.out/name);published.append(args.out/name)
+        except BaseException:
+            for path in published: path.unlink()
+            raise
+    print(f'archive : {args.out/"archive.csv"} ({len(opinions)} published units)')
+    print(f'originals : {args.out/"originals.csv"} ({len(originals)} parents, including unpublished work)')
+    print(f'database : {args.out/"archive.db"} (sanitized full lineage)')
+    print(f'mapping : {args.out/"mapping.csv"}')
+    print(f'source : {args.db} unchanged')
+    print('Keep the mapping separate. The archive is pseudonymous, not anonymous; unchanged free text may identify people.')
     return 0
 
 
-if __name__ == "__main__":
-    raise SystemExit(main())
+if __name__=='__main__': raise SystemExit(main())

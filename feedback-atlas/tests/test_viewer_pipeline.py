@@ -78,13 +78,13 @@ def _submit(client, texts):
             # is waited out and retried rather than treated as a failure -- the
             # limiter is not what this file is testing.
             for _ in range(8):
-                ws.send_json({"t": "submit", "nonce": f"n{i}",
+                ws.send_json({"t": "submit", "owner_capability": "test-viewer-owner-" * 3, "context_revision": 0, "nonce": f"n{i}",
                               "target_id": "target1", "text": text,
                               "source": "human", "week": 2})
                 outcome = None
                 for _ in range(12):
                     frame = ws.receive_json()
-                    if frame.get("t") == "ack" and frame.get("nonce") == f"n{i}":
+                    if frame.get("t") == "submission_accepted" and frame.get("nonce") == f"n{i}":
                         outcome = "ack"
                         break
                     if frame.get("t") == "error":
@@ -317,7 +317,12 @@ def test_roster_reload_notifies_open_viewers_on_both_channels(client):
             for _ in range(100):
                 ws.send_json({"t": "ping"})
                 frame = ws.receive_json()
-                if frame == {"t": "viewer_refresh"}:
+                if frame.get('t') == 'viewer_refresh':
+                    assert frame['targets'][0]['display_name'] == '고친이름'
+                    if ws is participant:
+                        assert 'roster' not in frame and REVIEWER_CANARY not in str(frame)
+                    else:
+                        assert any(r['id'] == REVIEWER_CANARY for r in frame['roster'])
                     break
                 assert frame["t"] == "pong"
                 time.sleep(0.01)
@@ -326,3 +331,24 @@ def test_roster_reload_notifies_open_viewers_on_both_channels(client):
         assert _query(client, "SELECT DISTINCT target_name FROM dataset").json() == [
             {"target_name": "고친이름"}]
         assert _query(client, "SELECT id, text, x, y FROM dataset").json() == before
+
+
+def test_failed_relation_refresh_cannot_serve_stale_withdrawn_feedback(client, monkeypatch):
+    _submit(client, ['철회 후 다른 화면에도 남아서는 안 됩니다.'])
+    atlas = client.app.state.atlas
+    def unavailable(*args, **kwargs):
+        raise RuntimeError('injected relation failure')
+    monkeypatch.setattr(atlas.mosaic, 'replace', unavailable)
+    op = atlas.state.opinions[0]
+    atlas.store.withdraw_submission(op.submission_id, 1, 'remove', None, None, admin=True)
+    client.portal.call(atlas.loop.refresh_published)
+    response = _query(client, 'SELECT * FROM dataset')
+    assert response.status_code == 503
+    assert not client.get('/healthz').json()['viewer']['enabled']
+    assert atlas.state.opinions == []
+
+
+def test_public_relation_carries_opaque_parent_link_but_no_capability(client):
+    _submit(client, ['원문에서 파생된 의견입니다.'])
+    row = _query(client, 'SELECT submission_id, ordinal, revision FROM dataset').json()[0]
+    assert row['submission_id'].startswith('s_') and row['ordinal'] == 0 and row['revision'] == 1

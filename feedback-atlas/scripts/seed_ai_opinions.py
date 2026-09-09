@@ -1,139 +1,131 @@
 #!/usr/bin/env python
-"""Bulk-import AI-generated opinions straight into the store (PRD 4.3).
+"""Offline import of exact raw feedback into the v2 durable parent queue.
 
-Writes to the database rather than through a websocket, for one reason: the
-submit path is rate-limited to roughly one message a second per connection. That
-limit is right for people and wrong for a script -- an instructor pasting thirty
-model readings of a presentation would have two thirds of them refused, silently
-from their point of view.
+Default: each input row is explicitly already unitized. --segment requests
+semantic boundaries. Both modes preserve raw text and wait for the application's
+shared model worker to embed/project/publish; no model is loaded by this script.
+Stop the server for administrative offline imports, then start it to drain the
+queue. Online imports require a separate authenticated intake API.
 
-The server holds the corpus in memory, so a running instance will not notice
-these rows by itself. Send it SIGUSR1 afterwards and it re-reads them and
-broadcasts without dropping a single connection:
-
-    uv run --python .venv/bin/python scripts/seed_ai_opinions.py \\
-        --db atlas.db --roster roster.csv --reviewer instructor comments.csv
-    kill -USR1 $(pgrep -f 'uvicorn.*src.server')
-
-Input is CSV (target_id,text[,source][,week]) or JSONL with the same keys.
-`source` defaults to ai, which is the point of the script and also PRD 5.3's
-default; `week` defaults to --week.
-
-Embeddings and coordinates are not computed here. The server backfills any text
-it has not embedded on its next recompute, so the import stays a database write
-and never needs the model loaded twice.
+CSV/JSONL fields: target_id,text[,source][,week]. AI is the source default.
+Identical file bytes, row positions, effective metadata and mode replay safely;
+changing any of those denotes a new import. Separate identical rows stay distinct.
 """
-
 import argparse
 import csv
+from dataclasses import asdict
+import hashlib
+import io
 import json
-import sys
 from pathlib import Path
+import secrets
+import sys
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+from src.models import SOURCES,WEEKS
+from src.roster import Roster
+from src.store import Store
+from src.submission_store import _digest
+from src.submissions import FeedbackSpan,SplitResult,SubmissionError,SubmissionRequest
 
-from src.models import SOURCES, WEEKS, new_opinion  # noqa: E402
-from src.roster import Roster  # noqa: E402
-from src.store import Store  # noqa: E402
-from src.textnorm import normalize_text, text_hash  # noqa: E402
 
-
-def read_rows(path: Path) -> list[dict]:
-    text = path.read_text(encoding="utf-8").lstrip("﻿")
-    if path.suffix.lower() == ".jsonl":
-        return [json.loads(line) for line in text.splitlines() if line.strip()]
-    reader = csv.DictReader(text.splitlines())
+def read_rows(path: Path, *, content: bytes | None = None) -> list[dict]:
+    text=(content if content is not None else path.read_bytes()).decode('utf-8-sig')
+    if path.suffix.lower()=='.jsonl':
+        rows=[json.loads(line) for line in text.splitlines() if line.strip()]
+        if any(not isinstance(row,dict) for row in rows):
+            raise SystemExit('JSONL rows must be objects')
+        return rows
+    reader=csv.DictReader(io.StringIO(text,newline=''))
     if reader.fieldnames is None:
-        raise SystemExit(f"{path} is empty")
-    missing = {"target_id", "text"} - {(f or "").strip() for f in reader.fieldnames}
+        raise SystemExit(f'{path} is empty')
+    reader.fieldnames=[(field or '').strip() for field in reader.fieldnames]
+    missing={'target_id','text'}-set(reader.fieldnames)
     if missing:
-        raise SystemExit(f"{path} is missing column(s): {', '.join(sorted(missing))}")
-    return [dict(row) for row in reader]
+        raise SystemExit(f'{path} is missing column(s): {", ".join(sorted(missing))}')
+    return list(reader)
 
 
-def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("input", type=Path, help="CSV or JSONL of comments")
-    ap.add_argument("--db", type=Path, required=True)
-    ap.add_argument("--roster", type=Path, required=True)
-    ap.add_argument("--reviewer", required=True,
-                    help="roster id these are filed under (usually the instructor)")
-    ap.add_argument("--week", type=int, default=1, choices=WEEKS)
-    ap.add_argument("--source", default="ai", choices=SOURCES)
-    ap.add_argument("--max-chars", type=int, default=1000)
-    ap.add_argument("--dry-run", action="store_true")
-    args = ap.parse_args(argv)
-
-    roster = Roster.from_path(args.roster)
-    reviewer = roster.resolve(args.reviewer)
+def main(argv=None):
+    ap=argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument('input',type=Path)
+    ap.add_argument('--db',type=Path,required=True)
+    ap.add_argument('--roster',type=Path,required=True)
+    ap.add_argument('--reviewer',required=True,help='canonical roster submitter (usually instructor)')
+    ap.add_argument('--week',type=int,default=1,choices=WEEKS)
+    ap.add_argument('--source',default='ai',choices=SOURCES)
+    ap.add_argument('--max-chars',type=int,default=20000)
+    ap.add_argument('--max-pending',type=int,default=300)
+    ap.add_argument('--segment',action='store_true',help='request semantic segmentation; default rows are already unitized')
+    ap.add_argument('--dry-run',action='store_true',help='validate without opening/creating a database; capacity not checked')
+    args=ap.parse_args(argv)
+    if not 1<=args.max_chars<=20000 or not 1<=args.max_pending<=300:
+        ap.error('max-chars must be 1..20000 and max-pending 1..300')
+    roster=Roster.from_path(args.roster)
+    reviewer=roster.resolve(args.reviewer)
     if reviewer is None:
-        raise SystemExit(
-            f"--reviewer {args.reviewer!r} is not on the roster. Authorship has to "
-            "resolve to a real entry, or admin mode's author view files these "
-            "under a name that does not exist.")
-    targets = {t["id"] for t in roster.targets()}
-
-    rows = read_rows(args.input)
-    opinions, skipped = [], []
-    for i, row in enumerate(rows, start=1):
-        text = normalize_text(str(row.get("text") or ""))
-        raw_target = str(row.get("target_id") or "").strip()
-        entry = roster.resolve(raw_target) if raw_target else None
-        target = entry.id if entry and entry.id in targets else None
-
-        if not text:
-            skipped.append((i, "empty text"))
-
-            continue
-        if len(text) > args.max_chars:
-            skipped.append((i, f"longer than {args.max_chars} characters"))
-
-            continue
-        if target is None:
-            # Refused, never guessed. Filing a model's reading against the wrong
-            # project is invisible once it is on the map.
-            skipped.append((i, f"unknown target {raw_target!r}"))
-
-            continue
-
-        source = str(row.get("source") or args.source).strip().lower()
-        if source not in SOURCES:
-            skipped.append((i, f"bad source {source!r}"))
-
-            continue
-        try:
-            week = int(row.get("week") or args.week)
-        except (TypeError, ValueError):
-            skipped.append((i, f"bad week {row.get('week')!r}"))
-
-            continue
-        if week not in WEEKS:
-            skipped.append((i, f"week {week} is not one of {WEEKS}"))
-
-            continue
-
-        opinions.append(new_opinion(reviewer_id=reviewer.id, target_id=target,
-                                    text=text, source=source, week=week))
-
-    for line, why in skipped:
-        print(f"  skipped row {line}: {why}", file=sys.stderr)
-
+        raise SystemExit(f'--reviewer {args.reviewer!r} is not on the roster')
+    targets={row['id'] for row in roster.targets()}
+    content=args.input.read_bytes()
+    file_digest=hashlib.sha256(content).hexdigest()
+    prepared=[];skipped=[]
+    for index,row in enumerate(read_rows(args.input,content=content),1):
+        raw=row.get('text')
+        target_raw=row.get('target_id')
+        entry=roster.resolve(target_raw) if isinstance(target_raw,str) else None
+        target=entry.id if entry and entry.id in targets else None
+        source=str(row.get('source') or args.source).strip().lower()
+        try: week=int(row.get('week') or args.week)
+        except (ValueError,TypeError): week=None
+        if not isinstance(raw,str) or not raw.strip(): reason='empty or non-string text'
+        elif len(raw)>args.max_chars: reason=f'longer than {args.max_chars} code points'
+        elif target is None: reason='unknown target'
+        elif source not in SOURCES: reason='bad source'
+        elif week not in WEEKS: reason='bad week'
+        else: reason=None
+        if reason:
+            skipped.append((index,reason));continue
+        identity=[file_digest,index,reviewer.id,target,week,source,'segment' if args.segment else 'unitized']
+        nonce='import:'+hashlib.sha256(json.dumps(identity,separators=(',',':')).encode()).hexdigest()
+        prepared.append((index,dict(reviewer_id=reviewer.id,target_id=target,week=week,source=source,
+            raw_text=raw,nonce=nonce,context_revision=0,metadata_confirmed=True)))
     if args.dry_run:
-        print(f"would import {len(opinions)} opinion(s), skipping {len(skipped)}")
-        return 1 if skipped else 0
-
-    store = Store(str(args.db))
-    store.migrate()
-    written = sum(store.insert_opinion(op, text_hash(op.text)) for op in opinions)
-    store.close()
-
-    print(f"imported {written} opinion(s) as {reviewer.id}"
-          + (f", skipped {len(skipped)}" if skipped else ""))
+        for index,why in skipped: print(f'  skipped row {index}: {why}',file=sys.stderr)
+        print(f'would import {len(prepared)} parent(s), skipping {len(skipped)}; replay/capacity not checked')
+        return int(bool(skipped))
+    written=replayed=0
+    store=Store(str(args.db))
+    try:
+        store.migrate()
+        for index,fields in prepared:
+            initial=None if args.segment else SplitResult((FeedbackSpan(0,len(fields['raw_text'])),),'import-unitized-v1')
+            # Privileged offline replay lookup. Owner capabilities are random,
+            # stored only as hashes, and deliberately never retained or printed.
+            old=store._db.execute('SELECT * FROM submissions WHERE reviewer_id=? AND nonce=?',
+                                  (fields['reviewer_id'],fields['nonce'])).fetchone()
+            if old:
+                expected=dict(fields)
+                if initial is not None:
+                    expected['initial_split']=asdict(initial)
+                if old['request_hash'] != _digest(expected):
+                    skipped.append((index,'NONCE_CONFLICT'));continue
+                replayed+=1;continue
+            request=SubmissionRequest(**fields,owner_capability=secrets.token_urlsafe(48))
+            try:
+                store.accept_submission(request,max_pending=args.max_pending,initial_split=initial)
+                written+=1
+            except SubmissionError as exc:
+                skipped.append((index,exc.code))
+    finally:
+        store.close()
+    for index,why in skipped: print(f'  skipped row {index}: {why}',file=sys.stderr)
+    print(f'imported {written} parent(s); replayed {replayed}; skipped {len(skipped)}')
     if written:
-        print("send SIGUSR1 to a running server so it picks these up without a restart:")
-        print("  kill -USR1 $(pgrep -f 'uvicorn.*src.server')")
-    return 1 if skipped else 0
+        print('Raw originals saved. Start the server to process/publish the durable queue; no model ran here.')
+    if any(why=='QUEUE_FULL' for _,why in skipped):
+        print('Queue full: accepted rows remain saved. Drain the queue, then rerun the identical file and options.')
+    return int(bool(skipped))
 
 
-if __name__ == "__main__":
+if __name__=='__main__':
     raise SystemExit(main())

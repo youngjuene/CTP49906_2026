@@ -1,0 +1,17 @@
+{
+  "participants": 30,
+  "seed_units": 1000,
+  "original_codepoints": 3176,
+  "resulting_units": 1150,
+  "ack_p50_ms": 38.09170098975301,
+  "ack_p95_ms": 48.105415888130665,
+  "ready_p50_s": 12.275021009147167,
+  "ready_p95_s": 17.289799687918276,
+  "heartbeat_p95_ms": 16.292758285999298,
+  "total_s": 18.814846289809793,
+  "all_originals_exact": true,
+  "nonce_replay_unique": true,
+  "model": "embeddinggemma-cpu",
+  "startup_s": 63.247420486062765,
+  "semantic_quality_approved": false
+}

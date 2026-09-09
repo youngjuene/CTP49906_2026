@@ -15,6 +15,7 @@ import { defineConfig } from "vite";
  * `npm install && npm run build` from this directory after changing a version.
  */
 export default defineConfig({
+  base: "./",
   build: {
     outDir: "../web/vendor",
     emptyOutDir: true,

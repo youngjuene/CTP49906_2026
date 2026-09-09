@@ -97,3 +97,10 @@ pytest==9.1.1
 httpx==0.28.1
 # httpx is what fastapi's TestClient uses to drive the WebSocket routes in
 # tests/test_server_routes.py. Tests that need it are marked and skip without it.
+
+# --- semantic segmentation -------------------------------------------------
+# The adjacent-context-v1 adapter uses the existing NumPy and shared
+# sentence-transformers runtime; it adds no runtime dependency. Reproduce the
+# rejected Chonkie candidate probe with these exact optional evaluation pins:
+# chonkie==1.7.0 chonkie-core==0.10.2 tokie==0.1.4 tenacity==9.1.4
+# See docs/qa/segmentation-evaluation.md before enabling it for a class.

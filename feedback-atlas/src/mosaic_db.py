@@ -50,7 +50,7 @@ DUCKDB_MEMORY_LIMIT = "256MB"
 # payloads.PARTICIPANT_KEYS, plus the display name the charts group by.
 PARTICIPANT_COLUMNS = (
     "id", "target_id", "target_name", "text", "source", "week", "timestamp",
-    "x", "y", "neighbors",
+    "x", "y", "neighbors", "submission_id", "ordinal", "revision",
 )
 ADMIN_COLUMNS = PARTICIPANT_COLUMNS + ("reviewer_id", "reviewer_name")
 
@@ -86,6 +86,7 @@ def _schema(columns: Sequence[str]):
         "text": pa.string(), "source": pa.string(), "week": pa.int32(),
         "timestamp": pa.string(), "x": pa.float64(), "y": pa.float64(),
         "neighbors": neighbors,
+        "submission_id": pa.string(), "ordinal": pa.int32(), "revision": pa.int32(),
         "reviewer_id": pa.string(), "reviewer_name": pa.string(),
     }
     return pa.schema([pa.field(c, types[c]) for c in columns])
@@ -131,8 +132,8 @@ class MosaicDatabase:
                         "ids": list(nb.get("ids") or []),
                         "distances": [float(d) for d in (nb.get("distances") or [])],
                     })
-                elif c == "week":
-                    cols[c].append(int(p.get("week") or 0))
+                elif c in ("week", "ordinal", "revision"):
+                    cols[c].append(int(p.get(c) or 0))
                 elif c in ("x", "y"):
                     cols[c].append(float(p.get(c) or 0.0))
                 else:
@@ -250,6 +251,7 @@ class MosaicService:
     def __init__(self):
         self.participant = MosaicDatabase(PARTICIPANT_COLUMNS)
         self.admin = MosaicDatabase(ADMIN_COLUMNS)
+        self.valid = True
 
     def replace(self, participant_points: Sequence[Mapping],
                 admin_points: Sequence[Mapping],
@@ -265,8 +267,10 @@ class MosaicService:
         which every participant already sees in the compose form, and an id that
         is not in the map falls back to itself rather than to a blank.
         """
+        self.valid = False
         self.participant.replace(participant_points, names)
         self.admin.replace(admin_points, names)
+        self.valid = True
 
     def database(self, *, admin: bool) -> MosaicDatabase:
         return self.admin if admin else self.participant

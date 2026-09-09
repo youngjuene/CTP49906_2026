@@ -9,9 +9,12 @@
 import { Atlas, CATEGORY10 } from "./atlas.js";
 import { mountCompose } from "./compose.js";
 import { mountAdmin } from "./admin.js";
+import {queryState, matchesQuery, visiblePoints, counts} from './query-state.js';
+import {mountReader} from './feedback-reader.js';
+import {mountSubmissionStatus} from './submission-status.js';
 import * as viewer from "./viewer.js";
 
-const PROTOCOL = 1;
+const PROTOCOL = 2;
 const OTHER = "var(--other)";
 
 const state = {
@@ -23,7 +26,7 @@ const state = {
   weeks: new Set([1, 2, 3, 4]),
   focusTarget: null, focusReviewer: null,
   defaults: { source: "ai", week: 1, maxChars: 1000 },
-  connected: false,
+  connected: false, query:queryState(), context:{week:1,target_id:null,revision:0,accepting:true},
 };
 
 const $ = (id) => document.getElementById(id);
@@ -66,10 +69,10 @@ atlas.colorOf = (p) => {
 };
 atlas.labelOf = (id) => state.targetIndex.has(id)
   ? state.targets[state.targetIndex.get(id)].display_name : id;
-atlas.visible = (p) => state.weeks.has(Number(p.week));
+atlas.visible = (p) => matchesQuery(p, state.query);
 atlas.dimmed = (p) =>
-  (state.focusTarget != null && p.target_id !== state.focusTarget) ||
-  (state.focusReviewer != null && p.reviewer_id !== state.focusReviewer) ||
+  (state.query.emphasis?.targetId != null && p.target_id !== state.query.emphasis.targetId) ||
+  (state.query.emphasis?.reviewerId != null && p.reviewer_id !== state.query.emphasis.reviewerId) ||
   (atlas.matches != null && !atlas.matches.has(p.id));
 
 /* ---------------- tooltip ---------------- */
@@ -89,7 +92,7 @@ function showTip(hit) {
        <span class="badge"><span class="sw" style="background:${colour}"></span>
          <span class="tgt"></span></span>
        <span class="badge">${Number(p.week)}주차</span>
-       <span class="badge">${p.source === "ai" ? "AI" : "사람"}</span>
+       <span class="badge">${p.source === "ai" ? "AI 생성" : "사람 작성"}</span>
        ${p.reviewer_name ? '<span class="badge rev"></span>' : ""}
      </div>`;
   // textContent, never innerHTML, for anything a participant typed.
@@ -110,11 +113,21 @@ function showTip(hit) {
 /* ---------------- chrome ---------------- */
 function renderStatus() {
   const total = atlas.points.size;
-  let shown = 0;
-  for (const p of atlas.points.values()) if (atlas.visible(p)) shown++;
-  $("status-count").textContent = `${shown}개 표시 / 전체 ${total}개`;
+  const visible = visiblePoints(atlas.points,state.query), shown=visible.length;
+  const tally=counts(visible);
+  $("status-count").textContent = `의견 ${tally.units}개 · 원문 ${tally.submissions}건 / 전체 의견 ${total}개`;
+  const list=$('visible-results');
+  const oldFocused=document.activeElement?.dataset?.unitId;
+  list.replaceChildren();
+  for(const point of visible) {
+    const button=document.createElement('button'); button.type='button';button.className='oprow';button.dataset.unitId=point.id;
+    button.textContent=`${point.source==='ai'?'AI 생성':'사람 작성'} · ${point.week}주차 · ${point.text}`;
+    button.onclick=()=>openReader(point,button);list.append(button);
+  }
+  if(oldFocused) [...list.children].find(b=>b.dataset.unitId===oldFocused)?.focus();
+  document.dispatchEvent(new CustomEvent('atlas:query'));
   $("empty").hidden = total > 0;
-  if (total && !shown) $("status-msg").textContent = "주차가 모두 꺼져 있습니다";
+  if (total && !shown) $("status-msg").textContent = "현재 필터에 맞는 의견이 없습니다";
   const bar = atlas.scaleBar();
   $("scale").innerHTML =
     `<svg viewBox="0 0 ${bar.px} 9" width="${bar.px}" aria-hidden="true">
@@ -136,6 +149,7 @@ function renderLegend() {
     row.lastElementChild.textContent = t.display_name;
     row.addEventListener("click", () => {
       state.focusTarget = state.focusTarget === t.id ? null : t.id;
+      state.query=queryState({...state.query,emphasis:{...state.query.emphasis,targetId:state.focusTarget}});
       $("status-msg").textContent = state.focusTarget
         ? `${t.display_name} 강조 중` : "";
       renderLegend(); atlas.render(); renderStatus();
@@ -143,16 +157,17 @@ function renderLegend() {
     box.appendChild(row);
   });
   const sep = document.createElement("div"); sep.className = "sep"; box.appendChild(sep);
-  const h2 = document.createElement("h4"); h2.textContent = "구분"; box.appendChild(h2);
+  const h2 = document.createElement("h4"); h2.textContent = "피드백 출처"; box.appendChild(h2);
   box.insertAdjacentHTML("beforeend",
-    `<div class="shape"><svg viewBox="-6 -6 12 12"><circle r="4.6" fill="${OTHER}"/></svg>사람</div>
-     <div class="shape"><svg viewBox="-6 -6 12 12"><path d="M0-5.2 5.2 0 0 5.2-5.2 0Z" fill="${OTHER}"/></svg>AI</div>`);
+    `<div class="shape"><svg viewBox="-6 -6 12 12"><circle r="4.6" fill="${OTHER}"/></svg>사람 작성</div>
+     <div class="shape"><svg viewBox="-6 -6 12 12"><path d="M0-5.2 5.2 0 0 5.2-5.2 0Z" fill="${OTHER}"/></svg>AI 생성</div>`);
 }
 
 $("weeks").addEventListener("change", (e) => {
   if (e.target.type !== "checkbox") return;
   const week = Number(e.target.value);
   if (e.target.checked) state.weeks.add(week); else state.weeks.delete(week);
+  state.query=queryState({...state.query,weeks:[...state.weeks]});
   showTip(null);
   // Coordinates are untouched: filtering only changes opacity, so the map
   // demonstrably does not reflow as weeks are toggled (PRD 5.5).
@@ -258,19 +273,10 @@ viewerBtn.addEventListener("click", () => {
   setViewer(viewerChoice);
 });
 
-async function autoEnableViewer() {
-  // Runs on every handshake, including the ones after a dropped tunnel.
-  if (viewerChoice !== null) return;      // the reader has already decided
-  if (viewerOn) return;
-  // Probed regardless of screen width, because the answer also decides whether
-  // the button is worth offering at all -- and a narrow screen with a capable
-  // browser should still be able to open it by hand.
-  if (!(await viewerIsUsable())) {
-    markViewerUnavailable();
-    return;
-  }
-  if (viewerChoice !== null || viewerOn) return; // a click can arrive while probing
-  if (window.innerWidth >= 1024) setViewer(true);
+function autoEnableViewer() {
+  viewerBtn.disabled=true;
+  viewerBtn.title='분석 보기는 필터·선택 연동 검증 전까지 사용하지 않습니다';
+  $('status-msg').textContent='분석 보기 준비 중: 필터·선택 연동 검증이 필요합니다. 수업 지도를 이용하세요.';
 }
 
 function setConn(kind, text) {
@@ -278,6 +284,10 @@ function setConn(kind, text) {
   node.className = "conn" + (kind === "ok" ? "" : ` ${kind}`);
   $("conn-text").textContent = text;
   state.connected = kind === "ok";
+  if(kind !== 'ok' && !$('view-gate').hidden) {
+    $('gate-error').hidden=false; $('gate-error-text').textContent=text+' 잠시 후 다시 시도할 수 있습니다.';
+    if(kind === 'bad' || text.includes('재연결')) $('gate-submit').disabled=false;
+  }
   document.dispatchEvent(new CustomEvent("atlas:conn", { detail: state.connected }));
 }
 
@@ -321,6 +331,20 @@ function send(message) {
   return false;
 }
 
+const requests=new Map();
+function disconnectRequests() {
+  for(const pending of requests.values()){clearTimeout(pending.timer);pending.reject(Object.assign(Error('연결이 끊겼습니다. 저장 여부를 다시 확인합니다.'),{code:'OFFLINE'}));}
+  requests.clear();
+}
+function request(message) {
+  return new Promise((resolve,reject)=>{
+    const request_id=crypto.randomUUID();
+    const timer=setTimeout(()=>{requests.delete(request_id);reject(Object.assign(Error('연결 응답을 기다리는 중입니다.'),{code:'TIMEOUT'}));},8000);
+    requests.set(request_id,{resolve,reject,timer});
+    if(!send({...message,request_id})) {clearTimeout(timer);requests.delete(request_id);reject(Object.assign(Error('연결이 끊겼습니다.'),{code:'OFFLINE'}));}
+  });
+}
+
 function connect() {
   closing = false;
   clearTimeout(retryTimer);
@@ -333,6 +357,7 @@ function connect() {
   // correct but the compose button permanently disabled.
   const previous = socket;
   if (previous) {
+    disconnectRequests();
     previous.onopen = previous.onmessage = previous.onclose = previous.onerror = null;
     try { previous.close(); } catch { /* already gone */ }
   }
@@ -359,6 +384,7 @@ function connect() {
 
   ws.onclose = () => {
     if (socket !== ws || closing) return;
+    disconnectRequests();
     setConn("warn", "재연결 중…");
     retryTimer = setTimeout(connect, backoff);
     backoff = Math.min(8000, backoff * 2);      // 500ms -> 8s, then hold
@@ -368,18 +394,33 @@ function connect() {
 }
 
 function handle(frame) {
+  if(state.channel==='admin' && frame.counts) state.adminCounts=frame.counts;
+  if(frame.projection_method) {
+    if(state.projectionMethod==='pca' && frame.projection_method==='umap') {$('projection-note').hidden=false;$('projection-note').textContent='지도 배치가 PCA에서 UMAP으로 전환되었습니다.';}
+    state.projectionMethod=frame.projection_method;
+  }
+  if(frame.request_id && requests.has(frame.request_id)) {
+    const pending=requests.get(frame.request_id); requests.delete(frame.request_id);clearTimeout(pending.timer);
+    if(frame.t==='error')pending.reject(Object.assign(Error(frame.message),frame));else pending.resolve(frame);
+  }
+  if(frame.t.startsWith('submission_')) document.dispatchEvent(new CustomEvent('atlas:'+frame.t,{detail:frame}));
   switch (frame.t) {
     case "hello_ok": {
       backoff = 500;
+      $('protocol-recovery').hidden=true;protocolRecoveryVersion++;
       // A reconnect gets a fresh snapshot from the server, so anything the
       // client accumulated while it was away is replaced rather than merged.
       state.rev = frame.rev; state.layoutRev = frame.layout_rev;
       state.targets = frame.targets || [];
       state.targetIndex = new Map(state.targets.map((t, i) => [t.id, i]));
       state.roster = frame.roster || [];
+      state.datasetId=frame.dataset_id;state.submitterKey=frame.submitter_key;
+      state.context=frame.context || state.context; state.processing=frame.processing || {};
+      $('own-id').textContent=state.channel==='admin'?'':`제출자 ID: ${state.identity}`;
+      $('change-id').hidden=state.channel==='admin';
       state.defaults = { source: frame.default_source || "ai",
                          week: frame.default_week || 1,
-                         maxChars: frame.max_text_chars || 1000 };
+                         maxChars: frame.max_text_chars || 20000 };
       setConn("ok", frame.channel === "admin" ? "관리자 채널" : "연결됨");
       show("main");
       $("admin-badge").hidden = frame.channel !== "admin";
@@ -389,6 +430,12 @@ function handle(frame) {
       autoEnableViewer();
       break;
     }
+    case 'processing':
+      state.processing=frame.processing;state.processingDiagnostics=frame.diagnostics;document.dispatchEvent(new CustomEvent('atlas:processing'));break;
+    case 'class_context':
+      state.context=frame.context;
+      document.dispatchEvent(new CustomEvent('atlas:context',{detail:frame.context}));
+      break;
     case "snapshot": {
       // Below roughly a hundred and fifty opinions the server legitimately sends
       // snapshots rather than deltas, because a full recompute really does move
@@ -400,6 +447,7 @@ function handle(frame) {
       state.rev = frame.rev; state.layoutRev = frame.layout_rev;
       atlas.clear();
       atlas.setPoints(frame.points);
+      state.query=queryState({...state.query,selectedIds:state.query.selectedIds.filter(id=>atlas.points.has(id))});
       if (fresh.length) atlas.markEntering(fresh.map(p => p.id));
       if (!atlas.fitted) atlas.fit(); else atlas.render();
       renderStatus();
@@ -427,6 +475,12 @@ function handle(frame) {
       document.dispatchEvent(new CustomEvent("atlas:ack", { detail: frame }));
       break;
     case "viewer_refresh":
+      if(frame.targets) {
+        state.targets=frame.targets;state.targetIndex=new Map(state.targets.map((target,index)=>[target.id,index]));
+        if(state.channel==='admin' && frame.roster)state.roster=frame.roster;
+        renderLegend();document.dispatchEvent(new CustomEvent('atlas:hello',{detail:frame}));
+        atlas.render();document.dispatchEvent(new CustomEvent('atlas:data'));
+      }
       if (viewerOn) viewer.refresh();
       break;
     case "ping":
@@ -443,7 +497,11 @@ function handle(frame) {
         closing = true;
         setConn("bad", frame.message);
         if (state.channel === "admin") { showAdminError(frame); show("admin"); }
-        else { showGateError(frame); show("gate"); sessionStorage.removeItem("atlas.id"); }
+        else {
+          showGateError(frame); show("gate");
+          if(frame.code==='PROTOCOL_MISMATCH')showProtocolRecovery();
+          else sessionStorage.removeItem("atlas.id");
+        }
       }
       break;
   }
@@ -451,6 +509,28 @@ function handle(frame) {
 
 /* ---------------- landing (PRD 5.1) ---------------- */
 let gateAttempts = 0;
+let protocolRecoveryVersion=0, protocolSaved=false, protocolDownloaded=false;
+async function showProtocolRecovery() {
+  const version=++protocolRecoveryVersion;
+  protocolSaved=false;protocolDownloaded=false;
+  $('protocol-recovery').hidden=false;$('protocol-refresh').disabled=true;
+  $('protocol-status').textContent='현재 초안과 전송 대기 기록을 기기에 보관하는 중입니다. 자동으로 새로고침하지 않습니다.';
+  try {
+    await compose.saveBeforeRefresh();
+    if(version!==protocolRecoveryVersion)return;
+    protocolSaved=true;$('protocol-refresh').disabled=false;
+    $('protocol-status').textContent='현재 초안과 전송 대기 기록을 보관했습니다. 같은 주소에서 앱 새로고침을 누르면 복구됩니다.';
+  }catch{
+    if(version!==protocolRecoveryVersion)return;
+    $('protocol-status').textContent='현재 초안을 기기에 보관하지 못했습니다. 원문을 먼저 내려받은 뒤 새로고침해 주세요. 기존 기기 기록은 삭제하지 않습니다.';
+  }
+}
+$('protocol-download').onclick=()=>{
+  compose.downloadDraft();protocolDownloaded=true;$('protocol-refresh').disabled=false;
+  $('protocol-status').textContent=protocolSaved?'원문 내려받기를 시작했습니다. 기기의 초안과 전송 대기 기록도 보관됩니다.':
+    '원문 내려받기를 시작했습니다. 파일 저장을 확인한 뒤 앱 새로고침을 눌러 주세요.';
+};
+$('protocol-refresh').onclick=()=>{if(protocolSaved || protocolDownloaded)location.reload();};
 
 function showGateError(frame) {
   gateAttempts++;
@@ -527,8 +607,19 @@ $("admin-back").addEventListener("click", (e) => {
 });
 
 /* ---------------- boot ---------------- */
-mountCompose({ state, send, atlas });
-mountAdmin({ state, send, atlas, renderStatus });
+const openReader=mountReader({state,request});
+const compose=mountCompose({ state, request });
+mountSubmissionStatus({state,request,openReader});
+mountAdmin({ state, send, request, atlas, renderStatus, openReader });
+$('change-id').onclick=async()=>{
+  await compose.flush();
+  closing=true;clearTimeout(retryTimer);clearInterval(watchdog);
+  if(socket) {socket.onopen=socket.onmessage=socket.onclose=socket.onerror=null;socket.close();socket=null;}
+  for(const pending of requests.values()){clearTimeout(pending.timer);pending.reject(Object.assign(Error('ID가 바뀌었습니다.'),{code:'OFFLINE'}));}requests.clear();
+  document.dispatchEvent(new CustomEvent('atlas:identity-clear'));
+  sessionStorage.removeItem('atlas.id');state.identity=null;state.connected=false;
+  atlas.clear();show('gate');$('gate-id').value='';$('gate-submit').disabled=false;$('gate-error').hidden=true;$('gate-id').focus();
+};
 document.addEventListener("atlas:data", renderStatus);
 // The server updates its DuckDB relation before it broadcasts, so by the time a
 // frame lands here the rows behind the viewer are already the new ones.

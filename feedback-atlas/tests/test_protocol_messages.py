@@ -124,7 +124,7 @@ def test_the_unknown_id_error_suspects_a_typo_before_it_blames_the_roster():
 
 def test_an_oversized_frame_is_refused_before_it_is_parsed():
     """A 10 MB frame should cost a length check, not a JSON parse."""
-    assert parse_client_frame(b"[" + b"1," * 100000 + b"1]") == "TOO_LARGE"
+    assert parse_client_frame(b"[" + b"1," * 200000 + b"1]") == "TOO_LARGE"
     assert parse_client_frame('{"t":"ping"}', max_bytes=5) == "TOO_LARGE"
 
 

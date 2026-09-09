@@ -181,148 +181,35 @@ def _route_viewer(page, body: str) -> None:
     page.route("**/viewer.js", lambda route: route.fulfill(content_type="text/javascript", body=body))
 
 
-def test_webgpu_unavailable_keeps_the_map_visible_and_disables_the_button(live_server, browser):
-    context = browser.new_context(viewport={"width": 1680, "height": 980})
-    context.add_init_script("Object.defineProperty(navigator, 'gpu', { configurable: true, value: undefined });")
+@pytest.mark.parametrize("width", [390, 1680])
+def test_classroom_map_default_and_analysis_honestly_disabled(live_server, browser, width):
+    context = browser.new_context(viewport={"width": width, "height": 980})
     page = context.new_page()
     try:
         _enter(page, live_server.url)
-        page.wait_for_function("document.querySelector('#tab-viewer').disabled")
-
-        assert page.get_attribute("#map-card", "hidden") is None
-        assert page.get_attribute("#viewer-card", "hidden") == ""
-        assert page.is_disabled("#tab-viewer")
-        assert "WebGPU" in page.inner_text("#status-msg")
-        assert page.eval_on_selector_all("#map path[d], #map circle", "nodes => nodes.length") > 0
-    finally:
-        context.close()
-
-
-def test_narrow_viewport_can_open_the_viewer_manually(live_server, browser):
-    context = browser.new_context(viewport={"width": 390, "height": 844})
-    page = context.new_page()
-    _route_viewer(page, READY_VIEWER)
-    try:
-        _enter(page, live_server.url)
-        page.wait_for_function("window.refreshes === 0")
-
-        assert page.get_attribute("#tab-viewer", "aria-pressed") == "false"
-        page.click("#tab-viewer")
-        page.wait_for_function("window.refreshes > 0")
-
-        assert page.get_attribute("#tab-viewer", "aria-pressed") == "true"
-        assert page.get_attribute("#viewer-card", "hidden") is None
-        assert page.get_attribute("#map-card", "hidden") == ""
-    finally:
-        context.close()
-
-
-def test_reader_closed_choice_survives_server_restart(live_server, browser):
-    context = browser.new_context(viewport={"width": 1680, "height": 980})
-    page = context.new_page()
-    _route_viewer(page, READY_VIEWER)
-    try:
-        _enter(page, live_server.url)
-        page.wait_for_function("document.querySelector('#tab-viewer').getAttribute('aria-pressed') === 'true'")
-
-        page.click("#tab-viewer")
-        page.wait_for_function("document.querySelector('#tab-viewer').getAttribute('aria-pressed') === 'false'")
+        assert page.is_visible('#map-card')
+        assert page.is_hidden('#viewer-card')
+        assert page.is_disabled('#tab-viewer')
+        assert '필터·선택' in page.get_attribute('#tab-viewer', 'title')
         live_server.stop()
-        page.wait_for_function("document.querySelector('#conn-text').textContent.trim() !== '연결됨'", timeout=20_000)
         live_server.start()
-        page.wait_for_function("document.querySelector('#conn-text').textContent.trim() === '연결됨'", timeout=25_000)
-
-        assert page.get_attribute("#tab-viewer", "aria-pressed") == "false"
-        assert page.get_attribute("#map-card", "hidden") is None
+        page.wait_for_function("document.querySelector('#conn-text').textContent === '연결됨'")
+        assert page.is_visible('#map-card')
     finally:
         context.close()
 
 
-def test_delayed_capability_probe_can_be_cancelled_while_open_is_pending(live_server, browser):
+def test_sighup_updates_roster_and_mosaic_without_enabling_analysis(live_server, browser):
     context = browser.new_context(viewport={"width": 1680, "height": 980})
     page = context.new_page()
-    _route_viewer(page, STUB_VIEWER)
     try:
         _enter(page, live_server.url)
-        page.wait_for_function("window.probes.length === 1")
-
-        page.click("#tab-viewer")
-        page.wait_for_function("window.probes.length === 2")
-        page.click("#tab-viewer")
-        page.evaluate("window.probes.forEach(resolve => resolve(true))")
-        page.wait_for_timeout(200)
-
-        assert page.get_attribute("#tab-viewer", "aria-pressed") == "false"
-        assert page.get_attribute("#map-card", "hidden") is None
-        assert page.evaluate("window.refreshes") == 0
-    finally:
-        context.close()
-
-
-def test_delayed_default_probe_cannot_reopen_after_an_explicit_close(live_server, browser):
-    context = browser.new_context(viewport={"width": 1680, "height": 980})
-    page = context.new_page()
-    _route_viewer(page, STUB_VIEWER)
-    try:
-        _enter(page, live_server.url)
-        page.wait_for_function("window.probes.length === 1")
-
-        page.click("#tab-viewer")
-        page.wait_for_function("window.probes.length === 2")
-        page.evaluate("window.probes[1](true)")
-        page.wait_for_function("document.querySelector('#tab-viewer').getAttribute('aria-pressed') === 'true'")
-        page.click("#tab-viewer")
-        page.evaluate("window.probes[0](true)")
-        page.wait_for_timeout(200)
-
-        assert page.get_attribute("#tab-viewer", "aria-pressed") == "false"
-        assert page.get_attribute("#map-card", "hidden") is None
-    finally:
-        context.close()
-
-
-def test_sighup_refreshes_open_viewer_and_queries_the_renamed_target(live_server, browser):
-    context = browser.new_context(viewport={"width": 1680, "height": 980})
-    page = context.new_page()
-    _route_viewer(page, READY_VIEWER)
-    try:
-        _enter(page, live_server.url)
-        page.wait_for_function("window.refreshes > 0")
-        before = page.evaluate("window.refreshes")
-
-        live_server.roster.write_text(ROSTER.replace("대상1", "고친이름"), encoding="utf-8")
+        live_server.roster.write_text(ROSTER.replace('대상1', '고친이름'), encoding='utf-8')
         live_server.sighup()
-
-        page.wait_for_function(f"window.refreshes > {before}", timeout=10_000)
-        names = page.evaluate(
-            """async () => {
-                const res = await fetch('/data/query', {
-                    method: 'POST',
-                    headers: { 'content-type': 'application/json' },
-                    body: JSON.stringify({
-                        type: 'json',
-                        sql: 'SELECT DISTINCT target_name FROM dataset'
-                    }),
-                });
-                return res.json();
-            }"""
-        )
-        assert names == [{"target_name": "고친이름"}]
-    finally:
-        context.close()
-
-
-def test_viewer_failure_displays_error_text_without_executing_markup(live_server, browser):
-    context = browser.new_context(viewport={"width": 1680, "height": 980})
-    page = context.new_page()
-    _route_viewer(page, READY_VIEWER.replace(
-        "node.textContent = 'Mounted viewer';",
-        "throw new Error('<img src=x onerror=window.injected=true>');"))
-    try:
-        _enter(page, live_server.url)
-        page.wait_for_selector("#viewer-note:not([hidden])")
-        assert page.locator("#viewer-note img").count() == 0
-        assert "<img" in page.inner_text("#viewer-note")
-        assert not page.evaluate("Boolean(window.injected)")
+        page.wait_for_function("document.querySelector('#c-target').textContent.includes('고친이름')")
+        names = page.request.post(live_server.url+'data/query',data={
+            'type':'json', 'sql':'SELECT DISTINCT target_name FROM dataset'}).json()
+        assert names == [{'target_name':'고친이름'}]
+        assert page.is_disabled('#tab-viewer')
     finally:
         context.close()

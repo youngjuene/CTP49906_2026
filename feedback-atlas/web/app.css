@@ -259,3 +259,28 @@ mark { background:#f9ceaf; color:#111; border-radius:2px; padding:0 1px }
    * viewer is a dashboard and cannot usefully shrink below this. */
   .viewer-card { flex:none; height:60vh; min-height:320px }
 }
+
+/* Classroom submission recovery and accessible original reader. */
+#own-id {font-size:12px; overflow-wrap:anywhere}
+.bar {flex-wrap:wrap}
+#c-source button {white-space:nowrap; padding:8px 5px}
+#c-count, #c-summary {margin:6px 0}
+.context-notice {border:1px solid var(--hair);padding:10px;border-radius:6px}
+.submission-card {border-top:1px solid var(--hair);padding:10px 0;font-size:12px}
+.submission-card p {line-height:1.6}
+.result-browser {position:absolute;left:8px;top:8px;z-index:3;max-width:min(340px,70%);background:var(--panel);border:1px solid var(--hair);border-radius:5px;padding:6px;font-size:12px}
+.result-browser summary {cursor:pointer}
+#visible-results {max-height:23vh;overflow:auto}
+#visible-results button {font-size:12px;border-bottom:1px solid var(--hair)}
+#feedback-reader {color:var(--fg);background:var(--panel);border:1px solid var(--hair);border-radius:8px;max-width:760px;width:calc(100% - 28px);max-height:90dvh;padding:16px;overflow:auto}
+#feedback-reader::backdrop {background:rgba(0,0,0,.45)}
+#feedback-reader pre {white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;line-height:1.7;background:var(--card);padding:10px;border-radius:4px}
+#feedback-reader label {display:block;font-size:12px;margin:8px 0}
+#feedback-reader select {max-width:100%}
+#reader-metadata {display:flex;gap:12px;flex-wrap:wrap}
+.reader-unit {border-top:1px solid var(--hair);padding:8px 0}
+.unit-split-position {width:95px}
+.crow {flex-wrap:wrap}
+#draft-clear-confirm {white-space:normal}
+@media(max-width:1023px) {#adminpanel {width:auto}.statusbar {font-size:10px}.statusbar .scale {display:none}}
+.unit-text {width:100%;min-height:100px;resize:vertical;white-space:pre-wrap;line-height:1.7;cursor:text}

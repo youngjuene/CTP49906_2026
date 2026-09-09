@@ -1,4 +1,6 @@
 import os
+import json
+import sys
 import shutil
 import subprocess
 from pathlib import Path
@@ -21,7 +23,10 @@ def _fixture(tmp_path: Path, *, server_running: bool = False) -> Path:
     bin_dir.mkdir()
     venv_bin.mkdir(parents=True)
     shutil.copy2(REPO / "scripts" / "class.sh", scripts / "class.sh")
+    for name in ('class_readiness.py','backup_database.py'):
+        if (REPO/'scripts'/name).exists(): shutil.copy2(REPO/'scripts'/name,scripts/name)
     (root / "roster.csv").write_text("student_id,name\ns1,S1\n")
+    (root/'.test-shell-env').write_text('kill() { printf "%s\\n" "$*" >> "$ATLAS_TEST_ROOT/killed.log"; }\n')
     if server_running:
         (root / "uvicorn_started").touch()
 
@@ -39,8 +44,8 @@ fi
     _write_executable(
         bin_dir / "curl",
         """#!/usr/bin/env bash
-if [[ "$ATLAS_TEST_HEALTH" == "ok" ]]; then
-  printf '{"opinions":0,"connections":0}\\n'
+if [[ "$ATLAS_TEST_HEALTH" == "ok" || "$ATLAS_TEST_HEALTH" == "unreviewed" ]]; then
+  printf '%s\\n' "$ATLAS_TEST_HEALTH_JSON"
   exit 0
 fi
 exit 7
@@ -72,6 +77,8 @@ if [[ "$1" == "-m" && "$2" == "uvicorn" ]]; then
   echo "[fake-uvicorn] args:$*" >> "$ATLAS_TEST_ROOT/fake-uvicorn.log"
   touch "$ATLAS_TEST_ROOT/uvicorn_started"
   exit 0
+elif [[ "$1" == "scripts/class_readiness.py" || "$1" == "scripts/backup_database.py" ]]; then
+  exec "$ATLAS_TEST_PYTHON" "$@"
 elif [[ "$1" == "scripts/make_qr.py" ]]; then
   echo "qr($1,$2,$3)" > "$ATLAS_TEST_ROOT/fake-qr.log"
   mkdir -p "$(dirname "$3")"
@@ -84,18 +91,26 @@ exit 99
     return root
 
 
-def _run_class(root: Path, *, health: str = "ok") -> subprocess.CompletedProcess:
+def _run_class(root: Path, *, health: str = "ok", allow_unreviewed: bool = False, command: str = "start", processing=None) -> subprocess.CompletedProcess:
     env = os.environ.copy()
     env.update(
         {
             "PATH": f"{root / '.tmpbin'}:{env['PATH']}",
             "ATLAS_ADMIN_CODE": "teacher-secret",
             "ATLAS_TEST_ROOT": str(root),
+            "BASH_ENV":str(root/".test-shell-env"),
             "ATLAS_TEST_HEALTH": health,
+            "ATLAS_TEST_PYTHON":sys.executable,
+            "ATLAS_ALLOW_UNREVIEWED_SEMANTICS":"1" if allow_unreviewed else "0",
+            "ATLAS_TEST_HEALTH_JSON":json.dumps({"ok":True,"opinions":0,"connections":0,
+                "segmentation_reviewed":health!="unreviewed","model_warmed":True,
+                "roster_count":2,"class_context":{"week":2,"target_id":"s1","accepting":False},
+                "limits":{"max_raw_codepoints":20000,"max_pending":300,"automatic_units":64},
+                "processing":processing or {},"viewer":{"enabled":False}}),
         }
     )
     return subprocess.run(
-        ["bash", "scripts/class.sh", "start"],
+        ["bash", "scripts/class.sh", command],
         cwd=root,
         env=env,
         text=True,
@@ -140,3 +155,58 @@ def test_already_running_unhealthy_server_refuses_tunnel(tmp_path):
     assert "학생 공유 주소" not in result.stdout
     assert not (root / "cf_started").exists()
     assert not (root / ".run" / "url.txt").exists()
+
+
+def test_unreviewed_semantics_refuses_public_classroom_tunnel(tmp_path):
+    root=_fixture(tmp_path)
+    result=_run_class(root,health='unreviewed')
+    assert result.returncode!=0
+    assert '의미 분할 검토' in result.stdout
+    assert not (root/'cf_started').exists()
+
+
+def test_explicit_development_override_is_reported_without_claiming_quality(tmp_path):
+    root=_fixture(tmp_path)
+    result=_run_class(root,health='unreviewed',allow_unreviewed=True)
+    assert result.returncode==0,result.stderr+result.stdout
+    assert '개발용 예외' in result.stdout
+    assert '미승인' in result.stdout
+    assert (root/'cf_started').exists()
+
+
+def test_readiness_reports_roster_context_bounds_queue_and_viewer(tmp_path):
+    root=_fixture(tmp_path)
+    result=_run_class(root,processing={'queued':2,'failed':1})
+    assert result.returncode==0,result.stderr+result.stdout
+    for label in ('명단','주차','20000','대기','실패','고급 보기','모델 준비'):
+        assert label in result.stdout
+
+
+def test_stop_refuses_undrained_accepted_work(tmp_path):
+    root=_fixture(tmp_path,server_running=True)
+    result=_run_class(root,command='stop',processing={'queued':1})
+    assert result.returncode!=0
+    assert '처리 대기' in result.stdout
+
+
+def test_stop_creates_full_private_backup_before_shutdown(tmp_path):
+    import sqlite3
+    root=_fixture(tmp_path,server_running=True)
+    with sqlite3.connect(root/'atlas.db') as conn:
+        conn.execute('CREATE TABLE recovery(raw_text,capability_hash)')
+        conn.execute('INSERT INTO recovery VALUES(?,?)',('pending original retained','private-hash'))
+    result=_run_class(root,command='stop')
+    assert result.returncode==0,result.stdout+result.stderr
+    backups=list((root/'.run/backups').glob('*.db'))
+    assert len(backups)==1
+    with sqlite3.connect(backups[0]) as conn:
+        assert conn.execute('SELECT * FROM recovery').fetchone()==('pending original retained','private-hash')
+    assert (root/'killed.log').exists()
+
+
+def test_explicit_development_override_takes_precedence_over_dotenv_default(tmp_path):
+    root=_fixture(tmp_path)
+    (root/'.env').write_text('ATLAS_ALLOW_UNREVIEWED_SEMANTICS=0\n')
+    result=_run_class(root,health='unreviewed',allow_unreviewed=True)
+    assert result.returncode==0,result.stdout+result.stderr
+    assert '개발용 예외' in result.stdout

@@ -9,7 +9,8 @@
 #   scripts/class.sh start    서버 + 터널 기동, 공유할 주소 출력
 #   scripts/class.sh url      현재 주소 다시 보기 (슬라이드에 붙일 때)
 #   scripts/class.sh status   무엇이 돌고 있는지
-#   scripts/class.sh stop     둘 다 정지
+#   scripts/class.sh backup   비공개 SQLite 복구 백업
+#   scripts/class.sh stop     접수/대기 확인 + 복구 백업 후 정지
 #
 # 수업 시작 5분 전에 실행하세요. 첫 기동은 모델을 올리고 UMAP JIT를 예열합니다.
 set -uo pipefail
@@ -20,7 +21,12 @@ RUN=".run"
 mkdir -p "$RUN"
 SRV_LOG="$RUN/server.log"; CF_LOG="$RUN/tunnel.log"; URL_FILE="$RUN/url.txt"
 
+SEMANTIC_OVERRIDE_FROM_ENV="${ATLAS_ALLOW_UNREVIEWED_SEMANTICS:-}"
 [ -f .env ] && set -a && . ./.env && set +a
+if [ -n "$SEMANTIC_OVERRIDE_FROM_ENV" ]; then
+  export ATLAS_ALLOW_UNREVIEWED_SEMANTICS="$SEMANTIC_OVERRIDE_FROM_ENV"
+fi
+unset SEMANTIC_OVERRIDE_FROM_ENV
 
 srv_pid() { pgrep -f "uvicorn --factory src.server:create_app .*--port $PORT" | head -1; }
 cf_pid()  { pgrep -f "cloudflared tunnel --url http://localhost:$PORT" | head -1; }
@@ -47,6 +53,10 @@ start() {
     echo "서버는 이미 돌고 있습니다 (pid $(srv_pid))"
     health_ok || { echo "이미 실행 중인 서버가 /healthz에 응답하지 않아 터널을 열지 않습니다."; exit 1; }
   fi
+
+  local review_args=()
+  [ "${ATLAS_ALLOW_UNREVIEWED_SEMANTICS:-0}" = "1" ] && review_args+=(--allow-unreviewed)
+  curl -sf --max-time 2 "http://127.0.0.1:$PORT/healthz" |     .venv/bin/python scripts/class_readiness.py "${review_args[@]}" || exit 1
 
   if [ -z "$(cf_pid)" ]; then
     echo "터널 여는 중…"
@@ -76,23 +86,40 @@ url() {
   echo "  관리자          :  $u/#admin"
   echo "  슬라이드용 QR  :  $(pwd)/$RUN/qr.png"
   echo
-  echo "  주소는 재시작할 때마다 바뀝니다. 지금 슬라이드에 붙여두세요."
+  echo "  임시 주소가 바뀌면 이전 주소의 브라우저 초안을 자동 복구할 수 없습니다. 수업에는 고정 주소를 권장합니다."
 }
 
 status() {
   local s c
   s=$(srv_pid); c=$(cf_pid)
-  echo "  서버   : ${s:-정지} $( [ -n "$s" ] && curl -sf --max-time 2 "http://127.0.0.1:$PORT/healthz" \
-      | .venv/bin/python -c 'import json,sys;d=json.load(sys.stdin);print(f"· 의견 {d[\"opinions\"]}건 · 접속 {d[\"connections\"]}")' 2>/dev/null)"
+  echo "  서버   : ${s:-정지}"
+  if [ -n "$s" ]; then
+    curl -sf --max-time 2 "http://127.0.0.1:$PORT/healthz" | \
+      .venv/bin/python scripts/class_readiness.py --status-only || echo "서버 상태를 확인하지 못했습니다."
+  fi
   echo "  터널   : ${c:-정지} $( [ -s "$URL_FILE" ] && cat "$URL_FILE")"
 }
 
+backup() {
+  local destination="${1:-$RUN/backups/atlas-$(date -u +%Y%m%dT%H%M%SZ)-$$.db}"
+  .venv/bin/python scripts/backup_database.py --db "${ATLAS_DB:-atlas.db}" --out "$destination"
+}
+
 stop() {
+  if [ -n "$(srv_pid)" ]; then
+    if [ "${1:-}" != "--force" ]; then
+      curl -sf --max-time 2 "http://127.0.0.1:$PORT/healthz" | \
+        .venv/bin/python scripts/class_readiness.py --check-stop || return 1
+    else
+      echo "강제 종료: 처리 중인 작업은 다음 시작 때 복구합니다. 비공개 백업을 먼저 만듭니다."
+    fi
+    backup || { echo "복구 백업 실패: 서버를 종료하지 않습니다."; return 1; }
+  fi
   for p in $(cf_pid) $(srv_pid); do kill "$p" 2>/dev/null && echo "  pid $p 정지"; done
   rm -f "$URL_FILE"
 }
 
 case "${1:-start}" in
-  start) start ;; url) url ;; status) status ;; stop) stop ;;
-  *) echo "사용법: scripts/class.sh {start|url|status|stop}"; exit 2 ;;
+  start) start ;; url) url ;; status) status ;; backup) backup "${2:-}" ;; stop) stop "${2:-}" ;;
+  *) echo "사용법: scripts/class.sh {start|url|status|backup [파일]|stop [--force]}"; exit 2 ;;
 esac

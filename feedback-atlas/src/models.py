@@ -48,6 +48,11 @@ class Opinion:
     source: str        # "ai" | "human"
     week: int
     timestamp: str     # ISO-8601 UTC, 'Z'
+    submission_id: str | None = None
+    ordinal: int = 0
+    revision: int = 1
+    start_cp: int = 0
+    end_cp: int = 0
 
 
 def _now_iso() -> str:

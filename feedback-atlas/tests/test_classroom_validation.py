@@ -5,7 +5,8 @@ import io
 
 import pytest
 
-from test_server_routes import CODE
+from test_server_routes import CODE, _wait_published
+from src.protocol import PROTOCOL_VERSION
 
 pytest_plugins = ["test_server_routes"]
 
@@ -39,7 +40,7 @@ def test_oversized_http_requests_are_refused(client, path):
 
 def test_unicode_wrong_websocket_code_returns_an_error(client):
     with client.websocket_connect("/ws/admin") as ws:
-        ws.send_json({"t": "hello", "protocol": 1, "code": "틀린 코드 🔒"})
+        ws.send_json({"t": "hello", "protocol": PROTOCOL_VERSION, "code": "틀린 코드 🔒"})
         assert ws.receive_json()["code"] == "BAD_ACCESS_CODE"
 
 
@@ -47,13 +48,14 @@ def test_unicode_wrong_websocket_code_returns_an_error(client):
                                  "+1+1", "-1+1", "@SUM(1,2)"])
 def test_spreadsheet_export_treats_opinions_as_text(client, text):
     with client.websocket_connect("/ws") as ws:
-        ws.send_json({"t": "hello", "protocol": 1, "id": "writer1"})
+        ws.send_json({"t": "hello", "protocol": PROTOCOL_VERSION, "id": "writer1"})
         ws.receive_json()
         ws.receive_json()
-        ws.send_json({"t": "submit", "target_id": "target1", "text": text,
+        ws.send_json({"t": "submit", "owner_capability": "test-csv-capability-" * 3, "context_revision": 0, "target_id": "target1", "text": text,
                       "nonce": "csv-test"})
-        assert ws.receive_json()["t"] == "ack"
-    response = client.post("/api/export.csv", json={"code": CODE})
+        assert ws.receive_json()["t"] == "submission_accepted"
+    _wait_published(client, 1)
+    response = client.post("/api/export.csv", json={"code": CODE, "scope": "all", "expected_data_rev": client.app.state.atlas.state.rev})
     rows = list(csv.DictReader(io.StringIO(response.content.decode("utf-8-sig"))))
     assert rows[0]["text"] == "'" + text
     assert client.app.state.atlas.state.opinions[0].text == text

@@ -189,6 +189,7 @@ export class Atlas {
       node.setAttribute("fill", fill);
       node.setAttribute("opacity", opacity);
       node.style.pointerEvents = vis ? "auto" : "none";
+      node.style.display = vis ? "" : "none";
       // Their affordance exactly: a hollow ring at stroke-width 2, filled with
       // the category colour, so a selected point still reads as its category.
       if (this.selected.has(id)) {
@@ -225,7 +226,7 @@ export class Atlas {
   _hits(shape) {
     const out = [];
     for (const p of this.points.values()) {
-      if (!this.visible(p) || this.dimmed(p)) continue;
+      if (!this.visible(p)) continue;
       const [cx, cy] = this.toScreen(p.x, p.y);
       if (shape.kind === "rect") {
         if (cx >= shape.x0 && cx <= shape.x1 && cy >= shape.y0 && cy <= shape.y1)
@@ -369,6 +370,7 @@ export class Atlas {
       dragging = false; svg.classList.remove("dragging");
       if (e.pointerId != null && svg.hasPointerCapture?.(e.pointerId))
         svg.releasePointerCapture(e.pointerId);
+      if(e.type === 'pointercancel') {this.gOverlay.replaceChildren();return;}
       if (this.mode === "pan") {
         // A click that did not drag is a pick, not a pan.
         if (moved < 4) {

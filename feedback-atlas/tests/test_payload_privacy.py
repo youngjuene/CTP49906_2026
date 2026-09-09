@@ -55,7 +55,7 @@ def _op(**kw):
     return Opinion(**base)
 
 
-def test_participant_point_emits_exactly_the_nine_public_keys():
+def test_participant_point_emits_exactly_the_twelve_public_keys():
     """The key set is spelled out here, not imported from PARTICIPANT_KEYS.
 
     Importing the constant would let a single edit widen the contract and the
@@ -71,6 +71,9 @@ def test_participant_point_emits_exactly_the_nine_public_keys():
     are computed from text the participant can read. Nothing in it is derived from
     who wrote anything, which is the only question this file asks.
 
+    V2 adds submission_id, ordinal and revision to link units to their public
+    original and order. None encodes the submitter or confers correction rights.
+
     The test below is the one that would catch it if that reasoning were wrong: it
     searches the serialised bytes of a frame carrying a populated neighbours
     column, so a reviewer id smuggled inside the nested lists fails there.
@@ -78,7 +81,7 @@ def test_participant_point_emits_exactly_the_nine_public_keys():
     point = participant_point(_op(), (0.5, -0.25))
     assert set(point) == {
         "id", "target_id", "text", "source", "week", "timestamp", "x", "y",
-        "neighbors",
+        "neighbors", "submission_id", "ordinal", "revision",
     }
     assert PARTICIPANT_KEYS == set(point)  # and the constant still describes reality
 

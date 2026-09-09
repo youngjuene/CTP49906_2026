@@ -191,3 +191,75 @@ if __name__ == "__main__":
             print("FAIL", fn.__name__, "->", type(e).__name__, e)
     print(f"\n{len(fns) - fails} passed, {fails} failed")
     sys.exit(1 if fails else 0)
+
+
+def test_archive_preserves_v2_lineage_and_unpublished_originals_without_handles(tmp_path):
+    import json,sqlite3
+    from src.submissions import SubmissionRequest,FeedbackSpan,SplitResult
+    db,roster=_build(tmp_path,n=2)
+    store=Store(str(db));store.migrate()
+    raw='  한글 👩🏽‍💻 첫 문장.\n\n음악이 큽니다.  '
+    r=store.accept_submission(SubmissionRequest(WRITERS[0],TARGETS[0],1,'human',raw,'private-nonce','secret-capability-'*3,0))
+    boundary=raw.index('음악')
+    store.stage_revision(r.submission_id,1,SplitResult((FeedbackSpan(0,boundary),FeedbackSpan(boundary,len(raw))),'test-semantic'),('human','ai'))
+    store.correct_submission(r.submission_id,1,'private-action',WRITERS[0],'secret-capability-'*3,
+        (FeedbackSpan(0,len(raw)),),('human',),TARGETS[1],2)
+    store.job_failed(r.submission_id,2,transient=False)
+    store.set_meta('private_import_secret','sensitive-meta')
+    store.close()
+    before=hashlib.sha256(db.read_bytes()).hexdigest()
+    out=tmp_path/'v2-archive'
+    assert deidentify(['--db',str(db),'--roster',str(roster),'--out',str(out),'--targets'])==0
+    assert hashlib.sha256(db.read_bytes()).hexdigest()==before
+    assert (out/'archive.db').exists()
+    originals=_rows(out/'originals.csv')
+    assert len(originals)==3
+    assert any(row['state']=='failed' for row in originals)
+    with sqlite3.connect(out/'archive.db') as conn:
+        conn.row_factory=sqlite3.Row
+        assert conn.execute('PRAGMA integrity_check').fetchone()[0]=='ok'
+        assert not conn.execute('PRAGMA foreign_key_check').fetchall()
+        assert conn.execute('SELECT count(*) FROM submission_actions').fetchone()[0]==0
+        assert conn.execute('SELECT count(*) FROM submission_receipts').fetchone()[0]==0
+        assert conn.execute('SELECT count(*) FROM submissions WHERE nonce IS NOT NULL OR capability_hash IS NOT NULL OR request_hash IS NOT NULL').fetchone()[0]==0
+        parent=conn.execute("SELECT * FROM submissions WHERE state='failed'").fetchone()
+        assert parent['raw_text']==raw and parent['id'] != r.submission_id
+        assert parent['reviewer_id'].startswith('R') and parent['target_id'].startswith('P')
+        assert conn.execute('SELECT count(*) FROM submission_revisions WHERE submission_id=?',(parent['id'],)).fetchone()[0]==2
+        for unit in conn.execute('SELECT u.*,o.text,o.reviewer_id FROM submission_units u JOIN opinions o ON o.id=u.opinion_id WHERE u.submission_id=?',(parent['id'],)):
+            assert unit['text']==raw[unit['start_cp']:unit['end_cp']]
+            assert unit['reviewer_id']==parent['reviewer_id']
+    archive_bytes=(out/'archive.db').read_bytes()
+    for secret in [b'private-nonce',b'private-action',b'secret-capability',b'sensitive-meta',WRITERS[0].encode()]:
+        assert secret not in archive_bytes
+
+
+def test_pending_only_archive_does_not_drop_accepted_feedback(tmp_path):
+    from src.submissions import SubmissionRequest
+    db,roster=_build(tmp_path,n=0)
+    store=Store(str(db));store.migrate()
+    store.accept_submission(SubmissionRequest(WRITERS[0],TARGETS[0],1,'ai','아직 처리 중인 원문','pending-nonce','s'*40,0))
+    store.close()
+    out=tmp_path/'pending-archive'
+    assert deidentify(['--db',str(db),'--roster',str(roster),'--out',str(out)])==0
+    assert len(_rows(out/'originals.csv'))==1
+    assert _rows(out/'archive.csv')==[]
+
+
+def test_target_codes_cannot_cascade_when_roster_ids_look_like_codes(tmp_path,monkeypatch):
+    import sqlite3
+    from scripts import deidentify as module
+    db,roster=_build(tmp_path,n=0)
+    store=Store(str(db));store.migrate()
+    for target in ('P01','P02'):
+        op=new_opinion(reviewer_id=WRITERS[0],target_id=target,text=f'{target} feedback')
+        store.insert_opinion(op,text_hash(op.text))
+    store.close()
+    def reversed_codes(ids,prefix,rng):
+        return {value:f'{prefix}{i:02}' for i,value in enumerate(sorted(set(ids),reverse=True),1)}
+    monkeypatch.setattr(module,'assign_codes',reversed_codes)
+    out=tmp_path/'codes'
+    deidentify(['--db',str(db),'--roster',str(roster),'--out',str(out),'--targets'])
+    with sqlite3.connect(out/'archive.db') as conn:
+        rows=conn.execute('SELECT r.target_id,o.target_id FROM submission_revisions r JOIN submission_units u ON u.submission_id=r.submission_id AND u.revision=r.revision JOIN opinions o ON o.id=u.opinion_id').fetchall()
+        assert all(revision_target==unit_target for revision_target,unit_target in rows)

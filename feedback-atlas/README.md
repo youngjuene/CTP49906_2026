@@ -6,17 +6,22 @@
 
 A classroom tool for the CTP49906 *Multimodal AI* workshop. During a student
 presentation, attendees open a link on their phones and write what they think.
-Each opinion is embedded **locally** — no API call — projected to 2D, and pushed
-to every connected screen within a second.
+Participants can paste a whole response of up to 20,000 Unicode code points.
+The original is saved durably before processing; derived topic units are embedded
+**locally**, projected to 2D, and published together. Processing time depends on
+input length and the queue; the UI distinguishes saved, processing and ready.
 
-Colour encodes **which student the feedback is about**; shape encodes **AI or
-human**. That second channel is the point: the session asks how far a model can
+Colour encodes **which student the feedback is about**; shape encodes **feedback
+source: AI-generated or human-written**, independently of who submits it. AI is
+the intentional default; using AI to process human-written feedback does not
+change its source. The session asks how far a model can
 describe subjective experience, and this puts both kinds of comment in one
 semantic space so the room can see whether they land in the same place.
 
-Two front ends sit on that one corpus: a hand-written map built for a phone and a
-projector, and Apple's Embedding Atlas viewer for the table, the linked charts and
-the cross-filtering. Both read the same rows.
+The classroom map serves phones, laptops and projectors. The optional Embedding
+Atlas analysis viewer remains disabled until it supports the same filters and
+selection semantics. Automatic semantic splitting is also **not approved for
+classroom rollout**: see the [implementation and release evidence](docs/qa/feedback-atlas-release.md).
 
 The specification is [`realtime-feedback-atlas-prd.md`](realtime-feedback-atlas-prd.md).
 
@@ -27,8 +32,9 @@ against a roster the instructor registered in advance, and that is the whole gat
 Registration is strict — an id that is not on the list does not get in.
 
 Not anonymous, and not pretending to be. `reviewer_id` is stored on the server
-and never crosses a participant connection. Admin mode, behind a fixed access
-code, is the only surface that shows who wrote what.
+and is excluded from public map payloads. Each participant receives their own
+private identity and ownership records; admin mode, behind a fixed access code,
+can attribute other people's submissions.
 
 ## Setup
 
@@ -138,11 +144,16 @@ preview the map yourself over SSH, and it does nothing for thirty phones.
 ```bash
 scripts/class.sh start     # server + tunnel, both detached; prints URL and QR
 scripts/class.sh url       # the URL and QR again, for the slide
-scripts/class.sh status    # what is running, how many opinions, who is connected
-scripts/class.sh stop
+scripts/class.sh status    # roster/context, limits, queue, model and semantic readiness
+scripts/class.sh backup    # private consistent SQLite snapshot, including unpublished work
+scripts/class.sh stop      # requires closed intake and resolved queue; backs up before stopping
 ```
 
-Run it five minutes early. `setsid` on both processes is the load-bearing part:
+The current semantic release gate is **NO-GO**: synthetic held-out single-topic preservation is only 37.5%, and independent human judgments are absent. `start` refuses an unreviewed public classroom tunnel. `ATLAS_ALLOW_UNREVIEWED_SEMANTICS=1 scripts/class.sh start` is an explicit development override, not classroom approval. See [segmentation evaluation](docs/qa/segmentation-evaluation.md).
+
+Use one database per class and a stable HTTPS origin. A changed quick-tunnel origin cannot access the previous origin's saved browser draft/outbox. Recover from the original browser origin or preserve the draft text before changing URLs.
+
+Once classroom release gates pass, run it five minutes early. `setsid` on both processes is the load-bearing part:
 started from a plain shell, `cloudflared` dies the moment the laptop sleeps or the
 wifi drops, and the address the room is looking at disappears mid-session. The
 server survives that on its own; the tunnel does not.
@@ -160,19 +171,17 @@ the app to the internet rather than to the room, over plain HTTP, with the admin
 endpoint on the same port. The tunnel gives HTTPS and opens no port, and the QR
 makes its length irrelevant.
 
-**For the room, use a Cloudflare quick tunnel.** No account, one command, and it
-hands back an HTTPS URL any device can open from any network:
+**A Cloudflare quick tunnel is useful for temporary checks.** It needs no account and provides HTTPS, but a stable configured HTTPS endpoint is preferable for classroom draft continuity:
 
 ```bash
 cloudflared tunnel --url http://localhost:8100
 # → https://<random-words>.trycloudflare.com   share this, or a QR of it
 ```
 
-Verified end to end on this codebase: HTTPS page load, **WebSocket connected
-through the tunnel**, snapshot delivered, a submit round-tripped and acknowledged,
-and no reviewer id in the participant page — all from a phone-sized client. The
-URL changes on every restart, so generate it before the session and put it on a
-slide, not during.
+The earlier v1 tunnel check covered HTTPS, WebSocket connection and submission
+from a phone-sized client. The v2 flow has not been checked on a physical phone
+through the actual classroom URL. Quick-tunnel URLs change on restart, so a new
+origin also loses access to the old origin's browser storage.
 
 This is also why the app speaks WebSocket rather than Server-Sent Events:
 `trycloudflare.com` buffers `text/event-stream`, so SSE never arrives through it.
@@ -206,9 +215,10 @@ the real component, not a lookalike: a sortable table, distribution charts for
 every column that cross-filter each other, SQL predicates, full-text search, and
 its WebGPU embedding view with density contours and automatic cluster labels.
 
-Toggle it with the panel button in the left rail. It turns itself on at startup on
-a wide screen with a capable browser, and stays off on a phone, where the job is
-to write a sentence rather than to explore a dashboard.
+The analysis button currently explains why this viewer is unavailable. The
+classroom map remains active at every width. Bundled worker URLs are repaired and
+tested, but full WebGPU rendering and shared filter/selection behavior have not
+passed the release requirements.
 
 **It is a Mosaic application, so it queries rather than receives.** The server
 keeps an in-memory DuckDB holding the corpus and answers `POST /data/query`, which
@@ -245,49 +255,60 @@ no server at all:
 embedding-atlas feedback-atlas.csv --text text --x x --y y
 ```
 
-## Bulk AI import (PRD 4.3)
+## Bulk AI import (v2)
 
-The submit path is rate-limited to about one message a second per connection —
-right for people, wrong for a script. `scripts/seed_ai_opinions.py` writes to the
-database instead:
+`scripts/seed_ai_opinions.py` is an **offline administrative importer**. Stop the server first; imports are durable database writes and the next server startup drains them using its single shared model worker. This script loads no model and has no online bulk-API mode.
 
 ```bash
-python scripts/seed_ai_opinions.py comments.csv \
+.venv/bin/python scripts/seed_ai_opinions.py comments.csv \
   --db atlas.db --roster roster.csv --reviewer instructor --dry-run
-python scripts/seed_ai_opinions.py comments.csv \
-  --db atlas.db --roster roster.csv --reviewer instructor
-kill -USR1 $(pgrep -f 'uvicorn.*src.server')   # re-read without a restart
+.venv/bin/python scripts/seed_ai_opinions.py comments.csv \
+  --db atlas.db --roster roster.csv --reviewer instructor --segment
 ```
 
-Input is `target_id,text[,source][,week]` as CSV or JSONL. Rows whose target
-cannot be resolved are skipped and listed, never guessed at. Use `--dry-run`
-first: opinion ids are generated per row, so importing the same file twice
-imports it twice.
+Input is CSV or JSONL with `target_id,text[,source][,week]`. Source defaults to AI and can be overridden per row. The default mode explicitly treats each row as an already-unitized opinion; `--segment` asks the common worker to choose semantic boundaries. Both preserve the exact raw string, including quoted CSV newlines and Unicode decomposition, and neither publishes a point before its vector and coordinates exist. The limit is 20,000 raw code points per parent.
 
-## After the semester (PRD 6, 7)
+Re-running identical file bytes, row positions, effective metadata and mode is idempotent. Identical text in different rows remains separate. Changing the file or effective metadata/mode denotes a new import. Owner capabilities are generated randomly, stored only as hashes and never printed; imported originals are managed through instructor authorization.
+
+The queue limit is 300 pending parents (`--max-pending` may lower it). A full queue returns nonzero with accepted/replayed/skipped counts; accepted rows stay saved. Drain the queue, then rerun the identical file and options to accept remaining rows. `--dry-run` validates without opening or creating the database; replay and current capacity are not checked in dry runs.
+
+## Closing, backup and migration
+
+Close intake in the instructor context controls, check pending/failed originals, resolve or explicitly preserve failures, export the instructor recovery CSV, then run `scripts/class.sh stop`. It checks the queue and writes a private full SQLite recovery snapshot before stopping processes. `stop --force` still creates a backup, but permits unresolved work for restart recovery; it cannot recover text that never left a browser.
 
 ```bash
-python scripts/deidentify.py --db atlas.db --roster roster.csv --out archive/
+.venv/bin/python scripts/backup_database.py \
+  --db atlas.db --out recovery/atlas-before-upgrade.db
 ```
 
-Writes `archive/archive.csv` with every id replaced by a random code, and
-`archive/mapping.csv` holding the codes. It never touches the source database.
+This uses SQLite's backup API, including committed WAL content and pending originals, revision history and owner credentials. The output is mode 0600 and existing destinations are refused. Keep recovery backups private. Do not copy only `atlas.db` while a WAL-mode server is active.
 
-Keep the two apart. The mapping is the only thing that re-identifies the archive;
-destroy it, or store it where the archive is not. Codes are random and shuffled,
-not derived from the ids — a hash or a roster-order number is reversible by
-anyone who has the class list.
+A v1-to-v2 migration creates a private, consistent `atlas.db.pre-v2-backup` before changing schema. If that filename exists, it creates a fresh timestamp-suffixed copy; the successful migration records its actual path in `meta.migration_backup_path`. Validate a copied database first and retain matching code. Before upgrading old loaded clients, preserve unsent v1 drafts manually and resolve in-flight submissions; old JavaScript cannot acquire the new outbox behavior retroactively.
 
-**The archive is pseudonymous, not anonymous.** The opinions themselves are
-unchanged, and people write things like "제가 발표에서 말했듯이". PRD 11 is right
-that the real control for research use is consent obtained separately from
-participation, with analysis only after grades are final. This script is the
-substitution step, not the ethics.
+For rollback, close intake and stop the server, retain a full current v2 backup plus recovery exports of **all** post-upgrade originals, and account for accepted new work before using an older snapshot. Restore to an unused filename with the matching old code, rather than overwriting the upgraded database:
+
+```bash
+.venv/bin/python scripts/backup_database.py \
+  --db recovery/atlas-before-upgrade.db --out restored-v1.db
+# Configure matching old code to use ATLAS_DB=restored-v1.db before starting it.
+```
+
+## After the semester: pseudonymous archive
+
+```bash
+.venv/bin/python scripts/deidentify.py \
+  --db atlas.db --roster roster.csv --out archive/ --targets
+```
+
+The source is opened read-only and never migrated in place. The script produces `archive.db` with all parent/revision/unit lineage, `archive.csv` with published units, and `originals.csv` including pending/failed/withdrawn parents. It remaps opaque parent/unit IDs consistently, replaces reviewer identities with random codes, optionally codes targets, removes nonce/capability/request/action handles and private metadata, then compacts and verifies the copied database. SQLite retains exact original strings; CSV cells receive spreadsheet-safety escaping.
+
+`mapping.csv` is a separate private roster-code mapping. Keep it elsewhere or destroy it. Recovery backups contain credentials; these sanitized archives do not, and must not be used as classroom recovery databases. **The archive is pseudonymous, not anonymous:** unchanged free text, timestamps and retained project details may identify people. This script cannot establish consent or remove identifying information from prose automatically.
 
 ## Tests
 
 ```bash
-python -m pytest feedback-atlas
+cd feedback-atlas
+.venv/bin/python -m pytest -q
 ```
 
 CPU only, no model weights, no network — the same rule as the rest of the repo.
@@ -314,9 +335,10 @@ only hoped for:
 Browser lifecycle checks are opt-in: from `feedback-atlas/`, run
 `.venv/bin/python -m pytest tests/browser_viewer.py -q` with Playwright and its
 Chromium browser installed. They use a temporary database and a local test server
-to check the WebGPU fallback, viewer choices during reconnects and delayed probes,
-and roster reload notifications. The viewer is stubbed for lifecycle checks;
-these tests do not verify hardware rendering.
+to check the disabled analysis control, classroom map continuity and live roster
+updates. Full submission, recovery, correction and export commands and measured
+results are in the [release report](docs/qa/feedback-atlas-release.md). Browser
+scenarios use synthetic data and a fake model; semantic quality is tested separately.
 
 ## Known limits
 

@@ -100,3 +100,13 @@ class Hub:
                 with contextlib.suppress(Exception):
                     await conn.socket.close()
             await self.leave(conn_id)
+
+    async def notify_submission(self, submission_id, store):
+        """Only sockets which proved ownership (or admin authority) subscribe."""
+        for cid, conn in list(self._conns.items()):
+            if submission_id not in conn.meta.get('submissions', set()):
+                continue
+            detail = store.submission_detail(submission_id, admin=True)
+            if conn.channel is Channel.PARTICIPANT:
+                detail = {k: v for k, v in detail.items() if k != 'reviewer_id'}
+            await self.send(cid, {'t': 'submission_detail', **detail})

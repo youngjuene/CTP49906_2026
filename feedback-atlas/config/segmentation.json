@@ -1,0 +1,9 @@
+{
+  "algorithm": "adjacent-context-v1",
+  "threshold": 0.6,
+  "context_candidates": 1,
+  "max_units": 64,
+  "prompt": "similarity",
+  "classroom_enabled": false,
+  "annotation_status": "synthetic-only-human-review-required"
+}

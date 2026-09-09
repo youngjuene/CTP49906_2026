@@ -68,15 +68,16 @@ def test_live_submission_unicode_privacy_filters_and_theme(live_server, context)
     page.wait_for_function("document.querySelector('#c-text').value === ''")
     observer.wait_for_function("document.querySelectorAll('#map [data-id]').length === 4")
     frames = [json.loads(frame) for frame in received]
-    assert "writer1" not in json.dumps(frames)
+    public_frames = [frame for frame in frames if frame["t"] in ("snapshot", "delta")]
+    assert "writer1" not in json.dumps(public_frames)
     points = [p for frame in frames for p in frame.get("points", frame.get("added", []))]
-    assert any(p["text"] == opinion.replace("\n", " ") and p["target_id"] == "target2" and p["week"] == 3
+    assert any(p["text"] == opinion and p["target_id"] == "target2" and p["week"] == 3
                and p["source"] == "human" for p in points)
     assert not observer.evaluate("Boolean(window.qaInjected)")
     coords = observer.locator("#map [data-id]").evaluate_all(
         "nodes => nodes.map(n => [n.dataset.id,n.getAttribute('cx'),n.getAttribute('cy'),n.getAttribute('d')])")
     observer.uncheck('#weeks input[value="3"]')
-    assert "3개 표시 / 전체 4개" in observer.inner_text("#status-count")
+    assert "의견 3개 · 원문 3건 / 전체 의견 4개" in observer.inner_text("#status-count")
     observer.check('#weeks input[value="3"]')
     assert coords == observer.locator("#map [data-id]").evaluate_all(
         "nodes => nodes.map(n => [n.dataset.id,n.getAttribute('cx'),n.getAttribute('cy'),n.getAttribute('d')])")
@@ -108,7 +109,7 @@ def test_lost_ack_recovers_without_duplicate_submission(live_server, context, re
         window.WebSocket = class extends RealSocket {
           set onmessage(handler) {
             super.onmessage = event => {
-              if (window.dropNextAck && JSON.parse(event.data).t === 'ack') {
+              if (window.dropNextAck && JSON.parse(event.data).t === 'submission_accepted') {
                 window.dropNextAck = false;
                 window.ackDropped = true;
                 this.close();
@@ -122,6 +123,7 @@ def test_lost_ack_recovers_without_duplicate_submission(live_server, context, re
     page = context.new_page()
     enter(page, live_server.url)
     page.evaluate("window.dropNextAck = true")
+    page.select_option("#c-target", "target1")
     page.fill("#c-text", "확인 응답이 끊겨도 한 번만 저장합니다.")
     page.click("#c-submit")
     page.wait_for_function("window.ackDropped")

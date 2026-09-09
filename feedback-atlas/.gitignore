@@ -25,3 +25,9 @@ roster.csv
 # web/vendor/ is its committed output and MUST stay tracked -- it is what makes
 # the frontend work with no npm, no bundler and no network at class time.
 frontend/node_modules/
+
+# Migration recovery copies contain original text and private ownership state.
+*.pre-v2-backup*
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm

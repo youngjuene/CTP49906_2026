@@ -21,13 +21,18 @@ full re-encode of the semester.
 
 import sqlite3
 import threading
+import uuid
+import time
+from pathlib import Path
+from contextlib import contextmanager
 from collections.abc import Iterable, Mapping, Sequence
 
 import numpy as np
 
 from src.models import Opinion
+from src.submission_store import SubmissionStoreMixin, SUBMISSION_SCHEMA
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS opinions (
@@ -82,7 +87,7 @@ def blob_to_vector(b: bytes, dim: int) -> np.ndarray:
     return arr
 
 
-class Store:
+class Store(SubmissionStoreMixin):
     def __init__(self, path: str):
         self.path = str(path)
         # check_same_thread=False because the recompute runs in a worker thread
@@ -92,23 +97,47 @@ class Store:
         self._db.row_factory = sqlite3.Row
         self._lock = threading.RLock()
 
+    @contextmanager
+    def transaction(self):
+        with self._lock:
+            self._db.execute("BEGIN IMMEDIATE")
+            try:
+                yield
+                self._db.commit()
+            except BaseException:
+                self._db.rollback()
+                raise
+
     def migrate(self) -> None:
         with self._lock:
-            # WAL so a read during an in-flight write does not block. Note for
-            # deployment: WAL is unreliable on NFS/SMB -- keep the db on local disk.
+            has_meta = self._db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='meta'").fetchone()
+            found = self.get_meta('schema_version') if has_meta else None
+            if found is not None and int(found) not in (1, SCHEMA_VERSION):
+                raise RuntimeError(f'database schema {found}, code expects {SCHEMA_VERSION}')
+            backup_path = None
+            if found == '1' and self.path != ':memory:':
+                from scripts.backup_database import backup_database
+                backup_path = self.path + '.pre-v2-backup'
+                if Path(backup_path).exists():
+                    backup_path += '.' + str(time.time_ns())
+                backup_database(Path(self.path), Path(backup_path))
             self._db.execute("PRAGMA journal_mode=WAL")
             self._db.execute("PRAGMA synchronous=NORMAL")
-            self._db.executescript(_SCHEMA)
-            self._db.commit()
-            found = self.get_meta("schema_version")
-            if found is None:
-                self.set_meta("schema_version", str(SCHEMA_VERSION))
-            elif int(found) != SCHEMA_VERSION:
-                raise RuntimeError(
-                    f"database at {self.path} is schema v{found}, code expects "
-                    f"v{SCHEMA_VERSION}; move it aside rather than letting it be "
-                    "read with the wrong shape"
-                )
+            self._db.execute("PRAGMA foreign_keys=ON")
+            with self.transaction():
+                for statement in (_SCHEMA + SUBMISSION_SCHEMA).split(';'):
+                    if statement.strip():
+                        self._db.execute(statement)
+                if backup_path:
+                    self._db.execute("INSERT INTO meta VALUES('migration_backup_path',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (backup_path,))
+                rows = self._db.execute("SELECT * FROM opinions WHERE id NOT IN (SELECT opinion_id FROM submission_units)").fetchall()
+                for row in rows:
+                    op = Opinion(**{k: row[k] for k in ('id','reviewer_id','target_id','text','source','week','timestamp')})
+                    receipt = self._db.execute('SELECT nonce FROM submission_receipts WHERE opinion_id=? LIMIT 1', (op.id,)).fetchone()
+                    self._legacy_parent(op, receipt['nonce'] if receipt else None)
+                self._db.execute("INSERT INTO meta VALUES('schema_version',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (str(SCHEMA_VERSION),))
+                self._db.execute("INSERT OR IGNORE INTO meta VALUES('dataset_id',?)", ('d_' + uuid.uuid4().hex,))
+                self._db.execute("INSERT OR IGNORE INTO meta VALUES('data_rev',?)", (str(self._db.execute('SELECT COUNT(*) FROM opinions').fetchone()[0]),))
 
     def close(self) -> None:
         with self._lock:
@@ -130,16 +159,12 @@ class Store:
 
     # --- opinions -----------------------------------------------------------
     def insert_opinion(self, op: Opinion, text_hash: str) -> bool:
-        """False when this id is already stored -- a retry over a flaky tunnel,
-        not a second opinion."""
-        with self._lock:
-            cur = self._db.execute(
-                "INSERT OR IGNORE INTO opinions"
-                "(id,reviewer_id,target_id,text,source,week,timestamp,text_hash)"
-                " VALUES(?,?,?,?,?,?,?,?)",
-                (op.id, op.reviewer_id, op.target_id, op.text, op.source,
-                 op.week, op.timestamp, text_hash))
-            self._db.commit()
+        with self.transaction():
+            cur = self._db.execute("INSERT OR IGNORE INTO opinions VALUES(?,?,?,?,?,?,?,?)",
+                (op.id,op.reviewer_id,op.target_id,op.text,op.source,op.week,op.timestamp,text_hash))
+            if cur.rowcount:
+                self._legacy_parent(op)
+                self._bump_rev()
             return cur.rowcount > 0
 
     def submission_receipt(self, reviewer_id: str, nonce) -> str | None:
@@ -187,6 +212,9 @@ class Store:
                         "INSERT INTO submission_receipts"
                         "(reviewer_id,nonce,opinion_id) VALUES(?,?,?)",
                         (op.reviewer_id, nonce, op.id))
+                if cur.rowcount > 0:
+                    self._legacy_parent(op, nonce)
+                    self._bump_rev()
                 self._db.commit()
                 return cur.rowcount > 0, op.id
             except Exception:
@@ -195,11 +223,12 @@ class Store:
 
     def all_opinions(self) -> list[Opinion]:
         with self._lock:
-            rows = self._db.execute(
-                "SELECT * FROM opinions ORDER BY timestamp, id").fetchall()
-        return [Opinion(id=r["id"], reviewer_id=r["reviewer_id"],
-                        target_id=r["target_id"], text=r["text"], source=r["source"],
-                        week=r["week"], timestamp=r["timestamp"]) for r in rows]
+            rows = self._db.execute("""SELECT o.*,u.submission_id,u.ordinal,u.revision,u.start_cp,u.end_cp
+                FROM opinions o JOIN submission_units u ON u.opinion_id=o.id
+                JOIN submissions s ON s.id=u.submission_id
+                WHERE s.state!='withdrawn' AND u.revision=s.published_revision
+                ORDER BY o.timestamp,u.submission_id,u.ordinal""").fetchall()
+        return [self._opinion_row(row) for row in rows]
 
     # --- embeddings ---------------------------------------------------------
     def get_embeddings(

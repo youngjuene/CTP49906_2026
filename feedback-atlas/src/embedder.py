@@ -127,6 +127,72 @@ class SentenceTransformerEmbedder:
         return out
 
 
+    @property
+    def max_seq_length(self) -> int:
+        return int(self._model.max_seq_length)
+
+    def _task_prompt(self, purpose: str) -> tuple[str | None, str]:
+        if purpose not in ("clustering", "similarity"):
+            raise ValueError("unsupported embedding purpose")
+        prompts = getattr(self._model, "prompts", None) or {}
+        name = self.spec.prompt_name
+        if purpose == "similarity" and name:
+            name = next((key for key in ("STS", "Similarity", "sentence_similarity")
+                         if key in prompts), None)
+            if name is None:
+                raise RuntimeError("model does not expose a supported similarity prompt")
+        if name:
+            if name not in prompts:
+                raise RuntimeError(f"model does not expose {name!r} prompt")
+            return name, prompts[name]
+        default = getattr(self._model, "default_prompt_name", None)
+        return None, prompts.get(default, "")
+
+    def token_counts(self, text: str, purpose: str) -> tuple[int, int]:
+        """Count untruncated content and the exact prompt/prepared tokenizer input."""
+        _, prompt = self._task_prompt(purpose)
+        prepared = apply_prefix(self.spec, [text])[0]
+        tokenizer = self._model.tokenizer
+        content = tokenizer(text, add_special_tokens=False, truncation=False)["input_ids"]
+        total = tokenizer(prompt + prepared, add_special_tokens=True, truncation=False)["input_ids"]
+        return len(content), len(total)
+
+    def task_identity(self, purpose: str) -> str:
+        import json
+        from importlib.metadata import version
+        name, prompt = self._task_prompt(purpose)
+        first = getattr(self._model, "_first_module", lambda: None)()
+        config = getattr(getattr(first, "auto_model", None), "config", None)
+        revision = getattr(config, "_commit_hash", None) or "unresolved-revision"
+        return json.dumps({"model": self.model_id, "revision": revision,
+                           "prompt_name": name, "prompt": prompt,
+                           "prefix": self.spec.query_prefix, "dim": self.dim,
+                           "purpose": purpose,
+                           "libraries": {package: version(package) for package in
+                                         ("sentence-transformers", "transformers", "numpy")}}, sort_keys=True)
+
+    def encode_task(self, texts: Sequence[str], purpose: str) -> np.ndarray:
+        """Task-local prompt kwargs never mutate the model's shared default."""
+        name, _ = self._task_prompt(purpose)
+        for text in texts:
+            content, prepared = self.token_counts(text, purpose)
+            if content > 1792 or prepared > min(2048, self.max_seq_length):
+                raise ValueError("prepared input exceeds model token limit")
+        if purpose == "clustering":
+            return self.encode(texts)
+        if not texts:
+            return np.zeros((0, self.dim), dtype=np.float32)
+        vectors = self._model.encode(
+            apply_prefix(self.spec, list(texts)), batch_size=32,
+            convert_to_numpy=True, normalize_embeddings=True,
+            show_progress_bar=False, **({"prompt_name": name} if name else {}),
+        )
+        out = np.asarray(vectors, dtype=np.float32)
+        if out.shape != (len(texts), self.dim):
+            raise RuntimeError(f"expected {(len(texts), self.dim)} embeddings, got {out.shape}")
+        return out
+
+
 def _load_help(spec: EmbedderSpec, exc: Exception) -> str:
     """Turn a 401/403 into instructions somebody can act on five minutes before class."""
     text = f"{type(exc).__name__}: {exc}"

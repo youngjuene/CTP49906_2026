@@ -1,0 +1,19 @@
+{
+  "participants": 30,
+  "seed_units": 1000,
+  "original_codepoints": 20000,
+  "resulting_units": 1990,
+  "snapshot_bytes": 2725165,
+  "ack_p50_ms": 47.99551237374544,
+  "ack_p95_ms": 54.4748529791832,
+  "ready_p50_s": 17.88469051104039,
+  "ready_p95_s": 24.933950482867658,
+  "heartbeat_p95_ms": 63.708832021802664,
+  "total_s": 27.13732363190502,
+  "all_originals_exact": true,
+  "nonce_replay_unique": true,
+  "vectors_finite_normalized": true,
+  "model": "embeddinggemma-cpu",
+  "startup_s": 64.74463938036934,
+  "semantic_quality_approved": false
+}

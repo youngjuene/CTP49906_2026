@@ -27,6 +27,10 @@
       <span id="gate-error-text"></span>
     </div>
     <button class="btn pri tall" type="submit" id="gate-submit">들어가기</button>
+    <div id="protocol-recovery" hidden>
+      <p class="hint" id="protocol-status" role="status"></p>
+      <div class="crow"><button class="btn" id="protocol-download" type="button">현재 원문 내려받기</button><button class="btn" id="protocol-refresh" type="button" disabled>앱 새로고침</button></div>
+    </div>
   </form>
 </section>
 
@@ -34,7 +38,7 @@
 <section class="gate view" id="view-admin-gate" hidden>
   <form class="gate-card" id="admin-form" autocomplete="off" novalidate>
     <h1>관리자 모드</h1>
-    <p class="sub">작성자 정보가 표시됩니다.</p>
+    <p class="sub">제출자 정보가 표시됩니다.</p>
     <div class="field">
       <label for="admin-code">접근 코드</label>
       <input type="password" id="admin-code" name="code" enterkeyhint="go" required>
@@ -53,11 +57,12 @@
 <main class="shell view" id="view-main" hidden>
   <header class="bar">
     <div class="logo">피드백 지도</div>
+    <span id="own-id"></span><button class="btn" id="change-id" type="button">ID 바꾸기</button>
     <span class="admin-badge" id="admin-badge" hidden>관리자</span>
 
     <!-- 주차 필터. 좌표는 그대로 두고 표시만 바꿉니다 (PRD 5.5). -->
     <fieldset class="weeks" id="weeks">
-      <legend class="flabel" style="position:absolute;left:-9999px">주차 필터</legend>
+      <legend class="flabel" style="position:absolute;left:-9999px">표시할 주차</legend>
       <label><input type="checkbox" value="1" checked>1주차</label>
       <label><input type="checkbox" value="2" checked>2주차</label>
       <label><input type="checkbox" value="3" checked>3주차</label>
@@ -95,14 +100,15 @@
     </nav>
 
     <div class="map-card" id="map-card">
-      <svg id="map" role="img" aria-label="의견 의미 지도"></svg>
+      <svg id="map" tabindex="0" role="img" aria-label="의견 의미 지도"></svg>
       <div class="empty" id="empty" hidden>
         <div><b style="color:var(--fg)">아직 의견이 없습니다.</b><br>
         첫 의견을 남기면 여기에 점으로 나타납니다.</div>
       </div>
+      <details class="result-browser"><summary>표시된 의견 읽기</summary><p class="hint">가까운 점은 내용이 비슷합니다. 한 원문의 여러 의견은 여러 사람이 아닙니다.</p><div id="visible-results"></div></details>
       <aside class="legend" id="legend" aria-label="범례"></aside>
       <div class="statusbar">
-        <span id="status-msg"></span>
+        <span id="status-msg"></span><span id="projection-note" role="status" hidden></span>
         <span class="spacer"></span>
         <span class="scale" id="scale"></span>
         <span class="div"></span>
@@ -120,46 +126,57 @@
     <!-- 의견 입력 (PRD 5.2, 5.3) -->
     <section class="side" id="compose">
       <h2>의견 쓰기</h2>
-      <form id="compose-form">
+      <p class="hint">ChatGPT 등 AI가 만든 의견은 ‘AI 생성’, 사람이 직접 작성한 의견은 ‘사람 작성’을 선택하세요. 원문을 한 번에 붙여 넣으면 됩니다.</p>
+      <p class="hint">반영된 의견과 원문은 참가자에게 공개됩니다. 제출자 ID는 참가자에게 공개되지 않습니다.</p>
+      <p class="hint" id="c-closed" hidden>현재 제출이 닫혀 있습니다. 작성한 원문은 기기에 보관됩니다.</p>
+      <div id="c-context" class="context-notice" hidden><p id="c-pending-context"></p><p>수업 정보가 바뀌었습니다. 이 원문의 대상·주차를 확인하세요.</p><button class="btn" id="context-apply" type="button">현재 정보 적용</button><button class="btn" id="context-keep" type="button">기존 정보 유지</button></div>
+      <form id="compose-form" novalidate>
         <div class="field">
           <label for="c-target">대상 학생</label>
           <select id="c-target" required></select>
         </div>
         <div class="field" style="margin-top:10px">
           <label for="c-text">의견</label>
-          <textarea id="c-text" maxlength="1000" enterkeyhint="send"
+          <textarea id="c-text" enterkeyhint="send"
                     placeholder="느낀 그대로 적어 주세요."></textarea>
         </div>
         <div class="row2" style="margin-top:10px">
           <div class="field" style="flex:1">
-            <label id="c-source-label">구분</label>
+            <label id="c-source-label">피드백 출처</label>
             <div class="seg" id="c-source" role="group" aria-labelledby="c-source-label">
               <button type="button" data-value="ai" aria-pressed="true">
                 <svg viewBox="-6 -6 12 12" aria-hidden="true">
-                  <path d="M0-5.2 5.2 0 0 5.2-5.2 0Z" fill="currentColor"/></svg>AI</button>
+                  <path d="M0-5.2 5.2 0 0 5.2-5.2 0Z" fill="currentColor"/></svg>AI 생성</button>
               <button type="button" data-value="human" aria-pressed="false">
                 <svg viewBox="-6 -6 12 12" aria-hidden="true">
-                  <circle r="4.6" fill="currentColor"/></svg>사람</button>
+                  <circle r="4.6" fill="currentColor"/></svg>사람 작성</button>
             </div>
           </div>
           <div class="field" style="width:104px">
-            <label for="c-week">주차</label>
+            <label for="c-week">기록할 주차</label>
             <select id="c-week"></select>
           </div>
         </div>
+        <p class="hint" id="c-count"></p><p id="c-summary" class="hint"></p>
         <button class="btn pri tall" type="submit" id="c-submit"
                 style="width:100%;margin-top:10px">보내기</button>
-        <p class="hint" id="c-hint">의견만 채우면 됩니다. 나머지는 기본값으로 들어갑니다.</p>
+        <p class="hint" id="c-hint" role="status">보내기 전에 대상·주차·출처를 확인하세요.</p><p class="hint" id="c-local" role="status"></p>
       </form>
+      <div class="crow"><button class="btn" id="draft-download" type="button">원문 내려받기</button><button class="btn" id="draft-clear" type="button">기기 기록 지우기</button></div>
+      <button class="btn" id="draft-clear-confirm" type="button" hidden>전송 대기·수정 권한을 포함한 이 ID의 기기 기록 삭제</button>
+      <p class="hint">이 주소의 같은 브라우저에서 복구됩니다. 주소가 바뀌면 이전 주소에서 원문을 내려받으세요.</p>
+      <div id="submission-status" aria-live="polite"></div>
     </section>
 
     <!-- 관리자 전용 도구. 참가자 채널에는 이 셋 중 어느 것도 없습니다 (PRD 5.6). -->
     <section class="side" id="adminpanel" hidden>
+      <div class="apane"><h2>수업 진행</h2><label>현재 발표 대상<select id="class-target"></select></label><label>현재 주차<select id="class-week"><option value="1">1주차</option><option value="2">2주차</option><option value="3">3주차</option><option value="4">4주차</option></select></label><label><input type="checkbox" id="class-accepting"> 제출 받기</label><button type="button" class="btn" id="class-save">수업 정보 적용</button><p class="hint" id="class-status"></p><p class="hint" id="processing-counts"></p><p class="hint" id="processing-diagnostics"></p><p class="hint" id="admin-counts"></p></div>
       <div class="apane">
         <h2>검색</h2>
         <input type="text" id="corpus-search" placeholder="의견 본문 검색"
                autocomplete="off" spellcheck="false">
         <p class="hint" id="search-count"></p>
+        <label>대상 필터<select id="filter-target"><option value="">전체 대상</option></select></label><label>피드백 출처 필터<select id="filter-source"><option value="">전체 출처</option><option value="ai">AI 생성</option><option value="human">사람 작성</option></select></label>
       </div>
 
       <div class="apane">
@@ -171,6 +188,8 @@
         </div>
         <p class="hint" id="sel-count">지도를 끌어 여러 의견을 한 번에 고릅니다.</p>
         <div class="revlist" id="sel-list"></div>
+        <label>내보낼 범위<select id="export-scope"><option value="visible">현재 필터 결과</option><option value="selected">선택한 의견</option><option value="all">전체</option></select></label>
+        <label>행 단위<select id="export-format"><option value="units">의견별</option><option value="originals">원문별</option></select></label><p class="hint" id="export-preview"></p>
         <div class="crow">
           <button class="btn" type="button" id="btn-clear-sel">선택 해제</button>
           <button class="btn" type="button" id="btn-export">CSV 내보내기</button>
@@ -185,7 +204,7 @@
       </div>
 
       <div class="apane">
-        <h2>작성자</h2>
+        <h2>제출자</h2>
         <input type="text" id="rev-search" placeholder="이름 또는 ID 검색"
                autocomplete="off" spellcheck="false">
         <div class="revlist" id="rev-list"></div>
@@ -195,6 +214,7 @@
   </div>
 </main>
 
+<dialog id="feedback-reader" aria-labelledby="reader-title"><div class="crow"><h2 id="reader-title">원문과 의견 확인</h2><button type="button" class="btn" id="reader-close">닫기</button></div><p class="hint" id="reader-message" role="status"></p><div id="reader-metadata"><label>대상<select id="reader-target"></select></label><label>기록할 주차<select id="reader-week"><option value="1">1주차</option><option value="2">2주차</option><option value="3">3주차</option><option value="4">4주차</option></select></label></div><h3>원문</h3><pre id="reader-original"></pre><h3>의견과 원문 위치</h3><div id="reader-units"></div><div class="crow"><button class="btn" id="reader-resolve" type="button" hidden>이전 전송 결과 다시 확인</button><button class="btn" id="reader-save" type="button">수정 저장</button><button class="btn" id="reader-withdraw" type="button">원문 전체 철회</button><button class="btn" id="reader-confirm-withdraw" type="button" hidden>지도에서 전체 철회 확인</button></div><details id="reader-history-section"><summary>수정 이력</summary><pre id="reader-history"></pre></details></dialog>
 <script type="module" src="app.js"></script>
 </body>
 </html>

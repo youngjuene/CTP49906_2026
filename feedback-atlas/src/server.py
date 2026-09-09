@@ -13,9 +13,7 @@ presentation. The server pings on its own timer rather than trusting clients to.
 
 import asyncio
 import contextlib
-import csv
 import hmac
-import io
 import json
 import logging
 import signal
@@ -26,20 +24,21 @@ from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconn
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from src.atlas_state import AtlasState, RecomputeLoop
+from src.atlas_state import AtlasState
 from src.config import AtlasConfig, cache_key, load_config, resolve_spec
 from src.embedder import build_embedder
+from src.model_runtime import ModelRuntime
+from src.submission_worker import SubmissionWorker
+from src.submission_routes import handle_submission, hello_metadata
 from src.hub import Channel, Hub
-from src.models import validate_submission
 from src.mosaic_db import MosaicService, available as mosaic_available
 from src.projection import warm_jit
 from src.protocol import (
-    MAX_FRAME_BYTES, PROTOCOL_VERSION, ack, error, hello_ok, neighbors,
+    MAX_FRAME_BYTES, PROTOCOL_VERSION, error, hello_ok, neighbors,
     parse_client_frame, pong,
 )
 from src.roster import Roster
 from src.store import Store
-from src.textnorm import text_hash
 
 log = logging.getLogger("atlas")
 WEB_DIR = Path(__file__).resolve().parents[1] / "web"
@@ -63,14 +62,6 @@ def _valid_admin_code(supplied, expected: str) -> bool:
         return hmac.compare_digest(supplied.encode("utf-8"), expected.encode("utf-8"))
     except UnicodeEncodeError:
         return False
-
-
-def _csv_cell(value):
-    # CSV quoting does not prevent Excel from interpreting feedback as a formula.
-    if isinstance(value, str) and (value.lstrip().startswith(("=", "+", "-", "@"))
-                                   or value.startswith(("\t", "\r", "\n"))):
-        return "'" + value
-    return value
 
 
 class RateLimiter:
@@ -109,7 +100,7 @@ class Atlas:
         self.store: Store | None = None
         self.state: AtlasState | None = None
         self.mosaic: MosaicService | None = None
-        self.loop: RecomputeLoop | None = None
+        self.loop: SubmissionWorker | None = None
         self.roster: Roster | None = None
         self.viewer_changed = asyncio.Event()
         self.started_at = time.time()
@@ -122,6 +113,10 @@ class Atlas:
         log.info("roster: %d entries, %d targets", len(self.roster),
                  len(self.roster.targets()))
 
+        from src.segmentation import load_policy
+        policy = load_policy()
+        if not policy.classroom_enabled and not cfg.fake_embedder and not cfg.allow_unreviewed_semantics:
+            raise RuntimeError('semantic quality is not approved; use ATLAS_ALLOW_UNREVIEWED_SEMANTICS=1 only for development QA')
         embedder = build_embedder(cfg)
         spec = resolve_spec(cfg.embedding_model)
         log.info("embedder: %s (%s)", getattr(embedder, "model_id", spec.model_id),
@@ -135,7 +130,8 @@ class Atlas:
 
         self.store = Store(cfg.db_path)
         self.store.migrate()
-        self.state = AtlasState(cfg, self.store, self.roster, embedder)
+        self.runtime = ModelRuntime(embedder)
+        self.state = AtlasState(cfg, self.store, self.roster, self.runtime)
         # Stood up before load(), because load() recomputes and commits, and
         # commit() is what refreshes the relation. Built after the store so a
         # missing database file fails on the cheap path.
@@ -145,10 +141,10 @@ class Atlas:
             log.info("embedding-atlas viewer: dataset relation ready")
         elif cfg.enable_viewer:
             log.warning("embedding-atlas viewer disabled: duckdb/pyarrow missing")
-        self.state.load()
+        self.runtime.run_sync(self.state.load)
         log.info("loaded %d opinions, layout_rev %d",
                  self.state.rev, self.state.layout_rev)
-        self.loop = RecomputeLoop(self.state, self.hub)
+        self.loop = SubmissionWorker(self.state, self.hub, self.runtime, policy=policy)
 
     def reload_corpus(self) -> None:
         """SIGUSR1. Pick up opinions written straight into the database.
@@ -161,12 +157,8 @@ class Atlas:
         """
         if self.state is None or self.store is None:
             return
-        before = self.state.rev
-        self.state.opinions = self.store.all_opinions()
-        self.state.rev = len(self.state.opinions)
-        log.info("corpus reloaded: %d -> %d opinions", before, self.state.rev)
-        if self.loop is not None and self.state.rev != before:
-            self.loop.request()
+        if self.loop is not None:
+            self.loop.request(reload=True)
 
     def reload_roster(self) -> None:
         """SIGHUP. Lets a late entry be added without dropping every open socket."""
@@ -180,8 +172,7 @@ class Atlas:
             self.state.roster = fresh
             # Refresh the relation before asking open viewers to drop cached queries.
             self.state.refresh_mosaic()
-            if self.mosaic is not None:
-                self.viewer_changed.set()
+            self.viewer_changed.set()
         log.info("roster reloaded: %d entries", len(fresh))
 
 
@@ -251,20 +242,28 @@ def create_app(cfg: AtlasConfig | None = None, *, atlas: Atlas | None = None) ->
             # The cache key names the model and its prompt convention. The access
             # code is never reported here or logged anywhere.
             "cache_key": state.cache_key if state else None,
-            "opinions": state.rev if state else 0,
+            "opinions": len(state.opinions) if state else 0,
             "layout_rev": state.layout_rev if state else 0,
-            "projector": ("umap" if state and state.rev >= atlas.cfg.pca_umap_threshold
+            "projector": ("umap" if state and len(state.opinions) >= atlas.cfg.pca_umap_threshold
                           else "pca"),
             "connections": atlas.hub.counts(),
             # Which front end the room can actually use, and how much the viewer's
             # relation currently holds. Reported because "the charts are empty" and
             # "the viewer never loaded" look identical from the back of a room.
             "viewer": {
-                "enabled": atlas.mosaic is not None,
-                "rows": atlas.mosaic.participant.rows if atlas.mosaic else 0,
+                "enabled": atlas.mosaic is not None and atlas.mosaic.valid,
+                "rows": atlas.mosaic.participant.rows if atlas.mosaic and atlas.mosaic.valid else 0,
             },
+            "roster_count": len(atlas.roster) if atlas.roster else 0,
+            "class_context": hello_metadata(atlas)['context'] if state else None,
+            "limits": {"max_raw_codepoints": atlas.cfg.max_text_chars, "max_pending": 300, "automatic_units": 64},
+            "model_warmed": state is not None,
+            "fake_embedder": atlas.cfg.fake_embedder,
             "uptime_s": round(time.time() - atlas.started_at, 1),
-            "last_error": state.last_error if state else None,
+            "processing": atlas.store.processing_counts() if atlas.store else {},
+            "queue_diagnostics": atlas.store.queue_diagnostics() if atlas.store else {},
+            "segmentation_reviewed": atlas.loop.policy.classroom_enabled if atlas.loop else False,
+            "last_error": "PROCESSING_FAILED" if state and state.last_error else None,
         })
 
     @app.post("/api/export.csv")
@@ -288,31 +287,12 @@ def create_app(cfg: AtlasConfig | None = None, *, atlas: Atlas | None = None) ->
             await asyncio.sleep(0.5)
             return JSONResponse(error("BAD_ACCESS_CODE"), status_code=403)
 
-        state = atlas.state
-        wanted = body.get("ids")
-        if wanted is not None and (not isinstance(wanted, list)
-                                   or any(not isinstance(value, str) for value in wanted)):
-            return JSONResponse(error("MALFORMED"), status_code=400)
-        keep = set(wanted) if isinstance(wanted, list) else None
-        names = {t["id"]: t["display_name"] for t in atlas.roster.targets()}
-
-        buf = io.StringIO()
-        writer = csv.writer(buf)
-        writer.writerow(["id", "reviewer_id", "reviewer_name", "target_id",
-                         "target_name", "text", "source", "week", "timestamp",
-                         "x", "y"])
-        for op in state.opinions:
-            if keep is not None and op.id not in keep:
-                continue
-            entry = atlas.roster.resolve(op.reviewer_id)
-            x, y = state.server_coords.get(op.id, (0.0, 0.0))
-            writer.writerow([_csv_cell(value) for value in [op.id, op.reviewer_id,
-                             entry.display_name if entry else op.reviewer_id,
-                             op.target_id, names.get(op.target_id, op.target_id),
-                             op.text, op.source, op.week, op.timestamp, x, y]])
-        # A BOM so Excel opens Korean as UTF-8 instead of mojibake. The
-        # instructor opening this is the whole audience for the feature.
-        payload = ("\ufeff" + buf.getvalue()).encode("utf-8")
+        from src.exporting import build_export
+        from src.submissions import SubmissionError
+        try:
+            payload = build_export(atlas, body)
+        except SubmissionError as exc:
+            return JSONResponse(error(exc.code), status_code=409 if exc.code == 'REVISION_CONFLICT' else 400)
         return Response(
             content=payload, media_type="text/csv; charset=utf-8",
             headers={"Content-Disposition":
@@ -340,7 +320,7 @@ def create_app(cfg: AtlasConfig | None = None, *, atlas: Atlas | None = None) ->
           the participant relation would show an instructor a viewer that looks
           right and is quietly missing the authorship they opened it for.
         """
-        if atlas.mosaic is None:
+        if atlas.mosaic is None or not atlas.mosaic.valid:
             return JSONResponse(
                 {"error": "the viewer is not enabled on this server"},
                 status_code=503)
@@ -404,9 +384,11 @@ async def _viewer_updates(atlas: Atlas) -> None:
     while True:
         await atlas.viewer_changed.wait()
         atlas.viewer_changed.clear()
-        # Only invalidate caches; no roster or authorship crosses channels.
-        await atlas.hub.broadcast(Channel.PARTICIPANT, {"t": "viewer_refresh"})
-        await atlas.hub.broadcast(Channel.ADMIN, {"t": "viewer_refresh"})
+        public = {"t": "viewer_refresh", "targets": atlas.roster.targets()}
+        await atlas.hub.broadcast(Channel.PARTICIPANT, public)
+        await atlas.hub.broadcast(Channel.ADMIN, {**public, "roster": [
+            {"id": e.id, "display_name": e.display_name, "role": e.role}
+            for e in atlas.roster.entries()]})
 
 
 async def _heartbeat(atlas: Atlas) -> None:
@@ -457,7 +439,7 @@ async def _participant(atlas: Atlas, socket: WebSocket) -> None:
             channel="participant", rev=state.rev, layout_rev=state.layout_rev,
             targets=atlas.roster.targets(), role=entry.role,
             default_week=atlas.cfg.default_week,
-            max_text_chars=atlas.cfg.max_text_chars))
+            max_text_chars=atlas.cfg.max_text_chars, metadata={**hello_metadata(atlas), "submitter_key": entry.id}))
         await socket.send_json(state.participant_snapshot())
         state.mark_all_sent()
         await _serve(atlas, socket, conn_id, entry, Channel.PARTICIPANT)
@@ -495,7 +477,7 @@ async def _admin(atlas: Atlas, socket: WebSocket) -> None:
             roster=[{"id": e.id, "display_name": e.display_name, "role": e.role}
                     for e in atlas.roster.entries()],
             default_week=atlas.cfg.default_week,
-            max_text_chars=atlas.cfg.max_text_chars))
+            max_text_chars=atlas.cfg.max_text_chars, metadata=hello_metadata(atlas)))
         await socket.send_json(state.admin_snapshot())
         await _serve(atlas, socket, conn_id, None, Channel.ADMIN)
     finally:
@@ -545,35 +527,8 @@ async def _serve(atlas: Atlas, socket: WebSocket, conn_id: str, entry,
             await socket.send_json(neighbors(
                 id=target, items=state.neighbors(target, k=k),
                 ready=state.vectors_ready))
-        elif kind == "submit":
-            if channel is not Channel.PARTICIPANT or entry is None:
-                await socket.send_json(error("NOT_AUTHENTICATED"))
-                continue
-            nonce = body.get("nonce")
-            recorded = state.store.submission_receipt(entry.id, nonce)
-            if recorded is not None:
-                await socket.send_json(ack(nonce=nonce, id=recorded, rev=state.rev))
-                continue
-            if not atlas.limiter.allow(conn_id):
-                await socket.send_json(error("RATE_LIMITED"))
-                continue
-            op, err = validate_submission(
-                body, reviewer=entry, roster=atlas.roster,
-                max_chars=atlas.cfg.max_text_chars,
-                default_week=atlas.cfg.default_week)
-            if err is not None:
-                # To this socket only. A refusal is not news for the room.
-                await socket.send_json(error(err))
-                continue
-            # Durable before acknowledged: a crash between the two would otherwise
-            # tell somebody their opinion landed when it did not.
-            inserted, opinion_id = state.store.insert_opinion_with_receipt(
-                op, text_hash(op.text), nonce)
-            rev = state.add(op) if inserted else state.rev
-            await socket.send_json(ack(nonce=str(body.get("nonce") or ""),
-                                       id=opinion_id, rev=rev))
-            if inserted:
-                atlas.loop.request()
+        elif await handle_submission(atlas, socket, conn_id, entry, channel, kind, body):
+            continue
         else:
             await socket.send_json(error("MALFORMED"))
 

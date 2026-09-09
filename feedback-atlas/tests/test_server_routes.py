@@ -23,7 +23,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # -> feedback-atlas/
 
 from src.config import load_config  # noqa: E402
-from src.protocol import PROTOCOL_VERSION  # noqa: E402
+from src.protocol import PROTOCOL_VERSION, MAX_FRAME_BYTES  # noqa: E402
 
 pytestmark = [pytest.mark.needs_fastapi, pytest.mark.needs_httpx]
 
@@ -67,6 +67,15 @@ def _drain_until(ws, kind, limit=8):
         if message["t"] == kind:
             return message
     raise AssertionError(f"no {kind!r} frame arrived")
+
+
+def _wait_published(client, count):
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        if client.get('/healthz').json()['opinions'] == count:
+            return
+        time.sleep(.02)
+    raise AssertionError(f'{count} units were not published')
 
 
 def test_the_rate_limiter_allows_a_burst_then_throttles_and_refills():
@@ -115,7 +124,7 @@ def test_a_broken_roster_file_does_not_replace_a_working_one(tmp_path):
 def test_healthz_reports_state_and_never_the_access_code(client):
     body = client.get("/healthz").json()
     assert body["ok"] is True and body["protocol"] == PROTOCOL_VERSION
-    assert body["cache_key"].startswith("fake:")   # the fake embedder is visible
+    assert "fake" in body["cache_key"]   # the fake embedder is visible
     assert CODE not in str(body)
 
 
@@ -167,11 +176,11 @@ def test_a_submission_reaches_a_second_participant(client):
         _hello(b, id="writer2")
         _drain_until(b, "snapshot")
 
-        a.send_json({"t": "submit", "nonce": "n1", "target_id": "target1",
+        a.send_json({"t": "submit", "owner_capability": "test-owner-capability-" * 2, "context_revision": 0, "nonce": "n1", "target_id": "target1",
                      "text": "소리가 몸 안쪽에서 나는 것처럼 들렸어요.",
                      "source": "human", "week": 2})
-        acked = _drain_until(a, "ack")
-        assert acked["nonce"] == "n1" and acked["rev"] == 1
+        acked = _drain_until(a, "submission_accepted")
+        assert acked["nonce"] == "n1" and acked["revision"] == 1
 
         arrived = None
         for _ in range(8):
@@ -194,9 +203,9 @@ def test_one_broadcast_shows_authorship_to_admin_and_not_to_participants(client)
         _hello(a, code=CODE)
         _drain_until(a, "snapshot")
 
-        p.send_json({"t": "submit", "nonce": "n1", "target_id": "target1",
+        p.send_json({"t": "submit", "owner_capability": "test-owner-capability-" * 2, "context_revision": 0, "nonce": "n1", "target_id": "target1",
                      "text": "불편했는데 그 불편함이 좋았습니다.", "source": "human"})
-        _drain_until(p, "ack")
+        _drain_until(p, "submission_accepted")
 
         p_frame = None
         for _ in range(8):
@@ -234,7 +243,7 @@ def test_a_refused_submission_answers_only_the_sender(client):
         _drain_until(a, "snapshot")
         _hello(b, id="writer2")
         _drain_until(b, "snapshot")
-        a.send_json({"t": "submit", "nonce": "n1", "target_id": "target1", "text": "   "})
+        a.send_json({"t": "submit", "owner_capability": "test-owner-capability-" * 2, "context_revision": 0, "nonce": "n1", "target_id": "target1", "text": "   "})
         assert _drain_until(a, "error")["code"] == "EMPTY_TEXT"
         b.send_json({"t": "ping"})
         assert b.receive_json()["t"] == "pong", "a refusal was broadcast to the room"
@@ -245,12 +254,13 @@ def test_resync_returns_a_full_snapshot_at_the_current_rev(client):
         _hello(ws, id="writer1")
         _drain_until(ws, "snapshot")
         for i in range(3):
-            ws.send_json({"t": "submit", "nonce": f"n{i}", "target_id": "target1",
+            ws.send_json({"t": "submit", "owner_capability": "test-owner-capability-" * 2, "context_revision": 0, "nonce": f"n{i}", "target_id": "target1",
                           "text": f"의견 {i}"})
-            _drain_until(ws, "ack")
+            _drain_until(ws, "submission_accepted")
+        _wait_published(client, 3)
         ws.send_json({"t": "resync", "have_rev": 0})
-        snap = _drain_until(ws, "snapshot")
-        assert snap["rev"] == 3 and len(snap["points"]) == 3
+        snap = _drain_until(ws, "snapshot", limit=32)
+        assert snap["rev"] == client.app.state.atlas.store.data_rev and len(snap["points"]) == 3
 
 
 def test_an_oversized_or_malformed_frame_does_not_drop_the_connection(client):
@@ -261,7 +271,7 @@ def test_an_oversized_or_malformed_frame_does_not_drop_the_connection(client):
         _drain_until(ws, "snapshot")
         ws.send_text("this is not json")
         assert _drain_until(ws, "error")["code"] == "MALFORMED"
-        ws.send_text('{"t":"submit","text":"' + "가" * 9000 + '"}')
+        ws.send_text('{"t":"submit","text":"' + "가" * MAX_FRAME_BYTES + '"}')
         assert _drain_until(ws, "error")["code"] == "TOO_LARGE"
         ws.send_json({"t": "ping"})
         assert ws.receive_json()["t"] == "pong"
@@ -277,16 +287,12 @@ def _seed(client, n=4):
                  "끝나고 나서 한참 아무 말도 못 했습니다."][:n]
         ids = []
         for i, text in enumerate(texts):
-            ws.send_json({"t": "submit", "nonce": f"s{i}", "target_id": "target1",
+            ws.send_json({"t": "submit", "owner_capability": "test-owner-capability-" * 2, "context_revision": 0, "nonce": f"s{i}", "target_id": "target1",
                           "text": text, "source": "ai" if i % 2 else "human"})
-            ids.append(_drain_until(ws, "ack")["id"])
-        # Wait for a layout, so a neighbour query is answered from real vectors
-        # rather than from a corpus that has not been projected yet.
-        for _ in range(40):
-            if client.get("/healthz").json()["layout_rev"] > 0:
-                break
-            time.sleep(0.1)
-        return ids
+            ids.append(_drain_until(ws, "submission_accepted")["submission_id"])
+        _wait_published(client, len(texts))
+        return [client.app.state.atlas.store.public_submission(sid)['units'][0]['id'] for sid in ids]
+
 
 
 def test_a_participant_cannot_ask_for_neighbours(client):
@@ -342,7 +348,7 @@ def test_export_requires_the_access_code(client):
 
 def test_export_returns_utf8_csv_with_authorship_and_coordinates(client):
     ids = _seed(client, n=3)
-    res = client.post("/api/export.csv", json={"code": CODE})
+    res = client.post("/api/export.csv", json={"code": CODE, "scope": "all", "expected_data_rev": client.app.state.atlas.state.rev})
     assert res.status_code == 200
     assert "text/csv" in res.headers["content-type"]
     assert "attachment" in res.headers["content-disposition"]
@@ -361,7 +367,7 @@ def test_export_returns_utf8_csv_with_authorship_and_coordinates(client):
 def test_export_can_be_narrowed_to_a_selection(client):
     """What the lasso is for: pull one cluster out of the map and take it away."""
     ids = _seed(client, n=4)
-    res = client.post("/api/export.csv", json={"code": CODE, "ids": ids[:2]})
+    res = client.post("/api/export.csv", json={"code": CODE, "scope": "selected", "ids": ids[:2], "expected_data_rev": client.app.state.atlas.state.rev})
     rows = res.content.decode("utf-8").lstrip("\ufeff").splitlines()[1:]
     assert len(rows) == 2
     assert all(any(i in r for i in ids[:2]) for r in rows)
@@ -383,11 +389,12 @@ def test_submissions_survive_a_restart_of_the_app(tmp_path):
         with c.websocket_connect("/ws") as ws:
             _hello(ws, id="writer1")
             _drain_until(ws, "snapshot")
-            ws.send_json({"t": "submit", "nonce": "n1", "target_id": "target1",
+            ws.send_json({"t": "submit", "owner_capability": "test-owner-capability-" * 2, "context_revision": 0, "nonce": "n1", "target_id": "target1",
                           "text": "재시작 후에도 남아야 하는 의견"})
-            _drain_until(ws, "ack")
+            _drain_until(ws, "submission_accepted")
 
     with TestClient(create_app(load_config(env))) as c:
+        _wait_published(c, 1)
         assert c.get("/healthz").json()["opinions"] == 1
         with c.websocket_connect("/ws") as ws:
             _hello(ws, id="writer2")

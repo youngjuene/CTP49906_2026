@@ -7792,7 +7792,7 @@ function Nie() {
 	if (zf == null) {
 		let e = qa(new Worker(new URL(
 			/* @vite-ignore */
-			"/assets/embedding.worker-BTM4jqI_.js",
+			"" + new URL("assets/embedding.worker-BTM4jqI_.js", import.meta.url).href,
 			"" + import.meta.url
 		), { type: "module" }));
 		zf = e, e.catch(() => {
@@ -7987,7 +7987,7 @@ var Vie = class {
 async function Hie() {
 	return (await qa(new Worker(new URL(
 		/* @vite-ignore */
-		"/assets/search.worker-D88g2FTb.js",
+		"" + new URL("assets/search.worker-D88g2FTb.js", import.meta.url).href,
 		"" + import.meta.url
 	), { type: "module" }))).create("SearchIndex");
 }
@@ -59062,7 +59062,7 @@ function PNe() {
 	return vZ ??= new Promise((e, t) => {
 		let n = new Worker(new URL(
 			/* @vite-ignore */
-			"/assets/clustering.worker-BQ5A7Jdj.js",
+			"" + new URL("assets/clustering.worker-BQ5A7Jdj.js", import.meta.url).href,
 			"" + import.meta.url
 		), { type: "module" });
 		n.onmessage = (t) => {

@@ -134,6 +134,7 @@ class AtlasConfig:
     db_path: str = "atlas.db"
     embedding_model: str = DEFAULT_MODEL
     device: str = "cpu"
+    allow_unreviewed_semantics: bool = False
     default_week: int = 1
     # Below this many opinions, project with PCA. UMAP's spectral init is
     # unusable on tiny inputs and its layout is dominated by initialisation
@@ -152,7 +153,7 @@ class AtlasConfig:
     # a whole class typing at once -- never fires at all.
     debounce_s: float = 0.4
     max_debounce_s: float = 2.0
-    max_text_chars: int = 1000
+    max_text_chars: int = 20000
     move_epsilon: float = MOVE_EPSILON
     fake_embedder: bool = False
     warm_umap: bool = True
@@ -224,6 +225,7 @@ def load_config(env: Mapping[str, str] | None = None) -> AtlasConfig:
         db_path=env.get("ATLAS_DB", "atlas.db"),
         embedding_model=model,
         device=env.get("ATLAS_DEVICE", "cpu"),
+        allow_unreviewed_semantics=env.get("ATLAS_ALLOW_UNREVIEWED_SEMANTICS", "") == "1",
         default_week=default_week,
         pca_umap_threshold=threshold,
         fake_embedder=env.get("ATLAS_UNSAFE_FAKE_EMBEDDER", "") == "1",
