@@ -4,7 +4,7 @@ Registration is strict (PRD 5.1, closing the open question in PRD 11): an id tha
 is not on this list does not get in. There is deliberately **no** method here that
 adds an entry at runtime -- no add(), no register(), no __setitem__. That absence
 is the policy, and tests/test_roster.py asserts it, because the natural way to
-handle a walk-in auditor mid-class is to quietly synthesise a roster row, and that
+handle a walk-in observer mid-class is to quietly synthesise a roster row, and that
 would turn a bounded set of writers into an unbounded one without anyone deciding
 to.
 
@@ -19,7 +19,7 @@ from pathlib import Path
 
 from src.textnorm import match_key, normalize_text
 
-# PRD 7's table says enum(student, auditor). "ta" is a deliberate addition, for a
+# PRD 7's table says enum(student, observer). "ta" is a deliberate addition, for a
 # reason PRD 3 already implies: it lists 강사/조교 as a distinct kind of user who
 # may submit feedback, and submitting requires a roster entry. Without a role of
 # their own, a TA has to be registered as 청강생 -- and the admin panel, which is
@@ -28,14 +28,14 @@ from src.textnorm import match_key, normalize_text
 #
 # TAs are not targets. targets() stays students-only, so a TA can write feedback
 # and never receive it, which is what the course actually looks like.
-ROLES = ("student", "auditor", "ta")
+ROLES = ("student", "observer", "ta")
 
 
 @dataclass(frozen=True)
 class RosterEntry:
     id: str            # canonical id, as written in the CSV
     display_name: str  # real name. Admin surfaces only (PRD 6).
-    role: str          # "student" (수강생) | "auditor" (청강생) | "ta" (조교)
+    role: str          # "student" (수강생) | "observer" (청강생) | "ta" (조교)
 
 
 class Roster:
@@ -112,7 +112,7 @@ class Roster:
     def targets(self) -> list[dict]:
         """Students only -- the list of projects feedback can be *about*.
 
-        Auditors write feedback but are not presenting, so they are not targets.
+        Observers write feedback but are not presenting, so they are not targets.
         """
         return [
             {"id": e.id, "display_name": e.display_name}

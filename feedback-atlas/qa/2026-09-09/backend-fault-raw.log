@@ -1,0 +1,24 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+________ test_failed_viewer_refresh_does_not_silently_serve_stale_rows _________
+tests/qa_backend_scenarios.py:38: in test_failed_viewer_refresh_does_not_silently_serve_stale_rows
+    assert response.status_code >= 500 or response.json() == [{"n": 1}], {
+E   AssertionError: {'websocket_points': 1, 'query_status': 200, 'query_body': [{'n': 0}], 'health': {'ok': True, 'protocol': 1, 'cache_key': 'fake:google/embeddinggemma-300m#raw#768', 'opinions': 1, ...}}
+E   assert (200 >= 500 or [{'n': 0}] == [{'n': 1}]
+E    +  where 200 = <Response [200 OK]>.status_code
+E     
+E     At index 0 diff: {'n': 0} != {'n': 1}
+E     Use -v to get more diff)
+=============================== warnings summary ===============================
+tests/qa_backend_scenarios.py::test_failed_viewer_refresh_does_not_silently_serve_stale_rows
+  /mnt/hdd/research/2026/CTP49906_2026/feedback-atlas/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+tests/qa_backend_scenarios.py::test_failed_viewer_refresh_does_not_silently_serve_stale_rows
+  /mnt/hdd/research/2026/CTP49906_2026/feedback-atlas/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/qa_backend_scenarios.py::test_failed_viewer_refresh_does_not_silently_serve_stale_rows
+1 failed, 2 warnings in 1.11s

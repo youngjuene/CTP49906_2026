@@ -1,40 +1,47 @@
 <!doctype html>
-<html lang="ko">
+<html lang="ko" data-boot="loading">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
-<title>피드백 지도</title>
+<title>feedback-atlas</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='11' cy='19' r='6' fill='%231f77b4'/%3E%3Cpath d='M21 6l7 7-7 7-7-7z' fill='%23ff7f0e'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="tokens.css">
 <link rel="stylesheet" href="app.css">
+<link rel="stylesheet" href="schedule.css">
 </head>
 <body>
 
-<!-- ============ 랜딩: ID 확인 (PRD 5.1) ============ -->
+<!-- ============ 랜딩: 개인 접근 코드 확인 ============ -->
 <section class="gate view" id="view-gate">
-  <form class="gate-card" id="gate-form" autocomplete="off" novalidate>
-    <h1>피드백 지도</h1>
-    <p class="sub">발표 세션</p>
-    <div class="field">
-      <label for="gate-id">내 ID</label>
-      <input type="text" id="gate-id" name="id" autocapitalize="off"
+  <form class="gate-card" id="gate-form" method="post" autocomplete="off" novalidate>
+    <h1 id="gate-title">feedback-atlas</h1>
+    <p class="sub" id="gate-sub">실제 수업 1~4주차</p>
+    <div class="context-note" id="gate-context-note" hidden></div>
+    <p class="demo-intro" id="demo-intro" hidden>의견을 작성하고 시각화를 탐색해 보세요. 실제 수업 기록에는 반영되지 않습니다.</p>
+    <div class="field" id="gate-code-field">
+      <label for="gate-code">개인 접근 코드</label>
+      <input type="password" id="gate-code" name="code" autocapitalize="off"
              autocorrect="off" spellcheck="false" enterkeyhint="go" required>
     </div>
+    <p class="hint" id="gate-code-hint">담당 TA가 알려준 본인 전용 코드를 입력해 주세요. 같은 코드를 계속 사용할 수 있습니다.</p>
     <div class="err" id="gate-error" hidden>
       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/>
         <path d="M12 8v5M12 16h.01"/></svg>
       <span id="gate-error-text"></span>
+      <button class="btn" type="button" id="boot-retry" hidden>다시 시도</button>
     </div>
-    <button class="btn pri tall" type="submit" id="gate-submit">들어가기</button>
+    <button class="btn pri tall" type="submit" id="gate-submit" disabled>시작 중…</button>
+    <p class="hint demo-main-link" id="demo-main-link" hidden><a id="demo-classroom-link" href="/">실제 수업 페이지로 이동</a></p>
   </form>
 </section>
 
 <!-- ============ 관리자 접근 코드 (PRD 5.6) ============ -->
 <section class="gate view" id="view-admin-gate" hidden>
-  <form class="gate-card" id="admin-form" autocomplete="off" novalidate>
+  <form class="gate-card" id="admin-form" method="post" autocomplete="off" novalidate>
     <h1>관리자 모드</h1>
     <p class="sub">작성자 정보가 표시됩니다.</p>
+    <div class="context-note" id="admin-context-note" hidden></div>
     <div class="field">
       <label for="admin-code">접근 코드</label>
       <input type="password" id="admin-code" name="code" enterkeyhint="go" required>
@@ -44,15 +51,16 @@
         <path d="M12 8v5M12 16h.01"/></svg>
       <span id="admin-error-text"></span>
     </div>
-    <button class="btn pri tall" type="submit">들어가기</button>
-    <p class="hint"><a href="#" id="admin-back">참가자 화면으로 돌아가기</a></p>
+    <button class="btn pri tall" type="submit" id="admin-submit" disabled>시작 중…</button>
+    <p class="hint"><a href="./" id="admin-back">참가자 화면으로 돌아가기</a></p>
   </form>
 </section>
 
 <!-- ============ 메인 ============ -->
 <main class="shell view" id="view-main" hidden>
+  <div class="context-banner" id="context-banner" hidden></div>
   <header class="bar">
-    <div class="logo">피드백 지도</div>
+    <div class="logo">feedback-atlas</div>
     <span class="admin-badge" id="admin-badge" hidden>관리자</span>
 
     <!-- 주차 필터. 좌표는 그대로 두고 표시만 바꿉니다 (PRD 5.5). -->
@@ -82,6 +90,11 @@
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M4 9V5a1 1 0 0 1 1-1h4M20 9V5a1 1 0 0 0-1-1h-4M4 15v4a1 1 0 0 0 1 1h4M20 15v4a1 1 0 0 1-1 1h-4"/></svg>
       </button>
+      <!-- Embedding Atlas 뷰어 전환. WebGPU가 없으면 자동으로 비활성화됩니다. -->
+      <button type="button" id="tab-viewer" aria-pressed="false" title="분석 보기">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/>
+          <path d="M3 9h18M9 9v12"/></svg>
+      </button>
       <div class="spacer"></div>
       <button type="button" id="btn-theme" title="밝기 전환">
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/>
@@ -105,6 +118,13 @@
       </div>
     </div>
 
+    <!-- Apple Embedding Atlas 뷰어. 표·연동 차트·교차 필터·검색·최근접 의견을
+         모두 포함하며, 서버의 dataset 릴레이션에 SQL로 질의합니다. -->
+    <section class="viewer-card" id="viewer-card" hidden>
+      <div class="viewer-mount" id="viewer-mount"></div>
+      <div class="viewer-note" id="viewer-note" hidden></div>
+    </section>
+
     <!-- 의견 입력 (PRD 5.2, 5.3) -->
     <section class="side" id="compose">
       <h2>의견 쓰기</h2>
@@ -116,7 +136,7 @@
         <div class="field" style="margin-top:10px">
           <label for="c-text">의견</label>
           <textarea id="c-text" maxlength="1000" enterkeyhint="send"
-                    placeholder="느낀 그대로 적어 주세요."></textarea>
+                    placeholder="AI가 생성한 피드백을 붙여넣어 주세요."></textarea>
         </div>
         <div class="row2" style="margin-top:10px">
           <div class="field" style="flex:1">
@@ -130,14 +150,11 @@
                   <circle r="4.6" fill="currentColor"/></svg>사람</button>
             </div>
           </div>
-          <div class="field" style="width:104px">
-            <label for="c-week">주차</label>
-            <select id="c-week"></select>
-          </div>
         </div>
+        <p class="hint" id="c-week-status" aria-live="polite" style="margin-top:10px"></p>
         <button class="btn pri tall" type="submit" id="c-submit"
                 style="width:100%;margin-top:10px">보내기</button>
-        <p class="hint" id="c-hint">의견만 채우면 됩니다. 나머지는 기본값으로 들어갑니다.</p>
+        <p class="hint" id="c-hint" aria-live="polite"></p>
       </form>
     </section>
 
@@ -183,6 +200,6 @@
   </div>
 </main>
 
-<script type="module" src="app.js"></script>
+<script type="module" src="bootstrap.js"></script>
 </body>
 </html>

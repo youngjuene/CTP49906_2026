@@ -22,6 +22,15 @@ button,input,select,textarea { font:inherit; color:inherit }
 }
 .gate-card h1 { font-size:17px; letter-spacing:-.01em; margin:0 }
 .gate-card .sub { font-size:13px; color:var(--muted); margin:-8px 0 0 }
+.context-note,.context-banner {
+  font-size:12px; color:var(--muted); background:var(--panel);
+  border:1px solid var(--hair); border-radius:6px; padding:9px 10px;
+}
+.context-note a,.context-banner a { color:var(--accent); font-weight:500 }
+.context-banner { flex:none }
+.demo-intro { margin:0; color:var(--muted); font-size:14px; line-height:1.7 }
+.demo-main-link { text-align:center }
+.demo-main-link a { color:var(--muted) }
 .field { display:flex; flex-direction:column; gap:4px }
 .field > label { font-size:12px; color:var(--muted) }
 input[type=text],input[type=password],select,textarea {
@@ -79,7 +88,10 @@ textarea { resize:vertical; min-height:90px; line-height:var(--lh-body); word-br
 .rail { display:flex; flex-direction:column; gap:8px; padding:2px; flex:none }
 .rail button { width:28px; height:28px; border-radius:6px; border:0; background:none;
   color:var(--muted); display:grid; place-items:center; cursor:pointer }
-.rail button:hover { color:var(--fg) }
+.rail button:hover:not(:disabled) { color:var(--fg) }
+/* The viewer button turns itself off on a browser that cannot draw the view.
+ * `.btn:disabled` above does not reach here: rail buttons are not `.btn`. */
+.rail button:disabled { opacity:.35; cursor:not-allowed }
 .rail button[aria-pressed="true"] { background:var(--panel); color:var(--fg);
   box-shadow:inset 0 0 0 1px var(--hair) }
 .rail .spacer { flex:1 }
@@ -113,6 +125,8 @@ textarea { resize:vertical; min-height:90px; line-height:var(--lh-body); word-br
   align-items:center; gap:8px; padding:0 6px; color:var(--muted);
   border-top:1px solid var(--hair); background:var(--tip-bg); flex:none }
 .statusbar .spacer { flex:1 }
+#status-msg { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+#status-count { flex:none; white-space:nowrap }
 .statusbar .div { width:1px; height:10px; background:currentColor; opacity:.3; margin:0 2px }
 .scale { display:flex; align-items:center; gap:5px }
 .scale svg { height:9px; stroke:currentColor; fill:none; stroke-width:1;
@@ -230,3 +244,29 @@ textarea { resize:vertical; min-height:90px; line-height:var(--lh-body); word-br
   font-variant-numeric:tabular-nums }
 /* Embedding Atlas's search-hit highlight, to the hex. */
 mark { background:#f9ceaf; color:#111; border-radius:2px; padding:0 1px }
+
+/* ---------- Embedding Atlas viewer ----------
+ * The viewer owns its own layout, chrome and theming; this only gives it a box
+ * with a definite height. It is a flex child of .body, and a Mosaic application
+ * measures its container on mount -- inside a flex parent with no explicit
+ * min-height that measurement is the content height, which is zero before the
+ * first query returns, so it lays out at zero and never recovers.
+ */
+.viewer-card {
+  flex:1; min-width:0; min-height:0; position:relative;
+  background:var(--card); border:1px solid var(--hair); border-radius:6px;
+  overflow:hidden; display:flex; flex-direction:column;
+}
+.viewer-mount { flex:1; min-height:0; position:relative }
+.viewer-note {
+  padding:10px 12px; font-size:12.5px; color:var(--muted);
+  border-top:1px solid var(--hair); background:var(--panel);
+}
+.viewer-note b { color:var(--fg) }
+.viewer-card .empty { z-index:1 }
+
+@media (max-width:1023px) {
+  /* Same trade as the map: on a phone the form is the primary surface. The
+   * viewer is a dashboard and cannot usefully shrink below this. */
+  .viewer-card { flex:none; height:60vh; min-height:320px }
+}

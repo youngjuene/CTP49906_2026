@@ -1,0 +1,110 @@
+FFFFF..FFF....FFFFF                                                      [100%]
+=================================== FAILURES ===================================
+__________ test_slow_environment_boot_does_not_put_access_code_in_url __________
+tests/browser_adversarial.py:59: in test_slow_environment_boot_does_not_put_access_code_in_url
+    assert "code=" not in actual_url, actual_url
+E   AssertionError: http://127.0.0.1:39503/?code=writer-one-code
+E   assert 'code=' not in 'http://127....ter-one-code'
+E     
+E     'code=' is contained here:
+E       http://127.0.0.1:39503/?code=writer-one-code
+E     ?                         +++++
+________ test_pending_receipt_cannot_be_replayed_as_a_different_person _________
+tests/browser_adversarial.py:94: in test_pending_receipt_cannot_be_replayed_as_a_different_person
+    assert len(rows) == 1 and rows[0]["reviewer_id"] == "writer1", rows
+E   AssertionError: [{'id': 'o_5facc3b8608d', 'reviewer_id': 'writer1', 'reviewer_name': '작성자1', 'target_id': 'target1', ...}, {'id': 'o_488da912f49c', 'reviewer_id': 'target2', 'reviewer_name': '대상2', 'target_id': 'target1', ...}]
+E   assert (2 == 1)
+E    +  where 2 = len([{'id': 'o_5facc3b8608d', 'reviewer_id': 'writer1', 'reviewer_name': '작성자1', 'target_id': 'target1', ...}, {'id': 'o_488da912f49c', 'reviewer_id': 'target2', 'reviewer_name': '대상2', 'target_id': 'target1', ...}])
+________________ test_closed_compose_choice_survives_reconnect _________________
+tests/browser_adversarial.py:109: in test_closed_compose_choice_survives_reconnect
+    assert page.is_hidden("#compose")
+E   AssertionError: assert False
+E    +  where False = is_hidden('#compose')
+E    +    where is_hidden = <Page url='http://127.0.0.1:52743/'>.is_hidden
+______________________ test_mobile_tap_opens_opinion_text ______________________
+tests/browser_adversarial.py:118: in test_mobile_tap_opens_opinion_text
+    assert page.locator(".tip .text").count() == 1
+E   AssertionError: assert 0 == 1
+E    +  where 0 = count()
+E    +    where count = <Locator frame=<Frame name= url='http://127.0.0.1:39423/'> selector='.tip .text'>.count
+E    +      where <Locator frame=<Frame name= url='http://127.0.0.1:39423/'> selector='.tip .text'> = locator('.tip .text')
+E    +        where locator = <Page url='http://127.0.0.1:39423/'>.locator
+_______________ test_long_opinion_tooltip_is_readable_within_map _______________
+tests/browser_adversarial.py:145: in test_long_opinion_tooltip_is_readable_within_map
+    assert bounds["tipBottom"] <= bounds["mapBottom"] and bounds["tipTop"] >= bounds["mapTop"], bounds
+E   AssertionError: {'tipBottom': 1080.3125, 'mapBottom': 407.09375, 'tipTop': 342.09375, 'mapTop': 69.5, ...}
+E   assert (1080.3125 <= 407.09375)
+___________ test_roster_target_removal_requires_explicit_reselection ___________
+tests/browser_adversarial.py:230: in test_roster_target_removal_requires_explicit_reselection
+    assert page.input_value("#c-target") == "", page.inner_html("#c-target")
+E   AssertionError: <option value="target1">대상1</option><option value="target2">대상2</option>
+E   assert 'target2' == ''
+E     
+E     + target2
+_____________ test_filtered_empty_status_clears_when_points_return _____________
+tests/browser_adversarial.py:245: in test_filtered_empty_status_clears_when_points_return
+    assert "주차가 모두 꺼져 있습니다" not in page.inner_text("#status-msg")
+E   AssertionError: assert '\uc8fc\ucc2...\ub2c8\ub2e4' not in '\uc8fc\ucc2...\ub2c8\ub2e4'
+E     
+E     '주차가 모두 꺼져 있습니다' is contained here:
+E       주차가 모두 꺼져 있습니다
+_____________________ test_map_zoom_updates_distance_scale _____________________
+tests/browser_adversarial.py:263: in test_map_zoom_updates_distance_scale
+    assert page.inner_html("#scale") != original
+E   assert '<svg viewBox="0 0 66 9" width="66" aria-hidden="true">\n       <path d="M1 1v7M65 1v7M1 4.5h64"></path></svg>0.5' != '<svg viewBox="0 0 66 9" width="66" aria-hidden="true">\n       <path d="M1 1v7M65 1v7M1 4.5h64"></path></svg>0.5'
+E    +  where '<svg viewBox="0 0 66 9" width="66" aria-hidden="true">\n       <path d="M1 1v7M65 1v7M1 4.5h64"></path></svg>0.5' = inner_html('#scale')
+E    +    where inner_html = <Page url='http://127.0.0.1:55981/'>.inner_html
+_________ test_admin_selection_mode_remains_consistent_after_reconnect _________
+tests/browser_adversarial.py:375: in test_admin_selection_mode_remains_consistent_after_reconnect
+    assert "3건 선택됨" in page.inner_text("#sel-count")
+E   AssertionError: assert '3건 선택됨' in '지도를 끌어 여러 의견을 한 번에 고릅니다.'
+E    +  where '지도를 끌어 여러 의견을 한 번에 고릅니다.' = inner_text('#sel-count')
+E    +    where inner_text = <Page url='http://127.0.0.1:33811/admin'>.inner_text
+________________ test_nearest_panel_refreshes_after_new_opinion ________________
+tests/browser_adversarial.py:391: in test_nearest_panel_refreshes_after_new_opinion
+    expect(admin.locator("#nb-list .oprow")).to_have_count(3, timeout=3000)
+E   AssertionError: Locator expected to have count '3'
+E   Actual value: 2 
+E   Call log:
+E     - Expect "to_have_count" with timeout 3000ms
+E     - waiting for locator("#nb-list .oprow")
+E       10 × locator resolved to 2 elements
+E          - unexpected value "2"
+_________________ test_selected_points_still_obey_search_focus _________________
+tests/browser_adversarial.py:405: in test_selected_points_still_obey_search_focus
+    assert opacity < 0.5, opacity
+E   AssertionError: 0.95
+E   assert 0.95 < 0.5
+______________ test_viewer_backend_failure_returns_to_working_map ______________
+tests/browser_adversarial.py:426: in test_viewer_backend_failure_returns_to_working_map
+    assert page.is_visible("#map-card")
+E   AssertionError: assert False
+E    +  where False = is_visible('#map-card')
+E    +    where is_visible = <Page url='http://127.0.0.1:52669/'>.is_visible
+_______________ test_vendored_category_setup_query_is_supported ________________
+tests/browser_adversarial.py:448: in test_vendored_category_setup_query_is_supported
+    assert response.ok, (response.status, response.text())
+E   AssertionError: (500, '{"error":"query must contain exactly one statement"}')
+E   assert False
+E    +  where False = <APIResponse url='http://127.0.0.1:37227/data/query' status=500 status_text='Internal Server Error'>.ok
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/_pytest/config/__init__.py:885
+  /mnt/hdd/research/2026/CTP49906_2026/feedback-atlas/.venv/lib/python3.12/site-packages/_pytest/config/__init__.py:885: PytestAssertRewriteWarning: Module already imported so cannot be rewritten; browser_viewer
+    self.import_plugin(import_spec)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/browser_adversarial.py::test_slow_environment_boot_does_not_put_access_code_in_url
+FAILED tests/browser_adversarial.py::test_pending_receipt_cannot_be_replayed_as_a_different_person
+FAILED tests/browser_adversarial.py::test_closed_compose_choice_survives_reconnect
+FAILED tests/browser_adversarial.py::test_mobile_tap_opens_opinion_text - Ass...
+FAILED tests/browser_adversarial.py::test_long_opinion_tooltip_is_readable_within_map
+FAILED tests/browser_adversarial.py::test_roster_target_removal_requires_explicit_reselection
+FAILED tests/browser_adversarial.py::test_filtered_empty_status_clears_when_points_return
+FAILED tests/browser_adversarial.py::test_map_zoom_updates_distance_scale - a...
+FAILED tests/browser_adversarial.py::test_admin_selection_mode_remains_consistent_after_reconnect
+FAILED tests/browser_adversarial.py::test_nearest_panel_refreshes_after_new_opinion
+FAILED tests/browser_adversarial.py::test_selected_points_still_obey_search_focus
+FAILED tests/browser_adversarial.py::test_viewer_backend_failure_returns_to_working_map
+FAILED tests/browser_adversarial.py::test_vendored_category_setup_query_is_supported
+13 failed, 6 passed, 1 warning in 54.85s

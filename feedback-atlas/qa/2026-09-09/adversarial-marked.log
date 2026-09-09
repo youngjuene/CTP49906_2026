@@ -1,0 +1,16 @@
+xxxxx..xxx....xxxxx                                                      [100%]
+=========================== short test summary info ============================
+XFAIL tests/browser_adversarial.py::test_slow_environment_boot_does_not_put_access_code_in_url - F01: startup can submit credentials in the URL
+XFAIL tests/browser_adversarial.py::test_pending_receipt_cannot_be_replayed_as_a_different_person - F02: retry crosses participant identity
+XFAIL tests/browser_adversarial.py::test_closed_compose_choice_survives_reconnect - F11: reconnect reopens hidden compose
+XFAIL tests/browser_adversarial.py::test_mobile_tap_opens_opinion_text - F04: touch tap cannot open opinion text
+XFAIL tests/browser_adversarial.py::test_long_opinion_tooltip_is_readable_within_map - F05: long tooltip is clipped outside map
+XFAIL tests/browser_adversarial.py::test_roster_target_removal_requires_explicit_reselection - F06: roster reload leaves obsolete targets
+XFAIL tests/browser_adversarial.py::test_filtered_empty_status_clears_when_points_return - F12: empty-filter message stays after reset
+XFAIL tests/browser_adversarial.py::test_map_zoom_updates_distance_scale - F13: zoom does not update distance scale
+XFAIL tests/browser_adversarial.py::test_admin_selection_mode_remains_consistent_after_reconnect - F08: reconnect leaves selection mode misleading
+XFAIL tests/browser_adversarial.py::test_nearest_panel_refreshes_after_new_opinion - F09: neighbors remain stale after new data
+XFAIL tests/browser_adversarial.py::test_selected_points_still_obey_search_focus - F07: selection overrides search dimming
+XFAIL tests/browser_adversarial.py::test_viewer_backend_failure_returns_to_working_map - F10: failed viewer hides working fallback
+XFAIL tests/browser_adversarial.py::test_vendored_category_setup_query_is_supported - F03: vendored setup SQL conflicts with backend policy
+6 passed, 13 xfailed in 54.67s

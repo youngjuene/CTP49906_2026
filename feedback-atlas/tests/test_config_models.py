@@ -170,6 +170,14 @@ def test_a_default_config_uses_the_documented_defaults():
     assert cfg.pca_umap_threshold == 80
     assert cfg.debounce_s == 0.4 and cfg.max_debounce_s == 2.0
     assert cfg.fake_embedder is False
+    assert cfg.access_codes_path == ".run/access-codes.json"
+    assert cfg.require_https is True
+
+
+def test_insecure_http_requires_an_explicit_test_or_isolated_launch_opt_in():
+    assert load_config({**ENV, "ATLAS_ALLOW_INSECURE_HTTP": ""}).require_https is True
+    assert load_config({**ENV, "ATLAS_ALLOW_INSECURE_HTTP": "true"}).require_https is True
+    assert load_config({**ENV, "ATLAS_ALLOW_INSECURE_HTTP": "1"}).require_https is False
 
 
 def test_the_fake_embedder_requires_an_explicit_opt_in():

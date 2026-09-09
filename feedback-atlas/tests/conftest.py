@@ -36,6 +36,14 @@ _OPTIONAL = {
     "needs_umap": "umap",
     "needs_fastapi": "fastapi",
     "needs_httpx": "httpx",
+    # The viewer half. duckdb and pyarrow are what the Mosaic relation is made
+    # of, and embedding_atlas supplies both the analyser and the Arrow IPC
+    # writer the query endpoint answers with. All three are optional in exactly
+    # the same sense as umap: absent, the server still runs the class on the
+    # hand-written map, so their tests skip rather than fail.
+    "needs_duckdb": "duckdb",
+    "needs_pyarrow": "pyarrow",
+    "needs_embedding_atlas": "embedding_atlas",
 }
 
 MISSING = {

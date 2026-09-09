@@ -11,18 +11,22 @@
  * server sent it, not because anything here asked for it.
  */
 
+import { apiUrl } from "./app-context.js";
+
 const CAT = ["#1f77b4","#ff7f0e","#2ca02c","#d62728","#9467bd",
              "#8c564b","#e377c2","#7f7f7f","#bcbd22","#17becf"];
 
 // A lookup, not a ternary: the previous `student ? 수강생 : 청강생` labelled every
-// non-student as 청강생, so a TA appeared as an auditor in the one panel whose
+// non-student as 청강생, so a TA appeared as an observer in the one panel whose
 // job is saying who wrote what.
-const ROLE_LABEL = { student: "수강생", auditor: "청강생", ta: "조교" };
+const ROLE_LABEL = { student: "수강생", observer: "청강생", ta: "조교" };
 
 export function mountAdmin({ state, send, atlas, renderStatus }) {
   const $ = (id) => document.getElementById(id);
   let selection = [];          // point records, in map order
   let picked = null;           // the point whose neighbours are shown
+  let neighborRequest = null;
+  let neighborSeq = 0;
 
   const isAdmin = () => state.channel === "admin";
   const colourOf = (p) => {
@@ -105,25 +109,43 @@ export function mountAdmin({ state, send, atlas, renderStatus }) {
 
   /* ---------------- 2. selection ----------------------------------------- */
   const modeBox = $("select-mode");
+  function syncModeControls() {
+    for (const b of modeBox.children)
+      b.setAttribute("aria-pressed", String(b.dataset.mode === atlas.mode));
+  }
+
   modeBox.addEventListener("click", (e) => {
     const button = e.target.closest("button");
     if (!button) return;
     atlas.setMode(button.dataset.mode);
-    for (const b of modeBox.children)
-      b.setAttribute("aria-pressed", String(b === button));
+    syncModeControls();
   });
+
+  function renderSelectionList() {
+    const list = $("sel-list");
+    list.replaceChildren();
+    for (const p of selection.slice(0, 200)) list.appendChild(opinionRow(p));
+    $("sel-count").textContent = selection.length
+      ? `${selection.length}건 선택됨` + (selection.length > 200 ? " (200건까지 표시)" : "")
+      : "지도를 끌어 여러 의견을 한 번에 고릅니다.";
+    $("export-note").textContent = selection.length
+      ? "CSV는 현재 검색/강조 조건이 아니라 명시적으로 선택한 의견만 내보냅니다."
+      : "";
+  }
 
   function setSelection(points) {
     selection = points;
     atlas.setSelection(points.map((p) => p.id));
-    const list = $("sel-list");
-    list.replaceChildren();
-    for (const p of points.slice(0, 200)) list.appendChild(opinionRow(p));
-    $("sel-count").textContent = points.length
-      ? `${points.length}건 선택됨` + (points.length > 200 ? " (200건까지 표시)" : "")
-      : "지도를 끌어 여러 의견을 한 번에 고릅니다.";
-    $("export-note").textContent = "";
+    renderSelectionList();
     renderStatus();
+  }
+
+  function refreshSelection() {
+    if (!selection.length) return;
+    const next = selection.map((p) => atlas.points.get(p.id)).filter(Boolean);
+    selection = next;
+    atlas.setSelection(next.map((p) => p.id));
+    renderSelectionList();
   }
 
   $("btn-clear-sel").addEventListener("click", () => setSelection([]));
@@ -133,14 +155,47 @@ export function mountAdmin({ state, send, atlas, renderStatus }) {
     if (!isAdmin() || !p) return;
     picked = p;
     $("pane-neighbors").hidden = false;
-    $("nb-of").textContent = `기준: ${p.text.slice(0, 40)}${p.text.length > 40 ? "…" : ""}`;
-    $("nb-list").replaceChildren();
-    send({ t: "neighbors", id: p.id, k: 8 });
+    requestNeighbors();
+  }
+
+  function renderPickedTitle() {
+    if (!picked) return;
+    $("nb-of").textContent = `기준: ${picked.text.slice(0, 40)}${picked.text.length > 40 ? "…" : ""}`;
+  }
+
+  function requestNeighbors({ stale = false } = {}) {
+    if (!picked || !isAdmin()) return;
+    const current = atlas.points.get(picked.id);
+    if (!current) {
+      picked = null;
+      neighborRequest = null;
+      $("pane-neighbors").hidden = true;
+      $("nb-list").replaceChildren();
+      return;
+    }
+    picked = current;
+    renderPickedTitle();
+    const list = $("nb-list");
+    list.replaceChildren();
+    const hint = document.createElement("p");
+    hint.className = "hint";
+    hint.textContent = stale ? "의견 목록이 바뀌어 가까운 의견을 다시 계산하는 중입니다."
+                             : "가까운 의견을 계산하는 중입니다.";
+    list.appendChild(hint);
+    if (!state.connected) return;
+    const nonce = `nb-${Date.now().toString(36)}-${(++neighborSeq).toString(36)}`;
+    neighborRequest = {
+      id: picked.id,
+      nonce,
+    };
+    send({ t: "neighbors", id: picked.id, k: 8, nonce });
   }
 
   document.addEventListener("atlas:neighbors", (e) => {
-    const { id, ids, distances, ready } = e.detail;
+    const { id, ids, distances, ready, nonce } = e.detail;
     if (!picked || picked.id !== id) return;
+    if (nonce != null && neighborRequest?.nonce !== nonce)
+      return;
     const list = $("nb-list");
     list.replaceChildren();
     ids.forEach((oid, i) => {
@@ -167,7 +222,7 @@ export function mountAdmin({ state, send, atlas, renderStatus }) {
     try {
       // POST with the code in the body, never a query string -- a URL carrying
       // the admin code would sit in tunnel logs and browser history.
-      const res = await fetch("/api/export.csv", {
+      const res = await fetch(apiUrl("/api/export.csv"), {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -251,10 +306,23 @@ export function mountAdmin({ state, send, atlas, renderStatus }) {
   revSearch.addEventListener("input", renderReviewers);
   document.addEventListener("atlas:hello", () => {
     if (!isAdmin()) return;
-    atlas.setMode("pan");
+    syncModeControls();
     renderReviewers();
+    refreshSelection();
+    if (picked) requestNeighbors({ stale: true });
   });
-  document.addEventListener("atlas:data", () => { renderReviewers(); runSearch(); });
+  document.addEventListener("atlas:roster", () => {
+    if (!isAdmin()) return;
+    renderReviewers();
+    refreshSelection();
+    if (picked) requestNeighbors({ stale: true });
+  });
+  document.addEventListener("atlas:data", () => {
+    renderReviewers();
+    runSearch();
+    refreshSelection();
+    if (picked) requestNeighbors({ stale: true });
+  });
 
   // Wire the map's callbacks. Both are no-ops on the participant channel.
   atlas.onSelect = (points) => { if (isAdmin()) setSelection(points); };

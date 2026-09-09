@@ -26,7 +26,7 @@ CSV = (
     "id,display_name,role\n"
     "kim.seoyeon,김서연,student\n"
     "park.junho,박준호,student\n"
-    "noh.kyungjin,노경진,auditor\n"
+    "noh.kyungjin,노경진,observer\n"
 )
 
 
@@ -68,7 +68,7 @@ def test_an_unlisted_id_is_refused_and_does_not_grow_the_roster():
 def test_the_roster_exposes_no_way_to_add_an_entry_at_runtime():
     """Strict pre-registration is the policy; this absence is how it is enforced.
 
-    Named explicitly because the tempting fix for a walk-in auditor mid-class is
+    Named explicitly because the tempting fix for a walk-in observer mid-class is
     a one-line `roster.add(...)`, and that decision should have to survive
     deleting this test.
     """
@@ -119,7 +119,7 @@ def test_a_teaching_assistant_may_write_but_is_never_a_target():
 
 
 def test_targets_are_students_only():
-    """Auditors and TAs write feedback but are not presenting, so neither is a
+    """Observers and TAs write feedback but are not presenting, so neither is a
     target."""
     targets = Roster.from_csv_text(CSV).targets()
     assert [t["id"] for t in targets] == ["kim.seoyeon", "park.junho"]

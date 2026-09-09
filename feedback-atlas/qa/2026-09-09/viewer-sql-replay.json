@@ -1,0 +1,22 @@
+{
+  "execSql": "\n    ALTER TABLE dataset ADD COLUMN IF NOT EXISTS \"__ev_source_id\" INTEGER DEFAULT 0;\n    UPDATE dataset\n    SET \"__ev_source_id\" =\n      CASE \"source\"::TEXT\n      WHEN 'human' THEN 0\n      ELSE (CASE WHEN \"source\" IS NULL THEN 2 ELSE 1 END) END\n  ",
+  "selectSql": "SELECT COUNT(DISTINCT \"source\") AS count FROM dataset",
+  "httpSelect": {
+    "status": 200,
+    "body": "[{\"count\":1}]"
+  },
+  "httpExec": {
+    "status": 500,
+    "body": "{\"error\":\"query must contain exactly one statement\"}"
+  },
+  "directSelect": {
+    "ok": true,
+    "contentType": "application/json",
+    "body": "[{\"count\":2}]"
+  },
+  "directExec": {
+    "ok": false,
+    "error": "ValueError",
+    "message": "query must contain exactly one statement"
+  }
+}

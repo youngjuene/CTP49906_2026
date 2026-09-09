@@ -32,7 +32,7 @@ from src.store import Store  # noqa: E402
 from src.textnorm import text_hash  # noqa: E402
 
 ROSTER = Roster.from_csv_text(
-    "id,display_name,role\ntarget1,대상1,student\nwriter1,작성자1,auditor\n")
+    "id,display_name,role\ntarget1,대상1,student\nwriter1,작성자1,observer\n")
 
 
 class FakeSocket:

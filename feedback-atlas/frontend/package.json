@@ -1,0 +1,20 @@
+{
+  "name": "feedback-atlas-frontend",
+  "private": true,
+  "type": "module",
+  "version": "0.0.0",
+  "description": "Build step for the vendored Embedding Atlas bundle in ../web/vendor. Dev-time only: the server never needs node, and the browser never fetches from a CDN.",
+  "scripts": {
+    "build": "vite build",
+    "clean": "rm -rf ../web/vendor",
+    "test:readonly-category": "node tests/readonly-category-transform.test.js"
+  },
+  "dependencies": {
+    "@uwdata/mosaic-core": "^0.21.1",
+    "@uwdata/mosaic-sql": "^0.21.1",
+    "embedding-atlas": "0.24.0"
+  },
+  "devDependencies": {
+    "vite": "^8.0.1"
+  }
+}

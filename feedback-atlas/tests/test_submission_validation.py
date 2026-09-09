@@ -26,10 +26,10 @@ ROSTER = Roster.from_csv_text(
     "id,display_name,role\n"
     "kim.seoyeon,김서연,student\n"
     "kang.minsu,강민수,student\n"
-    "noh.kyungjin,노경진,auditor\n"
+    "noh.kyungjin,노경진,observer\n"
 )
 WRITER = ROSTER.resolve("kang.minsu")
-AUDITOR = ROSTER.resolve("noh.kyungjin")
+OBSERVER = ROSTER.resolve("noh.kyungjin")
 
 
 def _submit(**body):
@@ -98,7 +98,7 @@ def test_an_auditor_may_submit_and_may_tag_an_opinion_as_ai():
     all."""
     op, err = validate_submission(
         {"target_id": "kim.seoyeon", "text": "차갑게 느껴졌습니다.", "source": "ai"},
-        reviewer=AUDITOR, roster=ROSTER)
+        reviewer=OBSERVER, roster=ROSTER)
     assert err is None
     assert op.reviewer_id == "noh.kyungjin" and op.source == "ai"
 

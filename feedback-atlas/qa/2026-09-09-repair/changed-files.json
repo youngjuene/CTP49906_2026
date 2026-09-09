@@ -1,0 +1,40 @@
+{
+  "changed_from_repair_baseline": [
+    "web/app-context.js",
+    "web/viewer.js",
+    "web/app.js",
+    "web/admin.js",
+    "web/atlas.js",
+    "web/compose.js",
+    "web/index.html",
+    "web/vendor/embedding-atlas.js",
+    "src/server.py",
+    "src/atlas_state.py",
+    "src/mosaic_db.py",
+    "src/access.py",
+    "src/protocol.py",
+    "tests/browser_adversarial.py",
+    "tests/qa_backend_scenarios.py",
+    "tests/test_viewer_pipeline.py",
+    "tests/test_access.py",
+    "frontend/vite.config.js",
+    "INTERFACE_QA.md",
+    "README.md"
+  ],
+  "new_repair_files": [
+    "web/bootstrap.js",
+    "tests/test_roster_updates.py",
+    "tests/browser_boot_repair.py",
+    "tests/browser_admin_repair.py",
+    "tests/browser_viewer_contract.py",
+    "frontend/readonly-category-transform.js",
+    "frontend/tests/readonly-category-transform.test.js"
+  ],
+  "frontend_manifest_change": "frontend/package.json adds test:readonly-category script only; dependency versions unchanged",
+  "reports": [
+    "DESKTOP_QA_REPAIR.md",
+    "INTERFACE_QA.md",
+    ".omx/plans/prd-desktop-qa-repair.md",
+    ".omx/plans/review-desktop-qa-repair.md"
+  ]
+}

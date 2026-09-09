@@ -24,6 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # -> feedback-atla
 
 from src.config import load_config  # noqa: E402
 from src.protocol import PROTOCOL_VERSION  # noqa: E402
+from tests.auth_helpers import ACCESS_CODES, write_access_codes, write_access_codes_for  # noqa: E402
 
 pytestmark = [pytest.mark.needs_fastapi, pytest.mark.needs_httpx]
 
@@ -32,8 +33,8 @@ ROSTER_CSV = (
     "id,display_name,role\n"
     "target1,대상1,student\n"
     "target2,대상2,student\n"
-    "writer1,작성자1,auditor\n"
-    "writer2,작성자2,auditor\n"
+    "writer1,작성자1,observer\n"
+    "writer2,작성자2,observer\n"
 )
 
 
@@ -45,18 +46,24 @@ def client(tmp_path):
 
     roster = tmp_path / "roster.csv"
     roster.write_text(ROSTER_CSV, encoding="utf-8")
+    access = write_access_codes(tmp_path)
     cfg = load_config({
         "ATLAS_ADMIN_CODE": CODE,
         "ATLAS_ROSTER": str(roster),
+        "ATLAS_ACCESS_CODES": str(access),
         "ATLAS_DB": str(tmp_path / "atlas.db"),
         "ATLAS_UNSAFE_FAKE_EMBEDDER": "1",
         "ATLAS_SKIP_WARMUP": "1",
+        "ATLAS_ALLOW_INSECURE_HTTP": "1",
+        "ATLAS_AUTO_WEEK": "0",
     })
     with TestClient(create_app(cfg)) as c:
         yield c
 
 
 def _hello(ws, **extra):
+    if "id" in extra and "code" not in extra and "session_token" not in extra:
+        extra["code"] = ACCESS_CODES.get(str(extra["id"]).strip().lower())
     ws.send_json({"t": "hello", "protocol": PROTOCOL_VERSION, **extra})
     return ws.receive_json()
 
@@ -93,9 +100,12 @@ def test_a_broken_roster_file_does_not_replace_a_working_one(tmp_path):
 
     roster = tmp_path / "roster.csv"
     roster.write_text(ROSTER_CSV, encoding="utf-8")
+    access = write_access_codes(tmp_path)
     atlas = Atlas(_load({"ATLAS_ADMIN_CODE": CODE, "ATLAS_ROSTER": str(roster),
+                         "ATLAS_ACCESS_CODES": str(access),
                          "ATLAS_DB": str(tmp_path / "a.db"),
-                         "ATLAS_UNSAFE_FAKE_EMBEDDER": "1", "ATLAS_SKIP_WARMUP": "1"}))
+                         "ATLAS_UNSAFE_FAKE_EMBEDDER": "1", "ATLAS_SKIP_WARMUP": "1",
+                         "ATLAS_ALLOW_INSECURE_HTTP": "1"}))
     atlas.startup()
     assert len(atlas.roster) == 4
 
@@ -104,7 +114,8 @@ def test_a_broken_roster_file_does_not_replace_a_working_one(tmp_path):
     assert len(atlas.roster) == 4, "a malformed roster replaced the working one"
     assert atlas.roster.resolve("writer1") is not None
 
-    roster.write_text(ROSTER_CSV + "writer3,작성자3,auditor\n", encoding="utf-8")
+    roster.write_text(ROSTER_CSV + "writer3,작성자3,observer\n", encoding="utf-8")
+    write_access_codes_for(tmp_path, ["target1", "target2", "writer1", "writer2", "writer3"])
     atlas.reload_roster()
     assert len(atlas.roster) == 5
     assert atlas.state.roster.resolve("writer3") is not None, \
@@ -121,17 +132,16 @@ def test_healthz_reports_state_and_never_the_access_code(client):
 
 def test_an_unlisted_id_never_gets_past_hello(client):
     with client.websocket_connect("/ws") as ws:
-        reply = _hello(ws, id="wanderer")
-        assert reply["t"] == "error" and reply["code"] == "UNKNOWN_ID"
+        reply = _hello(ws, id="wanderer", code="not-a-real-code")
+        assert reply["t"] == "error" and reply["code"] == "BAD_ACCESS_CODE"
         assert reply["fatal"] is True
-        assert "오타" in reply["hint"]
 
 
 def test_a_listed_id_gets_the_handshake_and_a_snapshot(client):
     with client.websocket_connect("/ws") as ws:
         reply = _hello(ws, id="  WRITER1 ")      # sloppy paste still resolves
         assert reply["t"] == "hello_ok"
-        assert reply["channel"] == "participant" and reply["role"] == "auditor"
+        assert reply["channel"] == "participant" and reply["role"] == "observer"
         assert [t["id"] for t in reply["targets"]] == ["target1", "target2"]
         assert "roster" not in reply
         assert ws.receive_json()["t"] == "snapshot"
@@ -154,7 +164,7 @@ def test_a_participant_socket_cannot_be_upgraded_by_sending_the_code(client):
     """Admin is a different path, a different channel and a different serialiser.
     There is deliberately no frame that promotes a connection in place."""
     with client.websocket_connect("/ws") as ws:
-        assert _hello(ws, id="writer1", code=CODE)["channel"] == "participant"
+        assert _hello(ws, id="writer1")["channel"] == "participant"
         _drain_until(ws, "snapshot")
         ws.send_json({"t": "hello", "protocol": PROTOCOL_VERSION, "code": CODE})
         assert ws.receive_json()["t"] == "error"
@@ -295,7 +305,7 @@ def test_a_participant_cannot_ask_for_neighbours(client):
     channel is the one with thirty sockets on it."""
     ids = _seed(client)
     with client.websocket_connect("/ws") as ws:
-        _hello(ws, id="writer1")
+        assert _hello(ws, id="writer1")["channel"] == "participant"
         _drain_until(ws, "snapshot")
         ws.send_json({"t": "neighbors", "id": ids[0], "k": 3})
         assert _drain_until(ws, "error")["code"] == "NOT_AUTHENTICATED"
@@ -375,9 +385,12 @@ def test_submissions_survive_a_restart_of_the_app(tmp_path):
 
     roster = tmp_path / "roster.csv"
     roster.write_text(ROSTER_CSV, encoding="utf-8")
+    access = write_access_codes(tmp_path)
     env = {"ATLAS_ADMIN_CODE": CODE, "ATLAS_ROSTER": str(roster),
+           "ATLAS_ACCESS_CODES": str(access),
            "ATLAS_DB": str(tmp_path / "atlas.db"),
-           "ATLAS_UNSAFE_FAKE_EMBEDDER": "1", "ATLAS_SKIP_WARMUP": "1"}
+           "ATLAS_UNSAFE_FAKE_EMBEDDER": "1", "ATLAS_SKIP_WARMUP": "1",
+           "ATLAS_ALLOW_INSECURE_HTTP": "1", "ATLAS_AUTO_WEEK": "0"}
 
     with TestClient(create_app(load_config(env))) as c:
         with c.websocket_connect("/ws") as ws:

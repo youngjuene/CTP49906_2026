@@ -84,7 +84,7 @@ def test_the_protocol_carries_no_week_filter_in_either_direction():
 def test_hello_ok_tells_the_form_everything_it_needs_and_no_names():
     frame = hello_ok(channel="participant", rev=0, layout_rev=0,
                      targets=[{"id": "kim.seoyeon", "display_name": "김서연"}],
-                     role="auditor")
+                     role="observer")
     assert frame["default_source"] == "ai"        # PRD 5.3
     assert frame["sources"] == ["ai", "human"]
     assert frame["max_text_chars"] > 0

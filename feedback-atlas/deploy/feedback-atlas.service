@@ -1,0 +1,17 @@
+[Unit]
+Description=Feedback Atlas classroom HTTPS server
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/mnt/hdd/research/2026/CTP49906_2026/feedback-atlas
+ExecStart=/bin/bash /mnt/hdd/research/2026/CTP49906_2026/feedback-atlas/scripts/serve.sh
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=45
+UMask=0077
+NoNewPrivileges=true
+LimitNOFILE=1024
+
+[Install]
+WantedBy=default.target

@@ -25,6 +25,7 @@ import numpy as np
 
 from src.config import AtlasConfig, cache_key, resolve_spec
 from src.deltas import diff_layout, should_send_snapshot
+from src.ea_projection import exact_neighbors, neighbors_from_graph
 from src.hub import Channel, Hub
 from src.models import Opinion
 from src.payloads import admin_points, participant_points
@@ -57,6 +58,12 @@ class RecomputeResult:
     # query would be work we have already done.
     vector_ids: list[str] | None = None
     vectors: object | None = None
+    # embedding-atlas's `neighbors` column for every opinion in this pass, keyed by
+    # opinion id. Built in the worker beside the projection rather than on demand,
+    # because that is where the k-NN graph already exists: the viewer reads this
+    # column off each row instead of asking a question, so there is no request to
+    # answer later and no second search to disagree with the layout.
+    neighbors: dict[str, dict] | None = None
 
 
 class Debouncer:
@@ -139,11 +146,22 @@ class AtlasState:
         self.layout = Layout(threshold=cfg.pca_umap_threshold,
                              n_neighbors=cfg.n_neighbors)
         self.last_error: str | None = None
+        self.mosaic_error: str | None = None
+        self.mosaic_failures = 0
         # The embedding matrix from the last successful recompute, kept for
         # neighbour lookups. At 1000 x 768 float32 this is ~3 MB.
         self._vector_row: dict[str, int] = {}
         self._row_ids: list[str] = []
         self._vectors = None
+        # The last computed `neighbors` column, keyed by opinion id. Held on state
+        # rather than rebuilt per frame because a reconnect mid-session asks for a
+        # full snapshot, and recomputing a thousand rows' neighbours to answer a
+        # phone that changed network is work already done.
+        self.neighbors_by_id: dict[str, dict] = {}
+        # The relation Embedding Atlas's viewer queries, when that front end is
+        # available. Optional on purpose: duckdb and pyarrow are heavy, the map
+        # does not need them, and a server without them still runs the class.
+        self.mosaic = None
 
     # --- startup ------------------------------------------------------------
     def load(self) -> None:
@@ -177,6 +195,8 @@ class AtlasState:
 
     def commit(self, result: RecomputeResult) -> None:
         self.server_coords = result.coords
+        if result.neighbors is not None:
+            self.neighbors_by_id = result.neighbors
         if result.vector_ids is not None and result.vectors is not None:
             self._row_ids = list(result.vector_ids)
             self._vector_row = {oid: i for i, oid in enumerate(self._row_ids)}
@@ -184,6 +204,39 @@ class AtlasState:
         self.layout_rev += 1
         self.store.put_coords(result.coords, self.layout_rev)
         self.store.set_meta("layout_rev", str(self.layout_rev))
+        self.refresh_mosaic()
+
+    def refresh_mosaic(self) -> bool:
+        """Reload the relation Embedding Atlas's viewer queries.
+
+        Built from the two existing serialisers rather than from the opinions
+        directly, so the viewer's table and the websocket frames are the same data
+        by construction -- a field cannot appear in one and be missing from the
+        other, and payloads.py stays the single place the privacy rule is written.
+
+        Never raises. The viewer is one of two front ends; a DuckDB that failed to
+        reload should cost the room its charts, not its map and not its ability to
+        take another opinion.
+        """
+        if self.mosaic is None:
+            return False
+        try:
+            self.mosaic.replace(
+                participant_points(self.opinions, self.server_coords,
+                                   self.neighbors_by_id),
+                admin_points(self.opinions, self.server_coords, self.roster,
+                             self.neighbors_by_id),
+                {t["id"]: t["display_name"] for t in self.roster.targets()},
+            )
+        except Exception as exc:      # noqa: BLE001
+            self.mosaic_error = f"mosaic reload failed: {type(exc).__name__}: {exc}"
+            self.last_error = self.mosaic_error
+            self.mosaic_failures += 1
+            return False
+        if self.mosaic_error is not None and self.last_error == self.mosaic_error:
+            self.last_error = None
+        self.mosaic_error = None
+        return True
 
     # --- the blocking half (worker thread) ----------------------------------
     def recompute(self, snap: RecomputeInput) -> RecomputeResult:
@@ -214,13 +267,50 @@ class AtlasState:
             return RecomputeResult(rev=snap.rev, coords=placed, drift=drift,
                                    refit=refit, encoded=encoded,
                                    seconds=time.monotonic() - started,
-                                   vector_ids=ids, vectors=X)
+                                   vector_ids=ids, vectors=X,
+                                   neighbors=self._neighbor_column(ids, X))
         except Exception as exc:      # noqa: BLE001
             # A failed recompute must leave server_coords untouched, so the anchor
             # frame never half-updates and the next attempt retries cleanly.
             return RecomputeResult(rev=snap.rev, coords={},
                                    seconds=time.monotonic() - started,
                                    error=f"{type(exc).__name__}: {exc}")
+
+    def _neighbor_column(self, ids: list[str], X) -> dict[str, dict]:
+        """embedding-atlas's `neighbors` column for the whole corpus.
+
+        Two sources, in this order, and the order is the point:
+
+        1. **The graph UMAP was fitted on.** src/projection.py keeps it beside the
+           reducer, so these are the neighbours that actually shaped the layout.
+           Reading them back costs nothing -- the work happened during the fit.
+        2. **An exact cosine matmul, for the rest.** Opinions that arrived since
+           the last fit were placed by `transform()` and never joined the graph, so
+           it has no row for them. Below the analyser's floor there is no graph at
+           all. Both cases land here.
+
+        Both report 1 - cosine, so a panel can list neighbours from either source
+        without the numbers meaning different things.
+
+        Never raises: a corrupt or mismatched graph costs the neighbour panel, and
+        the map is worth more than the panel.
+        """
+        k = self.cfg.neighbors_k
+        out: dict[str, dict] = {}
+        knn, knn_ids = self.layout.knn, self.layout.knn_ids
+        if knn is not None and knn_ids and len(knn_ids) <= len(ids) \
+                and list(ids[:len(knn_ids)]) == list(knn_ids):
+            try:
+                out.update(neighbors_from_graph(knn[0], knn[1], knn_ids, k=k))
+            except Exception:      # noqa: BLE001
+                out = {}
+        missing = [i for i, oid in enumerate(ids) if oid not in out]
+        if missing:
+            try:
+                out.update(exact_neighbors(X, ids, missing, k=k))
+            except Exception:      # noqa: BLE001
+                pass
+        return out
 
     @property
     def vectors_ready(self) -> bool:
@@ -270,11 +360,13 @@ class AtlasState:
     # --- serialisation ------------------------------------------------------
     def participant_snapshot(self) -> dict:
         return snapshot(rev=self.rev, layout_rev=self.layout_rev,
-                        points=participant_points(self.opinions, self.server_coords))
+                        points=participant_points(self.opinions, self.server_coords,
+                                                  self.neighbors_by_id))
 
     def admin_snapshot(self) -> dict:
         return snapshot(rev=self.rev, layout_rev=self.layout_rev,
-                        points=admin_points(self.opinions, self.server_coords, self.roster))
+                        points=admin_points(self.opinions, self.server_coords,
+                                            self.roster, self.neighbors_by_id))
 
     def mark_all_sent(self) -> None:
         self.sent_coords = dict(self.server_coords)
@@ -359,9 +451,11 @@ class RecomputeLoop:
         common = dict(from_rev=state.sent_rev, rev=result.rev,
                       layout_rev=state.layout_rev, moved=moved, drift=result.drift)
         await self.hub.broadcast(Channel.PARTICIPANT, delta(
-            added=participant_points(fresh, result.coords), **common))
+            added=participant_points(fresh, result.coords, result.neighbors),
+            **common))
         await self.hub.broadcast(Channel.ADMIN, delta(
-            added=admin_points(fresh, result.coords, state.roster), **common))
+            added=admin_points(fresh, result.coords, state.roster, result.neighbors),
+            **common))
 
         for oid in added_ids:
             state.sent_coords[oid] = result.coords[oid]

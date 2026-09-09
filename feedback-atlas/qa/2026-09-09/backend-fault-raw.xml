@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="1.104" timestamp="2026-09-09T16:44:38.401819+09:00" hostname="tx01"><testcase classname="tests.qa_backend_scenarios" name="test_failed_viewer_refresh_does_not_silently_serve_stale_rows" time="1.019"><failure message="AssertionError: {'websocket_points': 1, 'query_status': 200, 'query_body': [{'n': 0}], 'health': {'ok': True, 'protocol': 1, 'cache_key': 'fake:google/embeddinggemma-300m#raw#768', 'opinions': 1, ...}}&#10;assert (200 &gt;= 500 or [{'n': 0}] == [{'n': 1}]&#10; +  where 200 = &lt;Response [200 OK]&gt;.status_code&#10;  &#10;  At index 0 diff: {'n': 0} != {'n': 1}&#10;  Use -v to get more diff)">tests/qa_backend_scenarios.py:38: in test_failed_viewer_refresh_does_not_silently_serve_stale_rows
+    assert response.status_code &gt;= 500 or response.json() == [{"n": 1}], {
+E   AssertionError: {'websocket_points': 1, 'query_status': 200, 'query_body': [{'n': 0}], 'health': {'ok': True, 'protocol': 1, 'cache_key': 'fake:google/embeddinggemma-300m#raw#768', 'opinions': 1, ...}}
+E   assert (200 &gt;= 500 or [{'n': 0}] == [{'n': 1}]
+E    +  where 200 = &lt;Response [200 OK]&gt;.status_code
+E     
+E     At index 0 diff: {'n': 0} != {'n': 1}
+E     Use -v to get more diff)</failure></testcase></testsuite></testsuites>

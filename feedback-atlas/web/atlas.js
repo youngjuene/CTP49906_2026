@@ -62,6 +62,7 @@ export class Atlas {
   constructor(svg, opts = {}) {
     this.svg = svg;
     this.onHover = opts.onHover || (() => {});
+    this.onCameraChange = opts.onCameraChange || (() => {});
     this.camera = { tx: 0, ty: 0, scale: 1 };
     this.points = new Map();          // id -> point record from the server
     this.nodes = new Map();           // id -> SVG element
@@ -127,6 +128,7 @@ export class Atlas {
     this.camera.ty = -(y0 + y1) / 2;
     this.fitted = true;
     this.render();
+    this.onCameraChange(this.camera);
   }
 
   setPoints(list) {
@@ -194,7 +196,7 @@ export class Atlas {
       if (this.selected.has(id)) {
         node.setAttribute("stroke", "var(--fg)");
         node.setAttribute("stroke-width", "2");
-        node.setAttribute("opacity", vis ? 0.95 : DIM_OPACITY);
+        node.setAttribute("opacity", !vis ? DIM_OPACITY : (dim ? 0.16 : 0.95));
       } else {
         node.removeAttribute("stroke");
         node.removeAttribute("stroke-width");
@@ -406,6 +408,7 @@ export class Atlas {
       this.camera.tx += mx / this.camera.scale - mx / before;
       this.camera.ty += my / this.camera.scale - my / before;
       this.render();
+      this.onCameraChange(this.camera);
     }, { passive: false });
   }
 

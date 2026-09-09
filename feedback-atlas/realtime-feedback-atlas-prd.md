@@ -144,7 +144,7 @@ AVLLM/MLLM이 자신의 촬영 영상 속 주관적 감각 경험을 얼마나 �
 |---|---|---|
 | id | string | 랜딩 페이지 대조 기준 값(= `reviewer_id`로 그대로 쓰임) |
 | display_name | string | 실명 또는 실명급 식별자 — 관리자 모드에서만 노출 |
-| role | enum(student, auditor) | 수강생/청강생 구분 |
+| role | enum(student, observer) | 수강생/청강생 구분 |
 
 강사/조교가 수업 전 이 명단을 등록해두며, 명단에 없는 ID는 랜딩 페이지를 통과하지 못한다.
 

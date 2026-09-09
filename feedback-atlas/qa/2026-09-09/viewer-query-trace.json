@@ -1,0 +1,207 @@
+{
+  "queries": [
+    {
+      "method": "POST",
+      "url": "http://127.0.0.1:33275/data/query",
+      "post": "{\"type\":\"arrow\",\"sql\":\"DESCRIBE dataset\"}"
+    },
+    {
+      "method": "POST",
+      "url": "http://127.0.0.1:33275/data/query",
+      "post": "{\"type\":\"arrow\",\"sql\":\"SELECT COUNT(DISTINCT \\\"id\\\") AS count FROM dataset\"}"
+    },
+    {
+      "method": "POST",
+      "url": "http://127.0.0.1:33275/data/query",
+      "post": "{\"type\":\"arrow\",\"sql\":\"SELECT COUNT(DISTINCT \\\"target_id\\\") AS count FROM dataset\"}"
+    },
+    {
+      "method": "POST",
+      "url": "http://127.0.0.1:33275/data/query",
+      "post": "{\"type\":\"arrow\",\"sql\":\"SELECT COUNT(DISTINCT \\\"target_name\\\") AS count FROM dataset\"}"
+    },
+    {
+      "method": "POST",
+      "url": "http://127.0.0.1:33275/data/query",
+      "post": "{\"type\":\"arrow\",\"sql\":\"SELECT COUNT(DISTINCT \\\"source\\\") AS count FROM dataset\"}"
+    },
+    {
+      "method": "POST",
+      "url": "http://127.0.0.1:33275/data/query",
+      "post": "{\"type\":\"arrow\",\"sql\":\"SELECT COUNT(DISTINCT \\\"week\\\") AS count FROM dataset\"}"
+    },
+    {
+      "method": "POST",
+      "url": "http://127.0.0.1:33275/data/query",
+      "post": "{\"type\":\"arrow\",\"sql\":\"SELECT COUNT(DISTINCT \\\"timestamp\\\") AS count FROM dataset\"}"
+    },
+    {
+      "method": "POST",
+      "url": "http://127.0.0.1:33275/data/query",
+      "post": "{\"type\":\"arrow\",\"sql\":\"DESCRIBE dataset\"}"
+    },
+    {
+      "method": "POST",
+      "url": "http://127.0.0.1:33275/data/query",
+      "post": "{\"type\":\"arrow\",\"sql\":\"SELECT COUNT(*)::INT AS \\\"col0\\\", MEDIAN(\\\"x\\\") AS \\\"col1\\\", MEDIAN(\\\"y\\\") AS \\\"col2\\\", STDDEV(\\\"x\\\") AS \\\"col3\\\", STDDEV(\\\"y\\\") AS \\\"col4\\\" FROM \\\"dataset\\\"\"}"
+    },
+    {
+      "method": "POST",
+      "url": "http://127.0.0.1:33275/data/query",
+      "post": "{\"type\":\"arrow\",\"sql\":\"DESC SELECT \\\"source\\\" FROM \\\"dataset\\\"\"}"
+    },
+    {
+      "method": "POST",
+      "url": "http://127.0.0.1:33275/data/query",
+      "post": "{\"type\":\"arrow\",\"sql\":\"DESC SELECT * FROM \\\"dataset\\\"\"}"
+    },
+    {
+      "method": "POST",
+      "url": "http://127.0.0.1:33275/data/query",
+      "post": "{\"type\":\"arrow\",\"sql\":\"SELECT (\\\"id\\\")::TEXT AS \\\"value\\\", count(*) AS \\\"count\\\", sum((TRUE)::INT) AS \\\"countSelected\\\", (SELECT count(*) AS \\\"count\\\" FROM \\\"dataset\\\") AS \\\"total\\\", (SELECT count(*) AS \\\"count\\\" FROM \\\"dataset\\\") AS \\\"totalSelected\\\" FROM \\\"dataset\\\" GROUP BY (\\\"id\\\")::TEXT ORDER BY ((\\\"id\\\")::TEXT IS NOT NULL), \\\"count\\\" DESC, \\\"value\\\" ASC LIMIT 11\"}"
+    },
+    {
+      "method": "POST",
+      "url": "http://127.0.0.1:33275/data/query",
+      "post": "{\"type\":\"arrow\",\"sql\":\"SELECT (\\\"timestamp\\\")::TEXT AS \\\"value\\\", count(*) AS \\\"count\\\", sum((TRUE)::INT) AS \\\"countSelected\\\", (SELECT count(*) AS \\\"count\\\" FROM \\\"dataset\\\") AS \\\"total\\\", (SELECT count(*) AS \\\"count\\\" FROM \\\"dataset\\\") AS \\\"totalSelected\\\" FROM \\\"dataset\\\" GROUP BY (\\\"timestamp\\\")::TEXT ORDER BY ((\\\"timestamp\\\")::TEXT IS NOT NULL), \\\"count\\\" DESC, \\\"value\\\" ASC LIMIT 11\"}"
+    },
+    {
+      "method": "POST",
+      "url": "http://127.0.0.1:33275/data/query",
+      "post": "{\"type\":\"arrow\",\"sql\":\"SELECT count(*) AS \\\"count\\\" FROM (SELECT * FROM \\\"dataset\\\")\"}"
+    },
+    {
+      "method": "POST",
+      "url": "http://127.0.0.1:33275/data/query",
+      "post": "{\"type\":\"arrow\",\"sql\":\"SELECT SUM(count)::INT AS \\\"totalCount\\\", MAX(count)::INT AS \\\"maxCount\\\" FROM (SELECT COUNT(*) AS \\\"count\\\" FROM \\\"dataset\\\" GROUP BY FLOOR((\\\"x\\\" - 0.07613851623195723) / 0.26314002030713396), FLOOR((\\\"y\\\" - 0.42785008080126163) / 0.26314002030713396))\"}"
+    },
+    {
+      "method": "POST",
+      "url": "http://127.0.0.1:33275/data/query",
+      "post": "{\"type\":\"arrow\",\"sql\":\"SELECT (\\\"source\\\")::TEXT AS \\\"value\\\", count(*) AS \\\"count\\\" FROM \\\"dataset\\\" WHERE (NOT ((\\\"source\\\")::TEXT IS NULL)) GROUP BY (\\\"source\\\")::TEXT ORDER BY count(*) DESC LIMIT 10\"}"
+    },
+    {
+      "method": "POST",
+      "url": "http://127.0.0.1:33275/data/query",
+      "post": "{\"type\":\"arrow\",\"sql\":\"SELECT \\\"id\\\" AS \\\"__id__\\\", \\\"id\\\", \\\"target_id\\\", \\\"target_name\\\", \\\"text\\\", \\\"source\\\", \\\"week\\\", \\\"timestamp\\\", \\\"x\\\", \\\"y\\\", \\\"neighbors\\\" FROM (SELECT * FROM \\\"dataset\\\") LIMIT 10 OFFSET 0\"}"
+    },
+    {
+      "method": "POST",
+      "url": "http://127.0.0.1:33275/data/query",
+      "post": "{\"type\":\"exec\",\"sql\":\"\\n    ALTER TABLE dataset ADD COLUMN IF NOT EXISTS \\\"__ev_source_id\\\" INTEGER DEFAULT 0;\\n    UPDATE dataset\\n    SET \\\"__ev_source_id\\\" =\\n      CASE \\\"source\\\"::TEXT\\n      WHEN 'human' THEN 0\\n      ELSE (CASE WHEN \\\"source\\\" IS NULL THEN 2 ELSE 1 END) END\\n  \"}"
+    },
+    {
+      "method": "POST",
+      "url": "http://127.0.0.1:33275/data/query",
+      "post": "{\"type\":\"arrow\",\"sql\":\"SELECT \\\"x\\\"::FLOAT AS \\\"x\\\", \\\"y\\\"::FLOAT AS \\\"y\\\" FROM \\\"dataset\\\"\"}"
+    },
+    {
+      "method": "POST",
+      "url": "http://127.0.0.1:33275/data/query",
+      "post": "{\"type\":\"arrow\",\"sql\":\"SELECT \\\"id\\\" AS \\\"__id__\\\", \\\"id\\\", \\\"target_id\\\", \\\"target_name\\\", \\\"text\\\", \\\"source\\\", \\\"week\\\", \\\"timestamp\\\", \\\"x\\\", \\\"y\\\", \\\"neighbors\\\" FROM (SELECT * FROM \\\"dataset\\\") LIMIT 50 OFFSET 0\"}"
+    }
+  ],
+  "console": [
+    {
+      "type": "debug",
+      "text": "Request: 70.8"
+    },
+    {
+      "type": "debug",
+      "text": "Request: 5.5"
+    },
+    {
+      "type": "debug",
+      "text": "Request: 4.7"
+    },
+    {
+      "type": "debug",
+      "text": "Request: 5.4"
+    },
+    {
+      "type": "debug",
+      "text": "Request: 5.5"
+    },
+    {
+      "type": "debug",
+      "text": "Request: 4.9"
+    },
+    {
+      "type": "debug",
+      "text": "Request: 5.2"
+    },
+    {
+      "type": "debug",
+      "text": "Request: 4.6"
+    },
+    {
+      "type": "debug",
+      "text": "Request: 10.1"
+    },
+    {
+      "type": "debug",
+      "text": "Cache"
+    },
+    {
+      "type": "debug",
+      "text": "Request: 13.0"
+    },
+    {
+      "type": "debug",
+      "text": "Request: 15.0"
+    },
+    {
+      "type": "debug",
+      "text": "Request: 20.2"
+    },
+    {
+      "type": "debug",
+      "text": "Request: 30.6"
+    },
+    {
+      "type": "debug",
+      "text": "Request: 32.0"
+    },
+    {
+      "type": "debug",
+      "text": "Request: 21.6"
+    },
+    {
+      "type": "debug",
+      "text": "Request: 7.1"
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 500 (Internal Server Error)"
+    },
+    {
+      "type": "debug",
+      "text": "Request: 10.6"
+    },
+    {
+      "type": "debug",
+      "text": "Request: 11.6"
+    },
+    {
+      "type": "debug",
+      "text": "Request: 11.9"
+    }
+  ],
+  "pageerrors": [
+    "Cannot read properties of undefined (reading 'maxBufferSize')",
+    "query failed: query must contain exactly one statement"
+  ],
+  "state": {
+    "pressed": "true",
+    "viewerHidden": false,
+    "mapHidden": true,
+    "noteHidden": true,
+    "noteText": "",
+    "text": "",
+    "canvas": 0,
+    "svg": 0,
+    "inputs": 0,
+    "tables": 0,
+    "buttons": 0
+  }
+}

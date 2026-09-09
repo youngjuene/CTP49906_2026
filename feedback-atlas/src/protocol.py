@@ -24,12 +24,17 @@ PROTOCOL_VERSION = 1
 ERROR_CODES = (
     "UNKNOWN_ID", "EMPTY_TEXT", "TEXT_TOO_LONG", "UNKNOWN_TARGET", "BAD_WEEK",
     "BAD_SOURCE", "NOT_AUTHENTICATED", "BAD_ACCESS_CODE", "RATE_LIMITED",
-    "TOO_LARGE", "MALFORMED", "PROTOCOL_MISMATCH", "UNKNOWN_OPINION",
+    "TOO_LARGE", "MALFORMED", "PROTOCOL_MISMATCH", "UNKNOWN_OPINION", "DEMO_FULL", "OUTSIDE_CLASS_PERIOD",
+    "STALE_SCHEDULE", "BAD_SCHEDULE",
 )
 
 # One table, so PRD 5.1's escalation -- suspect a typo first, send them to the
 # instructor only after that -- is stated once instead of scattered through the UI.
 MESSAGES: dict[str, tuple[str, str]] = {
+    "STALE_SCHEDULE": ("다른 관리자가 일정을 변경했습니다.", "현재 일정을 다시 불러온 뒤 수정해 주세요."),
+    "BAD_SCHEDULE": ("수업 일정을 확인해 주세요.", "네 주차의 시작일을 순서대로 지정하고, 7일 기간이 서로 겹치지 않게 해 주세요."),
+    "OUTSIDE_CLASS_PERIOD": ("현재는 수업 의견 접수 기간이 아닙니다.", "안내된 수업 일정을 확인해 주세요. 작성 중인 의견은 그대로 남아 있습니다."),
+    "DEMO_FULL": ("데모 연습 공간이 가득 찼습니다.", "조교에게 연습 데이터 초기화를 요청해 주세요."),
     "UNKNOWN_ID": ("명단에서 찾을 수 없습니다.",
                    "오타가 없는지 먼저 확인해 주세요. 여러 번 실패하면 강사·조교에게 등록을 요청해 주세요."),
     "EMPTY_TEXT": ("의견을 입력해 주세요.", "내용이 있어야 지도에 올릴 수 있습니다."),
@@ -114,7 +119,7 @@ def pong() -> dict:
     return {"t": "pong"}
 
 
-def neighbors(*, id: str, items: list[dict], ready: bool = True) -> dict:
+def neighbors(*, id: str, items: list[dict], ready: bool = True, nonce: str | None = None) -> dict:
     """Nearest opinions to one opinion, closest first.
 
     Shaped as {ids, distances} to match embedding-atlas's own `data.neighbors`
@@ -124,11 +129,14 @@ def neighbors(*, id: str, items: list[dict], ready: bool = True) -> dict:
     genuinely has no neighbours". Both are an empty list, and they mean opposite
     things to whoever is looking at the screen.
     """
-    return {
+    msg = {
         "t": "neighbors", "id": id, "ready": ready,
         "ids": [i["id"] for i in items],
         "distances": [round(float(i["distance"]), 6) for i in items],
     }
+    if nonce is not None:
+        msg["nonce"] = nonce
+    return msg
 
 
 def parse_client_frame(raw: str | bytes, *, max_bytes: int = MAX_FRAME_BYTES):

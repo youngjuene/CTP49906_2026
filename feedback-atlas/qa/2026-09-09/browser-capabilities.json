@@ -1,0 +1,105 @@
+{
+  "serverUrl": "http://127.0.0.1:44381/",
+  "tmpdir": "/tmp/atlas-viewer-qa-rnrre8b3",
+  "baseline": [
+    {
+      "browser": "chromium",
+      "console": [
+        {
+          "type": "warning",
+          "text": "No available adapters."
+        }
+      ],
+      "requests": [
+        {
+          "method": "GET",
+          "url": "http://127.0.0.1:44381/api/environment",
+          "post": ""
+        }
+      ],
+      "urlAfterLogin": "http://127.0.0.1:44381/",
+      "urlContainsCode": false,
+      "bodyHas4Rows": true,
+      "nodeCount": 5,
+      "indexCspHeader": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; worker-src 'self' blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
+      "gateCodeCleared": true
+    },
+    {
+      "browser": "firefox",
+      "console": [],
+      "requests": [],
+      "launchError": "Error('BrowserType.launch: Failed to launch the browser process.\\nBrowser logs:\\n\\n<launching> /usr/bin/firefox -no-remote -headless -profile /tmp/playwright_firefoxdev_profile-l9iOGp -juggler-pipe -silent\\n<launched> pid=326545\\n[pid=326545][err] *** You are running in headless mode.\\n[pid=326545][out] [GFX1-]: glxtest: Unable to open a connection to the X server\\n[pid=326545] <process did exit: exitCode=0, signal=null>\\n[pid=326545] starting temporary directories cleanup\\nCall log:\\n  - <launching> /usr/bin/firefox -no-remote -headless -profile /tmp/playwright_firefoxdev_profile-l9iOGp -juggler-pipe -silent\\n  - <launched> pid=326545\\n  - [pid=326545][err] *** You are running in headless mode.\\n  - [pid=326545][out] [GFX1-]: glxtest: Unable to open a connection to the X server\\n  - [pid=326545] <process did exit: exitCode=0, signal=null>\\n  - [pid=326545] starting temporary directories cleanup\\n  - [pid=326545] <gracefully close start>\\n  - [pid=326545] <kill>\\n  - [pid=326545] <skipped force kill spawnedProcess.killed=false processClosed=true>\\n  - [pid=326545] finished temporary directories cleanup\\n  - [pid=326545] <gracefully close end>\\n')"
+    },
+    {
+      "browser": "webkit",
+      "console": [],
+      "requests": [],
+      "launchError": "Error(\"BrowserType.launch: Executable doesn't exist at /home/june/.cache/ms-playwright/webkit_ubuntu20.04_x64_special-2092/pw_run.sh\\n╔════════════════════════════════════════════════════════════╗\\n║ Looks like Playwright was just installed or updated.       ║\\n║ Please run the following command to download new browsers: ║\\n║                                                            ║\\n║     playwright install                                     ║\\n║                                                            ║\\n║ <3 Playwright Team                                         ║\\n╚════════════════════════════════════════════════════════════╝\")"
+    }
+  ],
+  "realViewerFlagAttempt": {
+    "browser": "chromium-webgpu-flags",
+    "queries": [],
+    "console": [],
+    "pageerrors": [],
+    "afterAuto": {
+      "pressed": "false",
+      "disabled": true,
+      "viewerHidden": true,
+      "mapHidden": false,
+      "noteHidden": true,
+      "noteText": "",
+      "text": "",
+      "canvas": 0,
+      "svg": 0,
+      "inputs": 0,
+      "tables": 0,
+      "buttons": 0
+    },
+    "afterClick": {
+      "pressed": "false",
+      "disabled": true,
+      "viewerHidden": true,
+      "mapHidden": false,
+      "noteHidden": true,
+      "noteText": "",
+      "text": "",
+      "canvas": 0,
+      "svg": 0,
+      "inputs": 0,
+      "tables": 0,
+      "buttons": 0
+    }
+  },
+  "backendDisabled": {
+    "browser": "chromium-fake-webgpu-phone-backend-disabled",
+    "queries": [
+      {
+        "method": "POST",
+        "url": "http://127.0.0.1:44381/data/query",
+        "post": "{\"type\":\"arrow\",\"sql\":\"DESCRIBE dataset\"}"
+      }
+    ],
+    "console": [
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+      }
+    ],
+    "pageerrors": [],
+    "afterFailure": {
+      "pressed": "true",
+      "disabled": false,
+      "viewerHidden": false,
+      "mapHidden": true,
+      "noteHidden": false,
+      "noteText": "분석 보기를 불러오지 못했습니다. query failed: the viewer is not enabled on this server",
+      "text": "",
+      "canvas": 0,
+      "svg": 0,
+      "inputs": 0,
+      "tables": 0,
+      "buttons": 0
+    }
+  }
+}

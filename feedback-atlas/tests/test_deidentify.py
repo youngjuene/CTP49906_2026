@@ -29,10 +29,10 @@ ROSTER = (
     "id,display_name,role\n"
     "kim.seoyeon,김서연,student\n"
     "park.junho,박준호,student\n"
-    "kang.minsu,강민수,auditor\n"
-    "seo.jiwoo,서지우,auditor\n"
-    "han.doyun,한도윤,auditor\n"
-    "noh.kyungjin,노경진,auditor\n"
+    "kang.minsu,강민수,observer\n"
+    "seo.jiwoo,서지우,observer\n"
+    "han.doyun,한도윤,observer\n"
+    "noh.kyungjin,노경진,observer\n"
 )
 WRITERS = ["kang.minsu", "seo.jiwoo", "han.doyun", "noh.kyungjin"]
 TARGETS = ["kim.seoyeon", "park.junho"]

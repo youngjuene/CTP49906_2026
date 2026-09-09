@@ -17,12 +17,28 @@ the prompt is checked against the loaded model's own prompt table, after load.
 from collections.abc import Sequence
 
 import numpy as np
+import threading
 
 from src.config import AtlasConfig, EmbedderSpec, apply_prefix, encode_kwargs, resolve_spec
 
 # Floors that matter, with the reason each one is a floor.
 _MIN_TRANSFORMERS = (4, 56, 2)      # below this, EmbeddingGemma's head is unknown
 _MIN_SENTENCE_TRANSFORMERS = (5, 0)  # below this, prompt_name is silently ignored
+
+
+class SharedEmbedder:
+    """Serialize inference when classroom and demo share one loaded model."""
+
+    def __init__(self, embedder):
+        self._embedder = embedder
+        self._lock = threading.Lock()
+        self.dim = embedder.dim
+        self.spec = embedder.spec
+        self.model_id = embedder.model_id
+
+    def encode(self, texts):
+        with self._lock:
+            return self._embedder.encode(texts)
 
 
 def _version_tuple(raw: str) -> tuple[int, ...]:

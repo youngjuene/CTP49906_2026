@@ -25,7 +25,7 @@ ROSTER = (
     "id,display_name,role\n"
     "kim.seoyeon,김서연,student\n"
     "park.junho,박준호,student\n"
-    "instructor,담당교수,auditor\n"
+    "instructor,담당교수,observer\n"
 )
 
 

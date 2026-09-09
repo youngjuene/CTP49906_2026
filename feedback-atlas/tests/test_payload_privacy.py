@@ -34,13 +34,13 @@ from src.roster import Roster  # noqa: E402
 # payload is unambiguous evidence rather than a coincidence.
 SENTINEL = "REVIEWER-CANARY-8f3a1c"
 
-# The canary is an auditor, not a student: auditors write feedback but are not
+# The canary is an observer, not a student: observers write feedback but are not
 # presenting, so the id must never appear on the participant channel for any
 # reason. A student id legitimately does appear -- the compose form has to list
 # the projects -- which would mask the leak this file is looking for.
 ROSTER = Roster.from_csv_text(
     "id,display_name,role\n"
-    f"{SENTINEL},카나리아,auditor\n"
+    f"{SENTINEL},카나리아,observer\n"
     "kim.seoyeon,김서연,student\n"
 )
 
@@ -55,18 +55,64 @@ def _op(**kw):
     return Opinion(**base)
 
 
-def test_participant_point_emits_exactly_the_eight_public_keys():
+def test_participant_point_emits_exactly_the_nine_public_keys():
     """The key set is spelled out here, not imported from PARTICIPANT_KEYS.
 
     Importing the constant would let a single edit widen the contract and the
-    test agree with it in the same commit. Writing the eight keys literally means
-    adding a ninth has to be argued for twice, in two files.
+    test agree with it in the same commit. Writing the keys literally means adding
+    one has to be argued for twice, in two files.
+
+    `neighbors` is the ninth, added when embedding-atlas's viewer replaced the
+    hand-written scatter: its component reads that column off every row rather
+    than requesting it. Here is the argument the second time. The field holds
+    `{"ids": [...], "distances": [...]}` where every id names another opinion and
+    every distance is between two texts. Both halves are already on this channel --
+    the ids are points drawn on the participant's own screen, and the distances
+    are computed from text the participant can read. Nothing in it is derived from
+    who wrote anything, which is the only question this file asks.
+
+    The test below is the one that would catch it if that reasoning were wrong: it
+    searches the serialised bytes of a frame carrying a populated neighbours
+    column, so a reviewer id smuggled inside the nested lists fails there.
     """
     point = participant_point(_op(), (0.5, -0.25))
     assert set(point) == {
         "id", "target_id", "text", "source", "week", "timestamp", "x", "y",
+        "neighbors",
     }
     assert PARTICIPANT_KEYS == set(point)  # and the constant still describes reality
+
+
+def test_neighbors_column_is_present_and_shaped_even_with_nothing_to_report():
+    """Empty, never absent, and never a bare list.
+
+    embedding-atlas's contract is a dict of two parallel arrays per row. A row
+    that omits the key makes the whole struct null in the viewer's DuckDB table
+    rather than one field, which disables the neighbours panel for the entire
+    corpus rather than for the one opinion that has no neighbours yet -- and the
+    corpus is in that state for the first minutes of every session.
+    """
+    bare = participant_point(_op(), (0.0, 0.0))
+    assert bare["neighbors"] == {"ids": [], "distances": []}
+
+    filled = participant_point(_op(), (0.0, 0.0),
+                               {"ids": ["o_x", "o_y"], "distances": [0.1, 0.2]})
+    assert filled["neighbors"] == {"ids": ["o_x", "o_y"], "distances": [0.1, 0.2]}
+    assert len(filled["neighbors"]["ids"]) == len(filled["neighbors"]["distances"])
+
+
+def test_neighbors_column_is_copied_not_aliased():
+    """A frame already queued for a socket must not change under it.
+
+    The same neighbours dict is handed to both serialisers for every point in a
+    broadcast. Storing it by reference would mean the next recompute's mutation
+    reaching a frame that has been built but not yet flushed -- which shows up as
+    one client seeing another revision's neighbours, intermittently, under load.
+    """
+    shared = {"ids": ["o_x"], "distances": [0.1]}
+    point = participant_point(_op(), (0.0, 0.0), shared)
+    shared["ids"].append("o_LATER")
+    assert point["neighbors"]["ids"] == ["o_x"]
 
 
 def test_reviewer_id_appears_nowhere_in_any_participant_frame():
@@ -78,7 +124,12 @@ def test_reviewer_id_appears_nowhere_in_any_participant_frame():
     """
     op = _op()
     coords = {op.id: (0.1, 0.2)}
-    points = participant_points([op], coords)
+    # A populated neighbours column, so the search covers the nested arrays
+    # embedding-atlas's viewer reads rather than only the flat fields.
+    neighbors = {op.id: {"ids": ["o_neighbour1", "o_neighbour2"],
+                         "distances": [0.11, 0.42]}}
+    points = participant_points([op], coords, neighbors)
+    assert points[0]["neighbors"]["ids"], "the nested column must actually be filled"
 
     frames = [
         protocol.snapshot(rev=1, layout_rev=1, points=points),

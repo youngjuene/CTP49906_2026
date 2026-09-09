@@ -1,0 +1,28 @@
+# Only public ACME challenge tokens are mounted here, never the app or credentials.
+# Traefik 2.9.10 reserves MaxInt32 for its own HTTP-01 handler. This narrowly
+# scoped 64-bit priority serves this IP's tokens without changing domain renewals.
+services:
+  challenge:
+    image: certbot/certbot:v5.4.0
+    entrypoint: [python, -m, http.server, "8080", --directory, /var/www/challenges]
+    user: "65534:65534"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 32
+    mem_limit: 128m
+    restart: unless-stopped
+    volumes:
+      - ../.run/acme-webroot:/var/www/challenges:ro
+    networks: [website_web]
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: website_web
+      traefik.http.routers.feedback-atlas-acme.entrypoints: web
+      traefik.http.routers.feedback-atlas-acme.rule: "Host(`143.248.249.7`) && PathPrefix(`/.well-known/acme-challenge/`)"
+      traefik.http.routers.feedback-atlas-acme.priority: "2147483648"
+      traefik.http.services.feedback-atlas-acme.loadbalancer.server.port: "8080"
+
+networks:
+  website_web:
+    external: true

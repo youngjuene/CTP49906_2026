@@ -1,0 +1,10 @@
+[Unit]
+Description=Renew Feedback Atlas IP certificate and reload HTTPS
+
+[Service]
+Type=oneshot
+WorkingDirectory=/mnt/hdd/research/2026/CTP49906_2026/feedback-atlas
+ExecStart=/bin/bash /mnt/hdd/research/2026/CTP49906_2026/feedback-atlas/scripts/renew_ip_certificate.sh
+TimeoutStartSec=300
+UMask=0077
+NoNewPrivileges=true

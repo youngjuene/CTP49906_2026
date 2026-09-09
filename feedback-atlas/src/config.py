@@ -135,12 +135,20 @@ class AtlasConfig:
     embedding_model: str = DEFAULT_MODEL
     device: str = "cpu"
     default_week: int = 1
+    auto_week: bool = True
     # Below this many opinions, project with PCA. UMAP's spectral init is
     # unusable on tiny inputs and its layout is dominated by initialisation
     # randomness up to ~50. Configurable because crossing it *reorganises the
     # map once* -- see README: cross it between sessions, not mid-presentation.
     pca_umap_threshold: int = 80
     n_neighbors: int = 15
+    # How many neighbours ride on each point in the payload. This is
+    # embedding-atlas's `neighbors` column, which its viewer reads directly rather
+    # than asking for; there is no request to answer, so the number is a bandwidth
+    # decision. Eight fills the panel and costs roughly 200 bytes a point. The
+    # graph itself is still built at n_neighbors, because that is what UMAP was
+    # fitted on and shrinking it would change the layout.
+    neighbors_k: int = 8
     # Trailing-edge debounce, with a cap. Without the cap a continuous stream --
     # a whole class typing at once -- never fires at all.
     debounce_s: float = 0.4
@@ -149,6 +157,17 @@ class AtlasConfig:
     move_epsilon: float = MOVE_EPSILON
     fake_embedder: bool = False
     warm_umap: bool = True
+    # Whether to stand up the DuckDB relation Embedding Atlas's viewer queries.
+    # On by default and switchable off, because the viewer is the heavier of the
+    # two front ends in every sense -- it needs duckdb and pyarrow on the server, a
+    # vendored bundle on the client, and WebGPU in the browser -- and a room where
+    # any of those is missing should still get its map.
+    enable_viewer: bool = True
+    access_codes_path: str = ".run/access-codes.json"
+    require_https: bool = True
+    enable_demo: bool = False
+    demo_db_path: str = ".run/demo/atlas.db"
+    is_demo: bool = False
 
 
 def _int_env(env: Mapping[str, str], name: str, default: int) -> int:
@@ -212,7 +231,13 @@ def load_config(env: Mapping[str, str] | None = None) -> AtlasConfig:
         embedding_model=model,
         device=env.get("ATLAS_DEVICE", "cpu"),
         default_week=default_week,
+        auto_week=env.get("ATLAS_AUTO_WEEK", "1") != "0",
         pca_umap_threshold=threshold,
         fake_embedder=env.get("ATLAS_UNSAFE_FAKE_EMBEDDER", "") == "1",
         warm_umap=env.get("ATLAS_SKIP_WARMUP", "") != "1",
+        enable_viewer=env.get("ATLAS_DISABLE_VIEWER", "") != "1",
+        access_codes_path=env.get("ATLAS_ACCESS_CODES", ".run/access-codes.json"),
+        require_https=env.get("ATLAS_ALLOW_INSECURE_HTTP", "") != "1",
+        enable_demo=env.get("ATLAS_ENABLE_DEMO", "") == "1",
+        demo_db_path=env.get("ATLAS_DEMO_DB", ".run/demo/atlas.db"),
     )
