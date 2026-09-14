@@ -679,3 +679,112 @@ def test_core_tf_results_have_a_run_ledger_before_advanced_activity_controls():
     assert core_ledgers, "Core TF runs have no nearby ledger/IDs before advanced activity 8"
     assert any({arg.arg for arg in node.args.args} <= {"ledger_view", "mo"}
                for node in core_ledgers), "The core ledger must remain an independent display"
+
+
+def test_large_export_previews_are_bounded_and_reassemble_exact_evidence(replay, tmp_path, monkeypatch):
+    """Catch eager accordion payloads that hide Molab's entire export cell."""
+    import ast
+    import asyncio
+    import hashlib
+    import json
+    from html.parser import HTMLParser
+    from types import SimpleNamespace
+
+    from src.run_ledger import build_evidence_json, build_worksheet_md, run_record
+
+    _, defs = replay
+    caption = '한글🙂</pre><script>never execute</script>```\\\n'
+    # One unusually large run must be safe too; splitting only by run is insufficient.
+    runs = [run_record(
+        kind="teacher_forcing", condition="answer→audio", metric_name="delta_per_token",
+        metric_value=-0.2, metric_unit="nats/token", config={"clip": "02321.mp4"},
+        prediction=caption, extra={"caption_text": caption, "tokens": [caption] * 16000},
+    )]
+    expected = {
+        "lab_log.md": build_worksheet_md(runs),
+        "lab_evidence.json": build_evidence_json(runs, provenance=defs["run_provenance"]),
+    }
+    assert len(expected["lab_evidence.json"].encode()) > 1_000_000
+    downloads, lazy_items = {}, []
+
+    class ExportUI:
+        # Isolated cell execution has no virtual-file server. Capture that IO
+        # boundary while keeping marimo's real layouts, escaping and lazy widgets.
+        def __getattr__(self, name):
+            return getattr(defs["mo"], name)
+
+        def download(self, data, *, filename, **kwargs):
+            downloads[filename] = data
+            return defs["mo"].Html(f'<a href="/@file/{filename}">Download</a>')
+
+        def lazy(self, element, **kwargs):
+            item = defs["mo"].lazy(element, **kwargs)
+            lazy_items.append(item)
+            return item
+
+    tree = ast.parse(NOTEBOOK.read_text())
+    cell = next(node for node in tree.body if isinstance(node, ast.FunctionDef)
+                and {arg.arg for arg in node.args.args}
+                == {"get_runs", "mo", "run_provenance", "worksheet_md"})
+    cell.decorator_list = []
+    cell.name = "render_export_cell"
+    for index, statement in enumerate(cell.body):
+        if isinstance(statement, ast.Expr) and isinstance(statement.value, ast.Call):
+            cell.body[index] = ast.Return(value=statement.value)
+    namespace = {}
+    exec(compile(ast.fix_missing_locations(ast.Module(body=[cell], type_ignores=[])),
+                 str(NOTEBOOK), "exec"), namespace)
+    rendered = namespace["render_export_cell"](
+        lambda: runs, ExportUI(), defs["run_provenance"], build_worksheet_md,
+    ).text
+    assert len(rendered.encode()) < 1_000_000
+    assert downloads == {name: value.encode() for name, value in expected.items()}
+
+    class PreText(HTMLParser):
+        def __init__(self):
+            super().__init__(convert_charrefs=True)
+            self.blocks, self.tags, self.inside = [], [], False
+
+        def handle_starttag(self, tag, attrs):
+            self.tags.append(tag)
+            if tag == "pre":
+                self.blocks.append("")
+                self.inside = True
+
+        def handle_endtag(self, tag):
+            if tag == "pre":
+                self.inside = False
+
+        def handle_data(self, data):
+            if self.inside:
+                self.blocks[-1] += data
+
+    instructions = PreText()
+    instructions.feed(rendered)
+    parts = {filename: [] for filename in expected}
+    assert lazy_items, "large previews should load only the chosen bounded chunk"
+    for item in lazy_items:
+        response = asyncio.run(item._load(SimpleNamespace()))
+        assert len(response.html.encode()) < 1_000_000
+        parsed = PreText()
+        parsed.feed(response.html)
+        assert "script" not in parsed.tags
+        chunk = json.loads(parsed.blocks[0])
+        parts[chunk["filename"]].append(chunk)
+        (tmp_path / f'{chunk["filename"]}.part{chunk["part"]:03d}.json').write_text(parsed.blocks[0], encoding="utf-8")
+    for filename, chunks in parts.items():
+        ordered = sorted(chunks, key=lambda chunk: chunk["part"])
+        assert [chunk["part"] for chunk in ordered] == list(range(1, len(chunks) + 1))
+        assert {chunk["parts"] for chunk in ordered} == {len(chunks)}
+        recovered = "".join(chunk["text"] for chunk in ordered)
+        assert recovered == expected[filename]
+        assert {chunk["sha256"] for chunk in ordered} == {hashlib.sha256(recovered.encode()).hexdigest()}
+    assert json.loads("".join(chunk["text"] for chunk in sorted(parts["lab_evidence.json"], key=lambda c: c["part"]))) == json.loads(expected["lab_evidence.json"])
+    # Execute the actual recovery code shown to a student, rather than only
+    # reproducing its join logic in the test.
+    monkeypatch.chdir(tmp_path)
+    assert len(instructions.blocks) == 2
+    for script in instructions.blocks:
+        exec(compile(script, "displayed-export-recovery.py", "exec"), {})
+    for filename, content in expected.items():
+        assert (tmp_path / filename).read_bytes() == content.encode("utf-8")

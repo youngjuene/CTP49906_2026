@@ -2927,14 +2927,67 @@ def _(ledger_view):
 @app.cell
 def _(get_runs, mo, run_provenance, worksheet_md):
     from html import escape as _escape
+    import hashlib as _hashlib
+    import json as _json_module
     from src.run_ledger import build_evidence_json as _evidence_json
     _runs = get_runs()
     _md = worksheet_md(_runs)
     _json = _evidence_json(_runs, provenance=run_provenance)
     _preview_style = "white-space:pre-wrap;overflow:auto;max-height:28rem;font-family:monospace"
-    # Preserve literal evidence when captions contain Markdown fences or HTML.
-    _md_preview = mo.Html(f'<pre style="{_preview_style}">{_escape(_md)}</pre>')
-    _json_preview = mo.Html(f'<pre style="{_preview_style}">{_escape(_json)}</pre>')
+
+    def _literal_preview(_text):
+        # Captions may contain Markdown fences or HTML; show exact inert text.
+        return mo.Html(f'<pre style="{_preview_style}">{_escape(_text)}</pre>')
+
+    def _copy_preview(_text, _filename):
+        # An accordion alone still embeds its full contents in the cell output.
+        # Bound every callback too: even one long run can contain a large token trace.
+        _chunk_size = 100_000
+        if len(_text) <= _chunk_size:
+            return _literal_preview(_text)
+        _parts = (len(_text) + _chunk_size - 1) // _chunk_size
+        _digest = _hashlib.sha256(_text.encode("utf-8")).hexdigest()
+
+        def _show_part(_part):
+            _envelope = _json_module.dumps({
+                "filename": _filename,
+                "part": _part,
+                "parts": _parts,
+                "sha256": _digest,
+                "text": _text[(_part - 1) * _chunk_size:_part * _chunk_size],
+            }, ensure_ascii=False, indent=2)
+            return _literal_preview(_envelope)
+
+        _restore = "\n".join([
+            'from pathlib import Path',
+            'import hashlib, json',
+            f"filename = {_filename!r}",
+            'parts = [json.loads(p.read_text(encoding="utf-8"))',
+            '         for p in Path(".").glob(filename + ".part*.json")]',
+            'parts.sort(key=lambda p: p["part"])',
+            'assert parts, "복사한 조각 파일을 같은 폴더에 저장하세요"',
+            'assert [p["part"] for p in parts] == list(range(1, parts[0]["parts"] + 1))',
+            'assert all(p["filename"] == filename and p["parts"] == len(parts) for p in parts)',
+            'data = "".join(p["text"] for p in parts).encode("utf-8")',
+            'assert all(p["sha256"] == hashlib.sha256(data).hexdigest() for p in parts)',
+            'Path(filename).write_bytes(data)',
+            'print(filename, "복원 완료:", len(data), "bytes")',
+        ])
+        return mo.vstack([
+            mo.md(f"큰 기록은 화면 출력 제한을 피하도록 **{_parts}개 조각**으로 나눴습니다. "
+                  "위 전체 파일 다운로드를 먼저 사용하세요. 복사가 필요하면 조각을 하나씩 열고 "
+                  "JSON 전체를 복사해 같은 폴더에 "
+                  f"`{_filename}.part001.json`, `.part002.json` …으로 저장하세요. "
+                  "아래 Python 코드를 그 폴더에서 실행하면 순서·누락·내용을 검사하고 원본 파일을 복원합니다. "
+                  "조각의 `text`를 손으로 편집하지 마세요."),
+            mo.accordion({
+                f"조각 {_part:03d}/{_parts:03d} · {_filename}":
+                    mo.lazy(lambda _part=_part: _show_part(_part))
+                for _part in range(1, _parts + 1)
+            }),
+            mo.accordion({"복사한 조각을 원본 파일로 복원하는 Python 코드": _literal_preview(_restore)}),
+        ], gap=0.5)
+
     mo.vstack([
         mo.md("### 제출할 결과 묶음 — 두 파일을 함께 보관하세요"),
         mo.hstack([
@@ -2943,8 +2996,8 @@ def _(get_runs, mo, run_provenance, worksheet_md):
             mo.download(_json.encode("utf-8"), filename="lab_evidence.json", mimetype="application/json",
                         label=f"⬇ 전체 설정·캡션·토큰 결과 JSON ({len(_runs)}건)"),
         ]),
-        mo.accordion({"Markdown 보기 · 다운로드가 안 되면 복사": _md_preview,
-                      "JSON 보기 · 다운로드가 안 되면 복사": _json_preview}),
+        mo.accordion({"Markdown 보기 · 다운로드가 안 되면 복사": _copy_preview(_md, "lab_log.md"),
+                      "JSON 보기 · 다운로드가 안 되면 복사": _copy_preview(_json, "lab_evidence.json")}),
         mo.md("파일을 열어 실행 ID·클립·프롬프트·캡션이 있는지 확인하세요. JSON은 원본 영상 파일을 포함하지 않습니다."),
     ], gap=0.5)
     return
