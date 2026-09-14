@@ -15,6 +15,16 @@
 
 Code for experiments conducted in the paper, with Qwen 2.5 Omni as the representative model.
 
+For the updated **Creative AI: Creation & Practice** classroom activity, use the
+[Korean notebook](CTP49906_avllm_molab_kr.py), [setup guide](README_kr.md),
+[instructor guide](CLASSROOM_GUIDE_kr.md), and [student worksheet](WORKSHEET_kr.md).
+The [September 14 QA record](QA_IMPROVEMENTS.md) documents 293 CPU tests and seven
+Molab GPU experiments, including restart recovery, alongside the remaining checks.
+That revision adds bounded controls, readable Korean output, strict control matching,
+and complete per-run evidence to the Korean notebook. Shared helpers changed too;
+the English notebook described below retains its earlier setup and teaching flow
+and was not subjected to the same live GPU retest.
+
 
 ## Installation
 ```bash
@@ -41,7 +51,7 @@ python src/attention_knockout_experiment.py \
 
 `CTP49906_avllm_molab.py` is a self-contained [marimo](https://marimo.io) notebook that
 turns the two experiments above into a **teaching walkthrough plus a live playground**.
-It is meant to be opened in [molab](https://marimo.io/molab) (a free hosted GPU runtime),
+It is meant to be opened in [molab](https://molab.marimo.io/notebooks) with an available GPU,
 read top-to-bottom once so the mechanics are clear, and then *poked at* — swap the clip,
 the prompt, the number of frames, and above all the **attention knockouts** — to build
 intuition for the paper's central question: **when an audio-visual LLM answers, is it
@@ -67,17 +77,21 @@ inside* and forming falsifiable "if I block X, the output should change like Y" 
 
 ### Running it (molab)
 
-1. Open the notebook in molab and **attach a GPU** via the notebook-specs button in the
-   header (it uses `cuda:0`; the 3B thinker fits comfortably).
+1. In molab, use **+ New notebook → Mirror from GitHub** with the notebook URL, fork
+   your own copy, and select a GPU in **Configure compute → Save and restart**.
+   It uses `cuda:0`; input size, host RAM, and available VRAM affect whether a run fits.
 2. Run the cells top-to-bottom. The setup cell pip-installs dependencies into the kernel,
    restores `torchvision.io.read_video` with a small PyAV shim (recent torchvision dropped
    the video decoder), and clones this repo (`src/` + the sample clip) so the experiment
    code is importable.
 3. First run downloads the model weights (~8 GB) and is the slow one; later cells reuse the
    loaded model.
-4. The Qwen weights are pinned to the immutable revision recorded in the notebook and
-   `precomputed/meta.json`. Before the class release, set `REPO_REF` to the published course
-   tag too; when opened from a local checkout, the notebook uses that checkout as-is.
+4. **English setup limitation:** this notebook still defaults `REPO_REF` to `main`,
+   hard-resets its managed helper clone to the fetched ref, and loads Qwen without an
+   explicit model revision. Saved replay metadata does not pin live model loading.
+   Use a separate disposable clone and verify the selected source/runtime before teaching.
+   The Korean notebook instead pins its helper and model/processor revisions, refuses
+   to overwrite tracked edits, and records actual runtime identity; see [its setup guide](README_kr.md).
 
 You can also run it locally with `uvx marimo edit CTP49906_avllm_molab.py` on a CUDA
 machine — the `# /// script` header pins compatible dependency versions.
@@ -96,18 +110,18 @@ run in this mode. Regenerate the artifacts on a CUDA box with
 | --- | --- | --- |
 | **Setup** | Installs deps, patches the video reader, clones the repo. | Nothing to tune; just let it finish. |
 | **Guided-demo reference** | Central knobs: `VIDEO_PATH`, `NFRAMES`, `LOGIT_PROMPT`, `ATTENTION_PROMPT`, `KNOCKOUT_RULES`, `MAX_NEW_TOKENS`. | Leave unchanged first; edit only to redesign the shared reference run. |
-| **Video preview** | Plays the exact clip (frames **and** embedded audio) sent to Qwen. | Whatever the model can't perceive here, it can't answer from. |
+| **Video preview** | Plays the source clip and embedded audio. | Qwen receives sampled and encoded representations; human playback is not the model's input experience. |
 | **Model + helpers** | Loads Qwen2.5-Omni-3B (talker freed — this only needs the *thinker*) and builds the token-type map. | Prints `token counts:` with **every** modality including the zeros — `image=0` on a video clip is a fact, not an omission. |
 | **Logit Lens** | One forward pass; decodes per-layer predictions at audio positions to a CSV; also prints the caption. | The caption is the model's "final answer" for comparison. |
 | **Diversity by layer** | Two plots: how many *distinct* probe tokens each layer decodes at audio positions, and how dominant the top token is. | A descriptive argmax statistic—not uncertainty, quality, or proof of fusion. |
 | **🎞️ Probe grid** | All 36 layers × every audio position on one canvas, coloured by token **class** (content / junk / undecodable). Drag to scrub a layer; click a column for that position's whole trajectory. | The headline finding of the week: the probe is **degenerate** at audio positions — layer 34 decodes 6 distinct tokens across 248 positions, 245 of them junk. "Crystallization" is convergence onto a space. |
 | **Attention Knockout** | Generates a **baseline** caption and a **knockout** caption side-by-side using `KNOCKOUT_RULES`. | The whole point: does the answer *change* when a pathway is cut? |
 | **Captured attention** | Baseline and knockout heatmaps plus their delta, showing final-query attention mass by token type. **Descriptive, not causal importance.** | The knockout panel's blocked column is ~0 *by construction*. Only the baseline panel says where attention normally goes; only Δ says where the mask pushed it. |
-| **Teacher-forced Δ log-lik** | Feeds the baseline caption back in tagged `answer` and scores its per-token log-probability change under the same direct-edge knockout. | Continuous and deterministic; reports additive total **and** length-normalized Δ/token — the mean is the one that survives a change of caption length. |
+| **Teacher-forced Δ log-lik** | Feeds the baseline caption back in tagged `answer` and scores its per-token log-probability change under the same direct-edge knockout. | Reports total **and** mean Δ/token. The mean normalizes length but does not control caption content, language, or tokenization. |
 | **🎚️ Layer-band sweep** | Regenerates the caption with one modality blocked over a chosen band, and diffs it against the baseline. | An unchanged caption is "no effect under this measurement", not proof the pathway is absent. Bands that mask zero layers are refused before the GPU runs. |
 | **🎛️ Playground** | Interactive form that re-runs the logit-lens diversity measurement on your choices. | Forward-pass only, so `generated` and `answer` are **inert on either side** of a rule here. `Frames` moves the *video* token count, never the audio one. |
 | **🎯 Teacher forcing** | Interactive form for the Δ log-lik measurement: your clip, prompt, target modality, and layer band, with the source fixed to `answer`. | Where `answer → audio` — inert everywhere else — becomes a real experiment. Pick `Silent control` as the clip: it is the one control in this lab that can fail. |
-| **📓 Lab ledger** | Every ▶ recorded with the prediction you wrote first, the setting you changed, and the measurement — exportable as a `WORKSHEET.md` table. | Two counts to watch: runs **without a control**, and runs **without a verdict**. |
+| **📓 Lab ledger** | Records distinct submitted results with your prediction, settings, and measurement — exportable as a `WORKSHEET.md` table. Identical results reuse an existing row. | Two counts to watch: runs **without a matched control**, and runs **without a verdict**. A matched setting is not certification of an observed null. |
 
 ### Reading a knockout rule
 
@@ -132,7 +146,7 @@ The six intervention token types (only some are modalities) used to tag position
 
 | Type | What it is |
 | --- | --- |
-| `query_text` | The words of your prompt / instruction. |
+| `query_text` | The prompt / instruction plus chat delimiters and other prompt structure. |
 | `audio` | Tokens from the video's **soundtrack**. |
 | `video` | Tokens from the sampled **frames**. |
 | `image` | Still-image tokens — absent for a video clip, so inert here. |
@@ -172,15 +186,19 @@ reshape the **audio-position logit lens** and belong in the **playground**.
 ### The research playground (the tweak-it part)
 
 The `🎛️` section wraps the diversity measurement in a form — **nothing runs until you
-press ▶** — and reuses the already-loaded model, so iterations are fast and need no extra
-VRAM. Controls:
+press ▶** — and reuses the already-loaded model. Each submission still performs additional
+computation and uses input-dependent memory; editing global code can rerun guided cells.
+Controls in this English notebook:
 
 - **Clip** — explicitly choose **Default**, matched **Silent control**, or **Upload** in both
   forms. Upload requires a file; it never silently falls back. Uploaded bytes are stored and
-  cached by SHA-256 under a path-safe generated filename. Preflight rejects files over 250 MB
-  or 120 seconds, over 1080p/60 FPS or the decoded-memory budget, unknown-duration media,
-  missing audio/video streams, and clips with no decodable video frame.
-- **Frames** — 2–32; more frames = richer visual context (and slower).
+  cached by SHA-256 under a path-safe generated filename. English upload checks cover
+  250 MiB, known durations over 120 seconds, known rates over 60 FPS, resolution,
+  a 6 GiB estimated decoded-RGB budget, and missing audio/video streams. Unknown metadata
+  can pass this older preflight; it does not enforce the Korean notebook's cumulative
+  decoder and input-token limits. Use the Korean activity for the reviewed upload flow.
+- **Frames** — 2–32, in steps of two; more frames change the sampled visual input and cost.
+  Start at 4 or 8. The updated Korean forms use a tighter 2–16 bound.
 - **Prompt** — the instruction; try steering it toward sound vs. sight.
 - **Knockout on/off**, then either the **single-rule** dropdowns (source, target, layer
   range) or the **advanced** field for several rules as `source,target,start,end` separated
@@ -245,11 +263,15 @@ graded on.
 
 ## WP-6 classroom release notes
 
-The bilingual instructor runbook, student quick-start, and audience-response
-surface are **specified in the PRD but not yet in this repository**. What exists
-today is [`WORKSHEET.md`](WORKSHEET.md), and the notebook's run ledger exports
-rows in its format directly (`⬇ Download your runs as a worksheet table` at the
-bottom of the notebook).
+The Korean [instructor guide](CLASSROOM_GUIDE_kr.md), [quick-start](README_kr.md),
+and [worksheet](WORKSHEET_kr.md) now support the updated Korean notebook. The full
+bilingual WP-6 package and the PRD's proposed audience-response surface remain
+separate curriculum work; see the [draft PRD](../CTP49906_W7-11_PRD.md).
+[`WORKSHEET.md`](WORKSHEET.md) remains the English research/design worksheet,
+and this English notebook exports ledger rows in its format. The Korean notebook
+adds complete evidence JSON, Markdown, and a visible copy fallback. Verify local
+file receipt before ending the session; the GPU QA verified preview contents,
+not browser download receipt or preservation after server recreation.
 
 This is a teaching-only candidate release until the human accessibility,
 localization, licensing, and governance gates are reviewed.

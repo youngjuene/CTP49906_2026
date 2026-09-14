@@ -48,6 +48,11 @@ python src/attention_knockout_experiment.py \
 교사는 [수업 진행 안내](CLASSROOM_GUIDE_kr.md), 학생은 [한국어 워크시트](WORKSHEET_kr.md)를
 먼저 확인하세요. 영어판은 [`CTP49906_avllm_molab.py`](CTP49906_avllm_molab.py)입니다.
 
+**2026-09-14 수업 보완판:** [배포 노트북(main)](https://github.com/youngjuene/CTP49906_2026/blob/main/avllm_interpretability/CTP49906_avllm_molab_kr.py)을 Mirror할 수 있습니다.
+이번 GPU QA와 정확히 같은 코드를 배포하려면 [검증한 불변 버전](https://github.com/youngjuene/CTP49906_2026/blob/61d540d01d6ed9ca46e98933ad961238dbfbeba8/avllm_interpretability/CTP49906_avllm_molab_kr.py)을 사용하세요.
+[37개 QA 항목의 보완·검증 기록](QA_IMPROVEMENTS.md)에 실제 GPU 실험 7건과 남은 운영 확인을 정리했습니다.
+기존 Fork에는 새 소스가 자동 반영되지 않으므로 결과를 먼저 보관하고 배포한 버전으로 새 사본을 만드세요.
+
 ### 한국어판 노트북
 
 한국어판은 설명·폼·그래프·기록표에 한국어를 사용하며, `LOGIT_PROMPT`와
@@ -294,6 +299,8 @@ float32 PCM 디코딩128 MiB 한도를 적용합니다. 불명확한 메타데�
 연결되지만, 연결 표시가 유효한 인과 결론을 보증하지는 않습니다. 오류나 세션 종료에
 대비해 결과를 내보내고, 메모리 부족 뒤에는 오류·설정을 기록한 다음 커널 재시작과 작은
 입력으로 복구하세요. Replay 결과는 자신의 새 실행과 구분해 제출합니다.
+다운로드 파일을 받지 못하면 노트북의 **“JSON 보기 · 다운로드가 안 되면 복사”**와 Markdown
+미리보기를 펼쳐 전체 내용을 각각 UTF-8 `.json`·`.md` 파일로 저장하고 다시 열어 확인하세요.
 
 ## 인용
 

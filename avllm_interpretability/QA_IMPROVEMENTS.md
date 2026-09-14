@@ -6,7 +6,9 @@
 
 ## 현재 검증과 배포 상태
 
+- **배포 경로:** 이번 수업 보완은 [PR #1](https://github.com/youngjuene/CTP49906_2026/pull/1)에 정리되어 있으며, 배포 파일은 [main의 한국어 노트북](https://github.com/youngjuene/CTP49906_2026/blob/main/avllm_interpretability/CTP49906_avllm_molab_kr.py)입니다. 아래 불변 커밋과 해시는 실제 GPU QA 대상을 식별하므로 이후 문서 갱신이나 병합 커밋으로 바꾸지 않습니다. 기존 Fork를 새로 만드는 순서와 제출 방법은 [수업 진행 안내](CLASSROOM_GUIDE_kr.md)를 따릅니다.
 - **CPU 통합 회귀검사: 293개 통과(4.64초), marimo check 통과.** 입력 경계·실제 소형 PyAV 영상·디코더 경로·표시·기록·내보내기·노트북 그래프·replay 검사입니다.
+- **병합 전 재검사:** 2026-09-14 같은 구현에서 293개 통과(5.41초), 한국어·영어 노트북의 `marimo check` 통과. 이후 배포 문서만 갱신했으며 GPU 검증 대상의 노트북 파일 해시와 구현은 유지합니다.
 - **수정 버전 GPU 재검증 완료:** [Molab 재검증 노트북](https://molab.marimo.io/notebooks/nb_vpv7VtWNqjkY3StGjYctmY)에서 불변 커밋 Mirror → Fork → RTX Pro 6000(4 CPU·32 GiB) → Run all을 완료하고, 인터랙티브 결과 **7건**을 확인했습니다. 한국어/영어 대조 쌍, 파라미터 변경, 입력 거부 후 회복, 판정 저장, 브라우저 새로고침/재연결 및 **실제 Restart kernel → Run all → 재제출**을 시험했습니다.
 - **검증한 소스 식별자:** [노트북 커밋 `61d540d01d6ed9ca46e98933ad961238dbfbeba8`](https://github.com/youngjuene/CTP49906_2026/blob/61d540d01d6ed9ca46e98933ad961238dbfbeba8/avllm_interpretability/CTP49906_avllm_molab_kr.py), 실제 헬퍼 커밋 `1df22a98697db72e4c2a5725156951fcbf9348b7`. 런타임의 노트북 SHA-256은 `b56544db421d2486c8a152f2d4cd3a1dcb99bf86282003a8e8e5c2c491bfb558`입니다.
 - **결과 내용·커널 복구 확인:** 확장한 DOM 미리보기에서 JSON과 Markdown을 보존했고 7개 실행이 서로 일치함을 확인했습니다. 실제 커널 재시작 뒤에도 7개 실행·1개 supported 판정이 유지되고 같은 한국어 TF 결과가 재현됐습니다. **브라우저 다운로드 파일 수신, 서버 종료/재생성, 학생 GPU 동시 할당은 미확인**입니다.
