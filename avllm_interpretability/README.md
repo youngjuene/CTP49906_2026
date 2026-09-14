@@ -18,10 +18,19 @@ Code for experiments conducted in the paper, with Qwen 2.5 Omni as the represent
 For the updated **Creative AI: Creation & Practice** classroom activity, use the
 [Korean notebook](CTP49906_avllm_molab_kr.py), [setup guide](README_kr.md),
 [instructor guide](CLASSROOM_GUIDE_kr.md), and [student worksheet](WORKSHEET_kr.md).
-The [September 14 QA record](QA_IMPROVEMENTS.md) documents 293 CPU tests and seven
-Molab GPU experiments, including restart recovery, alongside the remaining checks.
-That revision adds bounded controls, readable Korean output, strict control matching,
-and complete per-run evidence to the Korean notebook. Shared helpers changed too;
+The current Korean classroom flow follows priorities **1, 2, 3, 4, 7, 8**: answer→audio/video,
+original/silent controls, same-language prompt tasks, layer bands, new clips, and advanced paths.
+Teacher forcing comes first, starting with four original/silent × audio/video runs; the diversity
+probe follows as activity 8. Both student forms keep **8 frames fixed**. Language variation is
+an optional note in the prompt cell, and the caption limit is a truncation-recovery setting.
+Final code `936e9f4` passed 316 CPU tests and both notebook marimo checks. Molab RTX Pro 6000
+QA ran 12 experiments (9 TF, 3 diversity) on `914e56b`, then tested the final export cell in
+the live notebook against those records. Both large copy exports were reconstructed and
+SHA-256 verified; a fresh startup of the complete final source was not retested. The
+[QA record](QA_IMPROVEMENTS.md) separates this scope from the earlier `61d540d` restart-recovery
+tests and lists the remaining upload, download-receipt, and classroom-compute checks.
+The earlier revision added bounded controls, readable Korean output, strict control matching,
+and complete per-run evidence. Shared helpers changed too;
 the English notebook described below retains its earlier setup and teaching flow
 and was not subjected to the same live GPU retest.
 

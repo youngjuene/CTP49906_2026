@@ -2,9 +2,37 @@
 
 2026-09-14 · 대상: `CTP49906_avllm_molab_kr.py`와 공유 헬퍼
 
-별도 보관된 `molab-qa-2026-09-14/source-audit.md`의 **S01–S37 전체**를 아래에 대응시켰습니다. 원본 감사의 [불변 기준 노트북](https://github.com/youngjuene/CTP49906_2026/blob/57054857f379658928aed49ee6bf286ca7271434/avllm_interpretability/CTP49906_avllm_molab_kr.py)은 커밋 `57054857f379658928aed49ee6bf286ca7271434`입니다. 이 문서는 모든 문제가 해결됐다는 선언이 아닙니다. **구현**은 현재 코드에 보완이 있다는 뜻이며, **일부 보완 / 남음**에는 아직 해결하지 않은 조건을 적었습니다. 공유 헬퍼 변경 외에 영어 노트북의 수업 흐름까지 같은 수준으로 개편했다는 뜻도 아닙니다.
+별도 보관된 `molab-qa-2026-09-14/source-audit.md`의 **S01–S37 전체**를 아래에 대응시켰습니다. 원본 감사의 [불변 기준 노트북](https://github.com/youngjuene/CTP49906_2026/blob/57054857f379658928aed49ee6bf286ca7271434/avllm_interpretability/CTP49906_avllm_molab_kr.py)은 커밋 `57054857f379658928aed49ee6bf286ca7271434`입니다. 이 문서는 모든 문제가 해결됐다는 선언이 아닙니다. **구현**은 해당 감사 보완 버전에 코드가 있다는 뜻이며, **일부 보완 / 남음**에는 아직 해결하지 않은 조건을 적었습니다. 공유 헬퍼 변경 외에 영어 노트북의 수업 흐름까지 같은 수준으로 개편했다는 뜻도 아닙니다.
 
-## 현재 검증과 배포 상태
+## 후속 개편 — 수업 우선순위 1·2·3·4·7·8
+
+한국어 노트북과 [수업 안내](CLASSROOM_GUIDE_kr.md)·[워크시트](WORKSHEET_kr.md)는
+티처 포싱의 원본/무음 × audio/video 네 실행을 첫 활동으로 배치합니다. 같은 언어의 질문
+프리셋, 전체·초반·중반·후반 대역, 접힌 업로드 활동, 뒤쪽의 고급 교차 모달·복합 규칙 순서로
+탐색합니다. 프레임은 두 학생 폼에서 **8로 고정**하고, 언어 변경은 프롬프트 셀의 선택적
+주석으로 남깁니다. 생성 상한은 캡션 잘림 복구용 운영 설정으로 분리합니다.
+
+**새 UI 검증:** CPU 검사 **316개 통과(4.89초)**, 한국어·영어 노트북 `marimo check` 통과.
+실제 marimo replay·폼 제출·고정 8프레임·질문/대역 변환·기록 위치와 큰 내보내기 복원을 검사했습니다.
+
+- **GPU 실행:** [이번 Molab QA 사본](https://molab.marimo.io/notebooks/nb_1ntv7MQvERKtE2TNVrHDt1)에서 Mirror → Fork → RTX Pro 6000(4 CPU·32 GiB) → Run all을 완료했습니다. 인터랙티브 **12건(티처 포싱 9건·다양성 3건)**을 실행했습니다. 모두 8프레임이며 로컬 저장 상태가 `saved`입니다.
+- **검증 소스 범위:** GPU 시작·실험은 [커밋 `914e56b`](https://github.com/youngjuene/CTP49906_2026/blob/914e56b835385e6680c427a98db3a5dbd586e706/avllm_interpretability/CTP49906_avllm_molab_kr.py), 노트북 SHA-256 `43653fc69bb880ec25eefa1434087a25e05e568422cae53aa4f34d5dd110baf1`에서 수행했습니다. 헬퍼는 `1df22a98697db72e4c2a5725156951fcbf9348b7`, 모델은 `f75b40e3da2003cdd6e1829b1f420ca70797c34e`입니다. 최종 [배포 소스 `936e9f4`](https://github.com/youngjuene/CTP49906_2026/blob/936e9f4812c6a351d7cd56a4c8cee66ffe714eae/avllm_interpretability/CTP49906_avllm_molab_kr.py)는 후속 활동 문구를 한 비교로 줄이고 내보내기 셀을 수정했습니다. **최종 내보내기 셀을 같은 Molab 편집기에 적용해 기존 12건으로 복구 검증**했으며, 최종 파일 전체의 새 Mirror/Run all을 반복한 것은 아닙니다. 기록의 원래 provenance를 새 커밋으로 바꾸지 않았습니다.
+- **활동 1·2:** 원본/무음 × audio/video 네 실행 성공. 각 클립 안에서 캡션 토큰 ID가 같고, 원본 audio/video 실행이 각각 해당 무음 실행에 연결됨을 JSON으로 확인했습니다.
+- **활동 3·4·8:** 소리·보이는 내용·시청각 함께 프리셋이 실제 질문으로 제출됐습니다. 중반 대역은 `[12,24)`로 실행되고 전체 대역과 같은 캡션 ID를 재사용했습니다. `answer→query_text`, `audio→video`, `audio→query_text`, 두 교차 모달 규칙의 동시 차단을 실제 실행했습니다. 초반·후반 대역의 변환은 CPU 검사 범위이며 이번 GPU에서 모두 반복한 것은 아닙니다.
+- **입력 오류 후 회복:** 공백 직접 질문과 빈 업로드를 한국어 메시지로 거부했습니다. 프리셋으로 돌아오면 공백인 직접 질문 필드는 적용되지 않고 정상 실행됩니다. 잘못된 입력 뒤에도 직전 성공 결과가 남을 수 있으므로 출력 설정·ID를 확인하도록 안내했습니다.
+- **새로 발견하고 수정한 내보내기 문제:** 12건에서 닫힌 JSON/Markdown 미리보기도 전체 내용을 포함해 셀 출력이 **11,426,906바이트**가 되었고 다운로드 UI까지 숨겨졌습니다. 큰 미리보기를 필요할 때 여는 100,000자 조각으로 바꾸고 전체 다운로드는 유지했습니다. 실제 JSON **25조각·2,452,521바이트**, Markdown **23조각·2,226,147바이트**를 복원해 SHA-256을 확인했습니다. 두 파일의 12개 전체 실행 객체가 동일하며 화면에 표시한 Python 복원 코드도 동작합니다.
+- **남은 수업 주의점:** 보이는 내용 질문은 생성 상한 32와 128 모두 도달했고 마지막 글자가 `�`로 끝났습니다. 상한 증가는 완성·정확성을 보장하지 않습니다. 무음에서도 소리 캡션이 생성됩니다. 잘린 문자·반복·다른 언어 조각과 환각을 모델의 능력이나 해석 근거로 오인하지 않도록 [수업 안내](CLASSROOM_GUIDE_kr.md)에 반영했습니다.
+- **미확인 범위:** 활동 7의 업로드 영역과 빈 입력 거부는 확인했으나 실제 파일 선택은 자동화 브라우저 확장의 파일 접근 제한으로 완료하지 못했습니다. 새 학생 클립의 GPU 실행, 직접 다운로드 수신, 최종 버전의 새 커널/서버 복구, 학생 전원의 동시 GPU 할당과 최대 입력 메모리는 이번 검증에 포함하지 않습니다. 큰 파일의 복사 복원은 교사 지원이 필요할 수 있습니다.
+
+이번 별도 QA 묶음 `molab-priority-flow-2026-09-14/`에는 `live-qa-report.md`,
+`live-evidence.json`, `live-worksheet.md`, `export-parts/`, `focused-controls.png`,
+`export-size-failure.png`, `export-recovered.png`를 보관했습니다.
+
+아래 293개 CPU 검사와 7건의 GPU 실행, 프레임 8→4·한국어/영어 쌍은 **이전 `61d540d`
+버전에서 실제로 수행한 이력**입니다. 이번 개편에서는 프레임 변경 위젯과 필수 영어 활동을
+제거했으므로 이전 실행을 새 UI의 GPU 검증으로 간주하지 않습니다.
+
+## 이전 버전의 검증과 배포 기록
 
 - **배포 경로:** 이번 수업 보완은 [PR #1](https://github.com/youngjuene/CTP49906_2026/pull/1)에 정리되어 있으며, 배포 파일은 [main의 한국어 노트북](https://github.com/youngjuene/CTP49906_2026/blob/main/avllm_interpretability/CTP49906_avllm_molab_kr.py)입니다. 아래 불변 커밋과 해시는 실제 GPU QA 대상을 식별하므로 이후 문서 갱신이나 병합 커밋으로 바꾸지 않습니다. 기존 Fork를 새로 만드는 순서와 제출 방법은 [수업 진행 안내](CLASSROOM_GUIDE_kr.md)를 따릅니다.
 - **CPU 통합 회귀검사: 293개 통과(4.64초), marimo check 통과.** 입력 경계·실제 소형 PyAV 영상·디코더 경로·표시·기록·내보내기·노트북 그래프·replay 검사입니다.
@@ -20,6 +48,8 @@ CPU 재실행 명령:
 ```sh
 MPLCONFIGDIR=/private/tmp/ctp49906-mpl .venv/bin/python -m pytest avllm_interpretability/tests -q
 ```
+
+아래 37개 표는 불변 QA 버전의 보완 이력입니다. 현재 학생 UI의 활동 순서는 위의 후속 개편 절을 따릅니다.
 
 아래 근거 표기: **N** = [한국어 노트북](CTP49906_avllm_molab_kr.py), **S** = [입력 안전장치](src/classroom_safety.py), **D** = [캡션·표시 헬퍼](src/classroom_display.py), **R** = [실행 기록](src/run_ledger.py), **T** = [티처 포싱](src/teacher_forcing.py), **L** = [Logit Lens](src/logitlens_experiment.py), **A** = [어텐션 녹아웃](src/attention_knockout_experiment.py), **P** = [replay 검증](src/precompute.py), **G** = [수업 안내](CLASSROOM_GUIDE_kr.md)와 [워크시트](WORKSHEET_kr.md).
 
