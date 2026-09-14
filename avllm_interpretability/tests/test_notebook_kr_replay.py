@@ -178,10 +178,10 @@ def test_the_upload_gate_fires_for_the_korean_label_and_the_english_value(replay
     # check written against the English value alone never matches and fails open.
     _, defs = replay
     base = {
-        "prediction": "가설", "video": None, "nframes": 8, "prompt": "p",
+        "prediction": "가설", "video": None, "prompt_preset": ["직접 작성"], "prompt": "p",
         "ko_enable": False, "ko_source": ["audio"], "ko_target": ["video"],
         "ko_layers": (0, 36), "ko_rules_text": "", "compare": True,
-        "target": ["audio"], "layers": (0, 36),
+        "target": ["audio"], "layers": ["전체"],
     }
     for form in ("ko_controls", "tf_controls"):
         validate = defs[form].validate
@@ -280,12 +280,13 @@ def test_no_form_asks_for_a_hypothesis_any_more(replay):
     _, defs = replay
     payloads = {
         "band_controls": {"target": ["video"], "layers": (0, 12), "null_band": False},
-        "ko_controls": {"clip": defs["CLIP_DEFAULT"], "video": None, "nframes": 8,
-                        "prompt": "p", "ko_enable": False, "ko_source": ["audio"],
+        "ko_controls": {"clip": defs["CLIP_DEFAULT"], "video": None,
+                        "prompt_preset": ["직접 작성"], "prompt": "p", "ko_enable": False, "ko_source": ["audio"],
                         "ko_target": ["video"], "ko_layers": (0, 36),
                         "ko_rules_text": "", "compare": True},
-        "tf_controls": {"clip": defs["CLIP_DEFAULT"], "video": None, "nframes": 8,
-                        "prompt": "p", "target": ["audio"], "layers": (0, 36)},
+        "tf_controls": {"clip": defs["CLIP_DEFAULT"], "video": None,
+                        "prompt_preset": ["직접 작성"], "prompt": "p",
+                        "target": ["audio"], "layers": ["전체"]},
     }
     for name, payload in payloads.items():
         form = defs[name]
@@ -328,14 +329,15 @@ def test_the_forms_start_unsubmitted(replay, form_name):
 
 
 @pytest.mark.parametrize("form_name", ["ko_controls", "tf_controls"])
-def test_classroom_forms_reject_unsafe_frames_and_blank_prompts(replay, form_name):
+def test_classroom_forms_validate_the_selected_prompt_with_fixed_frames(replay, form_name):
     _, defs = replay
     form = defs[form_name]
-    valid = {"clip": defs["CLIP_DEFAULT"], "video": None, "nframes": 8,
-             "prompt": "소리를 설명해 주세요", "ko_enable": False,
-             "target": ["audio"], "layers": (0, 36), "max_new_tokens": 32}
+    valid = {"clip": defs["CLIP_DEFAULT"], "video": None,
+             "prompt_preset": ["직접 작성"], "prompt": "소리를 설명해 주세요", "ko_enable": False,
+             "target": ["audio"], "layers": ["전체"], "max_new_tokens": 32}
     assert form.validate(valid) is None
-    assert form.validate({**valid, "nframes": 32}) is not None
+    assert "nframes" not in form.element.elements
+    assert form.validate({**valid, "prompt_preset": ["소리 설명"], "prompt": "  "}) is None
     assert form.validate({**valid, "prompt": "  "}) is not None
 
 
@@ -343,9 +345,9 @@ def test_tf_caption_limit_is_a_submitted_form_setting(replay):
     _, defs = replay
     form = defs["tf_controls"]
     assert "max_new_tokens" in form.element.elements
-    valid = {"clip": defs["CLIP_DEFAULT"], "video": None, "nframes": 8,
-             "prompt": "소리를 설명해 주세요", "target": ["audio"],
-             "layers": (0, 36), "max_new_tokens": 64}
+    valid = {"clip": defs["CLIP_DEFAULT"], "video": None,
+             "prompt_preset": ["소리 설명"], "prompt": "", "target": ["audio"],
+             "layers": ["전체"], "max_new_tokens": 64}
     assert form.validate(valid) is None
     assert form.validate({**valid, "max_new_tokens": 1024}) is not None
 
@@ -493,3 +495,296 @@ def test_builtin_control_pair_requires_shipped_content_at_the_known_paths(replay
         assert matched_control_ids(record(altered, False), [control]) == []
     else:
         assert matched_control_ids(original, [record(altered, True)]) == []
+
+
+@pytest.mark.parametrize("label,prompt", [
+    ("소리 설명", "영상에서 들리는 소리를 설명해 주세요"),
+    ("보이는 내용 설명", "영상에서 보이는 내용을 설명해 주세요"),
+    ("시청각 함께 설명", "영상에서 보이는 것과 들리는 소리를 설명해 주세요"),
+])
+def test_prompt_presets_resolve_frontend_labels_and_converted_values(replay, label, prompt):
+    _, defs = replay
+    choices = defs["PROMPT_CHOICES"]
+    resolve = defs["resolve_classroom_prompt"]
+    assert choices[label] == prompt
+    # Frontend validation receives a singleton label list; the experiment gets
+    # the converted Python value. Both must execute the same question, regardless
+    # of an unrelated custom-text field left over from another selection.
+    assert resolve([label], "이 텍스트는 선택하지 않았습니다") == prompt
+    assert resolve(label, "") == prompt
+    assert resolve(choices[label], "") == prompt
+
+
+def test_custom_prompt_is_trimmed_and_blank_or_unknown_selection_is_rejected(replay):
+    _, defs = replay
+    resolve = defs["resolve_classroom_prompt"]
+    assert defs["PROMPT_CHOICES"]["직접 작성"] == "custom"
+    for selection in (["직접 작성"], "직접 작성", "custom"):
+        assert resolve(selection, "  보이는 인물을 묘사해 주세요  ") == "보이는 인물을 묘사해 주세요"
+        with pytest.raises(ValueError):
+            resolve(selection, " \n ")
+    for selection in ([], None, "unknown", ["소리 설명", "직접 작성"]):
+        with pytest.raises(ValueError):
+            resolve(selection, "질문")
+
+
+@pytest.mark.parametrize("label,value,expected", [
+    ("전체", "all", (0, 36)), ("초반", "early", (0, 12)),
+    ("중반", "middle", (12, 24)), ("후반", "late", (24, 36)),
+])
+def test_layer_presets_resolve_the_same_exclusive_interval_in_form_and_execution(
+    replay, label, value, expected,
+):
+    _, defs = replay
+    choices = defs["classroom_layer_choices"](36)
+    resolve = defs["resolve_classroom_layers"]
+    assert choices[label] == value
+    assert resolve([label], 36) == expected
+    assert resolve(label, 36) == expected
+    assert resolve(value, 36) == expected
+
+
+def test_layer_presets_reject_empty_or_unknown_choices(replay):
+    _, defs = replay
+    resolve = defs["resolve_classroom_layers"]
+    for selection in ([], None, "unknown", ["초반", "후반"], (0, 0)):
+        with pytest.raises(ValueError):
+            resolve(selection, 36)
+
+
+@pytest.mark.parametrize("form_name", ["tf_controls", "ko_controls"])
+def test_experiment_forms_offer_prompt_tasks_and_preserve_custom_uploads(replay, form_name):
+    _, defs = replay
+    elements = defs[form_name].element.elements
+    assert "nframes" not in elements
+    assert elements["prompt_preset"].options == defs["PROMPT_CHOICES"]
+    assert {"clip", "video", "prompt"} <= elements.keys()
+    assert elements["clip"].options[defs["CLIP_UPLOAD"]] == "Upload"
+    assert defs["NFRAMES"] == 8
+    if form_name == "tf_controls":
+        assert elements["layers"].options == defs["classroom_layer_choices"](36)
+        assert set(elements["target"].options.values()) >= {"audio", "video"}
+    else:
+        assert {"ko_enable", "ko_source", "ko_target", "ko_layers", "ko_rules_text"} <= elements.keys()
+
+
+def _execute_experiment_setup(defs, form_name, payload):
+    """Run the notebook's actual submit-to-validation statements without a GPU.
+
+    Finish immediately after setup validation (and, for TF, after building its
+    knockout rule), before either cell encodes a clip or invokes a model.
+    """
+    import ast
+    from types import SimpleNamespace
+
+    tree = ast.parse(NOTEBOOK.read_text())
+    cell = next(node for node in tree.body if isinstance(node, ast.FunctionDef)
+                and form_name in {arg.arg for arg in node.args.args}
+                and "validate_experiment" in {arg.arg for arg in node.args.args})
+    cell.decorator_list = []
+    cell.name = "submit_setup"
+    for index, stmt in enumerate(cell.body):
+        if form_name == "tf_controls":
+            stop_here = isinstance(stmt, ast.FunctionDef) and stmt.name == "_tf_prep"
+        else:
+            stop_here = (isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call)
+                         and isinstance(stmt.value.func, ast.Name)
+                         and stmt.value.func.id == "validate_experiment")
+            if stop_here:
+                index += 1
+        if stop_here:
+            cell.body = cell.body[:index] + [ast.Return(value=ast.Call(
+                func=ast.Name(id="locals", ctx=ast.Load()), args=[], keywords=[]))]
+            break
+    else:
+        raise AssertionError("Cannot locate pre-model experiment setup boundary")
+    namespace = {}
+    exec(compile(ast.fix_missing_locations(ast.Module(body=[cell], type_ignores=[])),
+                 str(NOTEBOOK), "exec"), namespace)
+    args = {arg.arg: defs[arg.arg] for arg in cell.args.args}
+    args.update({form_name: SimpleNamespace(value=payload), "USE_PRECOMPUTED": False})
+    return namespace["submit_setup"](**args)
+
+
+@pytest.mark.parametrize("form_name", ["tf_controls", "ko_controls"])
+def test_submitted_experiment_uses_fixed_frames_and_the_selected_prompt(replay, form_name):
+    _, defs = replay
+    payload = {"clip": "Default clip", "video": [], "nframes": 2,
+               "prompt_preset": "영상에서 보이는 내용을 설명해 주세요",
+               "prompt": "무시되어야 하는 이전 질문", "target": "audio",
+               "layers": "middle", "max_new_tokens": 32}
+    actual = _execute_experiment_setup(defs, form_name, payload)
+    prefix = "_tf_" if form_name == "tf_controls" else "_"
+    assert actual[prefix + "nframes"] == 8
+    assert actual[prefix + "prompt"] == "영상에서 보이는 내용을 설명해 주세요"
+    if form_name == "tf_controls":
+        assert actual["_tf_rules"] == [("answer", "audio", 12, 24)]
+
+
+def test_core_answer_measurement_precedes_advanced_diversity_in_the_notebook():
+    import ast
+    tree = ast.parse(NOTEBOOK.read_text())
+    locations = {}
+    for node in tree.body:
+        if not isinstance(node, ast.FunctionDef):
+            continue
+        for child in ast.walk(node):
+            if isinstance(child, ast.Name) and isinstance(child.ctx, ast.Store):
+                if child.id in ("tf_controls", "ko_controls"):
+                    locations[child.id] = node.lineno
+    assert locations["tf_controls"] < locations["ko_controls"]
+
+
+@pytest.mark.parametrize("n_layers", [0, 1, 2, -1])
+def test_layer_presets_refuse_models_too_small_for_three_nonempty_bands(replay, n_layers):
+    _, defs = replay
+    with pytest.raises(ValueError):
+        defs["classroom_layer_choices"](n_layers)
+    with pytest.raises(ValueError):
+        defs["resolve_classroom_layers"]("all", n_layers)
+
+
+@pytest.mark.parametrize("invalid_layers", [[], ["없는 구간"], "unknown"])
+def test_tf_form_reports_invalid_layer_selection_instead_of_submitting(replay, invalid_layers):
+    _, defs = replay
+    payload = {"clip": defs["CLIP_DEFAULT"], "video": None,
+               "prompt_preset": ["소리 설명"], "prompt": "", "target": ["audio"],
+               "layers": invalid_layers, "max_new_tokens": 32}
+    assert defs["tf_controls"].validate(payload) is not None
+
+
+
+def test_core_tf_results_have_a_run_ledger_before_advanced_activity_controls():
+    """Students need the first four run IDs before moving into advanced work.
+
+    Require a cheap, independent ledger display immediately in the core lesson
+    region, after all TF result displays and before the diversity controls.
+    """
+    import ast
+
+    tree = ast.parse(NOTEBOOK.read_text())
+    cells = [node for node in tree.body if isinstance(node, ast.FunctionDef)]
+    tf_result_cells = [node for node in cells
+                       if "tf_result" in {arg.arg for arg in node.args.args}]
+    ko_form = next(node for node in cells if any(
+        isinstance(child, ast.Name) and isinstance(child.ctx, ast.Store)
+        and child.id == "ko_controls" for child in ast.walk(node)))
+    last_tf_display_line = max(node.end_lineno for node in tf_result_cells)
+    ledger_displays = [node for node in cells if any(
+        isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call)
+        and isinstance(stmt.value.func, ast.Name)
+        and stmt.value.func.id == "ledger_view" for stmt in node.body)]
+    core_ledgers = [node for node in ledger_displays
+                    if last_tf_display_line < node.lineno < ko_form.lineno]
+    assert core_ledgers, "Core TF runs have no nearby ledger/IDs before advanced activity 8"
+    assert any({arg.arg for arg in node.args.args} <= {"ledger_view", "mo"}
+               for node in core_ledgers), "The core ledger must remain an independent display"
+
+
+def test_large_export_previews_are_bounded_and_reassemble_exact_evidence(replay, tmp_path, monkeypatch):
+    """Catch eager accordion payloads that hide Molab's entire export cell."""
+    import ast
+    import asyncio
+    import hashlib
+    import json
+    from html.parser import HTMLParser
+    from types import SimpleNamespace
+
+    from src.run_ledger import build_evidence_json, build_worksheet_md, run_record
+
+    _, defs = replay
+    caption = '한글🙂</pre><script>never execute</script>```\\\n'
+    # One unusually large run must be safe too; splitting only by run is insufficient.
+    runs = [run_record(
+        kind="teacher_forcing", condition="answer→audio", metric_name="delta_per_token",
+        metric_value=-0.2, metric_unit="nats/token", config={"clip": "02321.mp4"},
+        prediction=caption, extra={"caption_text": caption, "tokens": [caption] * 16000},
+    )]
+    expected = {
+        "lab_log.md": build_worksheet_md(runs),
+        "lab_evidence.json": build_evidence_json(runs, provenance=defs["run_provenance"]),
+    }
+    assert len(expected["lab_evidence.json"].encode()) > 1_000_000
+    downloads, lazy_items = {}, []
+
+    class ExportUI:
+        # Isolated cell execution has no virtual-file server. Capture that IO
+        # boundary while keeping marimo's real layouts, escaping and lazy widgets.
+        def __getattr__(self, name):
+            return getattr(defs["mo"], name)
+
+        def download(self, data, *, filename, **kwargs):
+            downloads[filename] = data
+            return defs["mo"].Html(f'<a href="/@file/{filename}">Download</a>')
+
+        def lazy(self, element, **kwargs):
+            item = defs["mo"].lazy(element, **kwargs)
+            lazy_items.append(item)
+            return item
+
+    tree = ast.parse(NOTEBOOK.read_text())
+    cell = next(node for node in tree.body if isinstance(node, ast.FunctionDef)
+                and {arg.arg for arg in node.args.args}
+                == {"get_runs", "mo", "run_provenance", "worksheet_md"})
+    cell.decorator_list = []
+    cell.name = "render_export_cell"
+    for index, statement in enumerate(cell.body):
+        if isinstance(statement, ast.Expr) and isinstance(statement.value, ast.Call):
+            cell.body[index] = ast.Return(value=statement.value)
+    namespace = {}
+    exec(compile(ast.fix_missing_locations(ast.Module(body=[cell], type_ignores=[])),
+                 str(NOTEBOOK), "exec"), namespace)
+    rendered = namespace["render_export_cell"](
+        lambda: runs, ExportUI(), defs["run_provenance"], build_worksheet_md,
+    ).text
+    assert len(rendered.encode()) < 1_000_000
+    assert downloads == {name: value.encode() for name, value in expected.items()}
+
+    class PreText(HTMLParser):
+        def __init__(self):
+            super().__init__(convert_charrefs=True)
+            self.blocks, self.tags, self.inside = [], [], False
+
+        def handle_starttag(self, tag, attrs):
+            self.tags.append(tag)
+            if tag == "pre":
+                self.blocks.append("")
+                self.inside = True
+
+        def handle_endtag(self, tag):
+            if tag == "pre":
+                self.inside = False
+
+        def handle_data(self, data):
+            if self.inside:
+                self.blocks[-1] += data
+
+    instructions = PreText()
+    instructions.feed(rendered)
+    parts = {filename: [] for filename in expected}
+    assert lazy_items, "large previews should load only the chosen bounded chunk"
+    for item in lazy_items:
+        response = asyncio.run(item._load(SimpleNamespace()))
+        assert len(response.html.encode()) < 1_000_000
+        parsed = PreText()
+        parsed.feed(response.html)
+        assert "script" not in parsed.tags
+        chunk = json.loads(parsed.blocks[0])
+        parts[chunk["filename"]].append(chunk)
+        (tmp_path / f'{chunk["filename"]}.part{chunk["part"]:03d}.json').write_text(parsed.blocks[0], encoding="utf-8")
+    for filename, chunks in parts.items():
+        ordered = sorted(chunks, key=lambda chunk: chunk["part"])
+        assert [chunk["part"] for chunk in ordered] == list(range(1, len(chunks) + 1))
+        assert {chunk["parts"] for chunk in ordered} == {len(chunks)}
+        recovered = "".join(chunk["text"] for chunk in ordered)
+        assert recovered == expected[filename]
+        assert {chunk["sha256"] for chunk in ordered} == {hashlib.sha256(recovered.encode()).hexdigest()}
+    assert json.loads("".join(chunk["text"] for chunk in sorted(parts["lab_evidence.json"], key=lambda c: c["part"]))) == json.loads(expected["lab_evidence.json"])
+    # Execute the actual recovery code shown to a student, rather than only
+    # reproducing its join logic in the test.
+    monkeypatch.chdir(tmp_path)
+    assert len(instructions.blocks) == 2
+    for script in instructions.blocks:
+        exec(compile(script, "displayed-export-recovery.py", "exec"), {})
+    for filename, content in expected.items():
+        assert (tmp_path / filename).read_bytes() == content.encode("utf-8")
