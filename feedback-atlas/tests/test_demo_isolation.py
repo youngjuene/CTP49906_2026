@@ -47,11 +47,11 @@ CLASSROOM_ROSTER = (
 )
 
 DEMO_STUDENTS = {
-    "kim.seoyeon": "김서연",
-    "park.junho": "박준호",
-    "lee.haneul": "이하늘",
-    "jung.minjae": "정민재",
-    "choi.yujin": "최유진",
+    "synth.owner01": "Paragraphica",
+    "synth.owner02": "The Anemoia Device",
+    "synth.owner03": "OlfacEnhancer",
+    "synth.owner04": "착용형 후각 인터페이스",
+    "synth.owner05": "Human Operator",
 }
 DEMO_OBSERVERS = {
     "kang.minsu": "강민수",

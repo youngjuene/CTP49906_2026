@@ -1,15 +1,17 @@
 id,display_name,role
-kim.seoyeon,김서연,student
-park.junho,박준호,student
-lee.haneul,이하늘,student
-jung.minjae,정민재,student
-choi.yujin,최유진,student
-kang.minsu,강민수,observer
-seo.jiwoo,서지우,observer
-han.doyun,한도윤,observer
-oh.sera,오세라,observer
-im.chaewon,임채원,observer
-ta.youngjun,영준,ta
-ta.doyo,도요,ta
-ta.seowoo,서우,ta
+synth.owner01,Paragraphica,student
+synth.owner02,The Anemoia Device,student
+synth.owner03,OlfacEnhancer,student
+synth.owner04,착용형 후각 인터페이스,student
+synth.owner05,Human Operator,student
+synth.peer01,Peer 01,observer
+synth.peer02,Peer 02,observer
+synth.peer03,Peer 03,observer
+synth.peer04,Peer 04,observer
+synth.peer05,Peer 05,observer
+synth.observer01,Observer 01,observer
+synth.observer02,Observer 02,observer
+synth.observer03,Observer 03,observer
+synth.observer04,Observer 04,observer
+synth.observer05,Observer 05,observer
 demo,demo,observer
