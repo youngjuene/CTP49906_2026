@@ -565,8 +565,10 @@ def _(MODEL_PATH, MODEL_REVISION, PROJECT_DIR):
             "runtime_packages": dict(run_provenance["packages"]),
             "python": run_provenance["python"], **settings,
         }
-        # Only this supplied pair has established visual correspondence.
-        if clip_path.resolve() in ((PROJECT_DIR / "assets" / "02321.mp4").resolve(), (PROJECT_DIR / "assets" / "02321_silent.mp4").resolve()):
+        # Only the unchanged shipped pair has established visual correspondence.
+        _shipped_hashes = {'02321.mp4': '9dcf1572e593777267eab01351022fcaf7b00f9a564da6059eb97f422266ddec', '02321_silent.mp4': '88c72f00bf52f18b1a62a31d3f187990518bdb7b0b77b64b75bf2b4c5295e231'}
+        if (config["clip_sha256"] == _shipped_hashes.get(clip_path.name)
+                and clip_path.resolve() == (PROJECT_DIR / "assets" / clip_path.name).resolve()):
             config["comparison_key"] = "builtin-02321-av-pair-v1"
         return config
 

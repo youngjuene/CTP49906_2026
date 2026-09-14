@@ -423,3 +423,73 @@ def test_export_copy_previews_preserve_literal_fences_and_html(replay):
         build_evidence_json(runs, provenance=defs["run_provenance"]),
     ]
     assert "script" not in parsed.tags and "img" not in parsed.tags
+
+
+@pytest.mark.parametrize("changed_name", ["02321.mp4", "02321_silent.mp4"])
+def test_builtin_control_pair_requires_shipped_content_at_the_known_paths(replay, changed_name):
+    import ast
+    import hashlib
+    import importlib.metadata
+    import platform
+
+    from src.run_ledger import matched_control_ids, run_record
+
+    _, defs = replay
+    actual_notebook_sha256 = hashlib.sha256(NOTEBOOK.read_bytes()).hexdigest()
+    assert defs["run_provenance"]["notebook_sha256"] == actual_notebook_sha256
+    expected_packages = {
+        name: importlib.metadata.version(name) for name in
+        ("torch", "torchvision", "transformers", "qwen-omni-utils", "marimo",
+         "numpy", "matplotlib", "av", "wigglystuff", "anywidget", "accelerate", "librosa", "audioread")
+    }
+    assert defs["run_provenance"]["packages"] == expected_packages
+    tree = ast.parse(NOTEBOOK.read_text())
+    cell = next(node for node in tree.body if isinstance(node, ast.FunctionDef)
+                and any(isinstance(child, ast.FunctionDef) and child.name == "experiment_config"
+                        for child in node.body))
+    cell.decorator_list = []
+    cell.name = "build_experiment_config"
+    namespace = {"__file__": str(NOTEBOOK)}
+    exec(compile(ast.fix_missing_locations(ast.Module(body=[cell], type_ignores=[])),
+                 str(NOTEBOOK), "exec"), namespace)
+    config_for, _ = namespace["build_experiment_config"](
+        defs["MODEL_PATH"], defs["MODEL_REVISION"], PROJECT,
+    )
+    settings = {"nframes": 8, "prompt": "소리를 설명해 주세요", "target": "audio",
+                "start": 0, "end": 36, "max_new_tokens": 32}
+    paths = [PROJECT / "assets" / name for name in ("02321.mp4", "02321_silent.mp4")]
+    configs = [config_for(path, **settings) for path in paths]
+    for config in configs:
+        assert config["notebook_sha256"] == actual_notebook_sha256
+        assert config["runtime_packages"] == expected_packages
+        assert config["model_id"] == defs["MODEL_PATH"]
+        assert config["model_revision"] == defs["MODEL_REVISION"]
+        assert config["repo_revision"] == defs["run_provenance"]["repo_revision"]
+        assert config["python"] == platform.python_version()
+        assert all(config[key] == value for key, value in settings.items())
+
+    def record(config, is_control):
+        return run_record(kind="teacher_forcing", condition="answer→audio [0,36)",
+                          metric_name="delta_per_token", metric_value=-0.2,
+                          metric_unit="nats/token", config=config, is_control=is_control)
+
+    original, control = record(configs[0], False), record(configs[1], True)
+    assert matched_control_ids(original, [original, control]) == [control["run_id"]]
+
+    class ReplacedClip:
+        # Same resolved location, different content; real repository assets
+        # remain untouched while exercising the actual notebook config function.
+        name = changed_name
+
+        def resolve(self):
+            return (PROJECT / "assets" / self.name).resolve()
+
+        def read_bytes(self):
+            return self.resolve().read_bytes() + b"changed content"
+
+    altered = config_for(ReplacedClip(), **settings)
+    assert "comparison_key" not in altered
+    if changed_name == "02321.mp4":
+        assert matched_control_ids(record(altered, False), [control]) == []
+    else:
+        assert matched_control_ids(original, [record(altered, True)]) == []
