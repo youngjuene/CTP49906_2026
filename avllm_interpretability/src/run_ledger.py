@@ -26,6 +26,7 @@ checkout with no torch, marimo or matplotlib installed.
 
 import hashlib
 import json
+import re
 from html import escape
 
 # The vocabulary the notebook's dropdowns offer. Not enforced here -- a record
@@ -68,17 +69,27 @@ def run_record(
     `append_run` can replace instead of appending a duplicate. `seq` and
     `changed` are placeholders here -- both are positional facts that only
     `append_run` can know.
+
+    `extra` contains scientific result evidence (captions, scored token IDs,
+    token-level deltas, distributions) and contributes to the digest. Different
+    evidence must never overwrite a prior result just because its headline
+    metric agrees. Keep annotations in `prediction`, `note`, `is_control`,
+    `verdict` and `rival`; those can change without creating a new experiment.
     """
     config = dict(config or {})
+    extra = dict(extra or {})
+    identity = {
+        "kind": kind,
+        "condition": condition,
+        "config": config,
+        "metric": [metric_name, metric_value, metric_unit],
+    }
+    # Preserve legacy IDs for runs with no extra evidence. Existing log IDs
+    # remain readable; new evidence-bearing runs receive distinct identities.
+    if extra:
+        identity["extra"] = extra
     run_id = hashlib.sha1(
-        _canonical(
-            {
-                "kind": kind,
-                "condition": condition,
-                "config": config,
-                "metric": [metric_name, metric_value, metric_unit],
-            }
-        ).encode("utf-8")
+        _canonical(identity).encode("utf-8")
     ).hexdigest()[:8]
     return {
         "run_id": run_id,
@@ -92,7 +103,7 @@ def run_record(
         "prediction": prediction,
         "is_control": bool(is_control),
         "note": note,
-        "extra": dict(extra or {}),
+        "extra": extra,
         "changed": [],
         "verdict": "",
         "rival": "",
@@ -107,13 +118,41 @@ def _changed_keys(record, prior):
     return sorted(k for k in set(old) | set(new) if old.get(k) != new.get(k))
 
 
-def append_run(prev, record, max_runs=40, log_path=None):
+def _persist_record(record, log_path):
+    """Retain the result and expose whether this version reached the local log."""
+    record["save_status"] = {"state": "memory_only", "path": "", "error": ""}
+    if log_path is None:
+        return
+    record["save_status"] = {"state": "saved", "path": str(log_path), "error": ""}
+    try:
+        with open(log_path, "ab+") as fh:
+            # A killed kernel may leave a fragment without its final newline.
+            # Retain that fragment for inspection, but never concatenate a new
+            # valid record onto it: load_log would discard both as one bad row.
+            fh.seek(0, 2)
+            needs_separator = False
+            if fh.tell():
+                fh.seek(-1, 2)
+                needs_separator = fh.read(1) != b"\n"
+            payload = ("\n" if needs_separator else "") + _canonical(record) + "\n"
+            fh.write(payload.encode("utf-8"))
+    except Exception as exc:  # noqa: BLE001 - keep the expensive result in memory
+        record["save_status"] = {
+            "state": "failed", "path": str(log_path),
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+
+
+def append_run(prev, record, max_runs=None, log_path=None):
     """Return a new run list with `record` added (or refreshed in place).
 
     Idempotent by `run_id`: a re-executed marimo cell hands us the same digest,
     and replacing keeps the original `seq` so the ledger does not renumber
     itself under the student. `changed` is computed against the most recent run
     of the same kind *that precedes this one*, so it too survives re-execution.
+    All unique runs are retained by default. An explicit `max_runs` limits only
+    the returned list; the JSONL remains append-only. Persistence failure is
+    returned in `record['save_status']` and never discards the experiment.
     """
     runs = [dict(r) for r in prev]
     record = dict(record)
@@ -127,6 +166,11 @@ def append_run(prev, record, max_runs=40, log_path=None):
 
     if index is not None:
         record["seq"] = runs[index].get("seq", index + 1)
+        # A claim may be written after the result in the verdict form. Fresh
+        # records usually have an empty prediction; preserve the annotation on
+        # an identical rerun unless a new nonblank prediction was supplied.
+        if not str(record.get("prediction") or "").strip():
+            record["prediction"] = runs[index].get("prediction", "")
         # `verdict` and `rival` are resolved *after* the run, by the verdict form.
         # A re-executed cell mints a fresh record with both empty, so overwriting
         # blindly would destroy the student's own conclusion on any upstream edit,
@@ -137,12 +181,27 @@ def append_run(prev, record, max_runs=40, log_path=None):
             if not record.get(_post_hoc):
                 record[_post_hoc] = runs[index].get(_post_hoc, "")
         # A digest match means the same kind/condition/config produced the same
-        # metric. The non-digested fields (prediction text, control flag, note)
+        # metric and scientific extra evidence. Annotation fields (prediction,
+        # control flag, note)
         # can still differ -- rewording a prediction and pressing ▶ again lands
         # here -- so compare the whole record, and log only when something
         # actually changed. `load_log` folds by `run_id`, last-wins, so a second
         # line for an amended run reloads as one row rather than two.
-        already_logged = runs[index] == record
+        previous = runs[index]
+        unchanged = (
+            {k: v for k, v in previous.items() if k != "save_status"}
+            == {k: v for k, v in record.items() if k != "save_status"}
+        )
+        status = previous.get("save_status", {})
+        already_logged = unchanged and (
+            log_path is None or (
+                status.get("state") == "saved" and status.get("path") == str(log_path)
+            )
+        )
+        if already_logged:
+            record["save_status"] = dict(status) or {
+                "state": "memory_only", "path": "", "error": "",
+            }
         runs[index] = record
     else:
         already_logged = False
@@ -151,15 +210,8 @@ def append_run(prev, record, max_runs=40, log_path=None):
     if max_runs and len(runs) > max_runs:
         runs = runs[-max_runs:]
 
-    if log_path and not already_logged:
-        # Best effort, always. The record in hand may have cost a minute of GPU
-        # time; a read-only directory or a full disk must not be able to throw
-        # it away, so every failure mode here is swallowed on purpose.
-        try:
-            with open(log_path, "a", encoding="utf-8") as fh:
-                fh.write(_canonical(record) + "\n")
-        except Exception:  # noqa: BLE001 - logging must never break the experiment
-            pass
+    if not already_logged:
+        _persist_record(record, log_path)
     return runs
 
 
@@ -184,34 +236,106 @@ def apply_verdict(prev, run_id, verdict, rival="", log_path=None):
             r["rival"] = rival
             amended = r
         runs.append(r)
-    if log_path and amended is not None:
-        # Best effort, as in `append_run`: a logging failure must never cost the
-        # student the verdict they just recorded.
-        try:
-            with open(log_path, "a", encoding="utf-8") as fh:
-                fh.write(_canonical(amended) + "\n")
-        except Exception:  # noqa: BLE001
-            pass
+    if amended is not None:
+        _persist_record(amended, log_path)
     return runs
 
 
-def ledger_counts(runs):
-    """Coverage summary of the ledger.
+def apply_verdict_checked(prev, run_id, verdict, rival="", log_path=None, *, claim=None):
+    """Return `(runs, status)` with explicit validation for notebook feedback.
 
-    "Controlled" is a property of the *kind*, not of the individual run: a
-    knockout sweep is controlled because the silent-clip run exists somewhere in
-    the same family, not because that particular row ran twice. So
-    `n_uncontrolled_claims` -- the number the course grades on -- counts
-    non-control runs whose family contains no control at all.
+    `ok` means the verdict was accepted in memory. Check `save_status` separately
+    before claiming local persistence. `apply_verdict` retains its legacy no-op
+    behavior for unknown IDs; new interfaces should use this checked helper.
+    A nonblank `claim` updates the existing `prediction` annotation without
+    changing scientific identity. Omitted or blank claims reuse that annotation.
+    Supported/refuted verdicts require a written claim; untested may stay blank.
     """
-    controlled_kinds = {r.get("kind") for r in runs if r.get("is_control")}
+    status = {"ok": False, "run_id": run_id, "error": "", "save_status": None}
+    original = next((r for r in prev if r.get("run_id") == run_id), None)
+    if original is None:
+        status["error"] = "unknown_run_id"
+        return prev, status
+    if verdict not in VERDICTS:
+        status["error"] = "invalid_verdict"
+        return prev, status
+    supplied_claim = str(claim).strip() if claim is not None else ""
+    effective_claim = supplied_claim or str(original.get("prediction") or "")
+    if verdict in ("supported", "refuted") and not effective_claim.strip():
+        status["error"] = "missing_claim"
+        return prev, status
+    annotated = [
+        {**r, "prediction": effective_claim} if r.get("run_id") == run_id else r
+        for r in prev
+    ]
+    runs = apply_verdict(annotated, run_id, verdict, rival, log_path=log_path)
+    amended = next(r for r in runs if r.get("run_id") == run_id)
+    status.update(ok=True, save_status=dict(amended["save_status"]))
+    return runs, status
+
+
+def matched_control_ids(run, runs):
+    """IDs of declared controls with matching recorded settings, never a verdict.
+
+    New records identify a deliberate clip pair with `config.comparison_key`.
+    Kind, condition and every other config field must still agree, except the
+    clip filename and its SHA-256 (the original and silent files differ).
+    Legacy keyless records may pair only 02321.mp4 with 02321_silent.mp4 and
+    require identical remaining config. Arbitrary uploads are never inferred to
+    have a control. This checks recorded settings, not scientific validity or
+    whether a declared control actually had a null effect.
+    """
+    if run.get("is_control"):
+        return []
+    config = run.get("config") or {}
+    comparison_key = config.get("comparison_key")
+    ignored = {"clip", "clip_sha256"} if comparison_key else {"clip"}
+    settings = {k: v for k, v in config.items() if k not in ignored}
+    matches = []
+    for control in runs:
+        if not control.get("is_control") or control.get("run_id") == run.get("run_id"):
+            continue
+        if (run.get("kind"), run.get("condition")) != (
+            control.get("kind"), control.get("condition")
+        ):
+            continue
+        other = control.get("config") or {}
+        if comparison_key:
+            if comparison_key != other.get("comparison_key"):
+                continue
+            if not config.get("clip") or not other.get("clip") or config["clip"] == other["clip"]:
+                continue
+        elif (
+            other.get("comparison_key")
+            or config.get("clip") != "02321.mp4"
+            or other.get("clip") != "02321_silent.mp4"
+        ):
+            continue
+        if _canonical(settings) != _canonical({
+            k: v for k, v in other.items() if k not in ignored
+        }):
+            continue
+        control_id = control.get("run_id")
+        if control_id and control_id not in matches:
+            matches.append(control_id)
+    return matches
+
+
+def ledger_counts(runs):
+    """Count declared controls and runs participating in matched settings pairs."""
+    matches = [matched_control_ids(r, runs) for r in runs]
+    used_controls = {run_id for ids in matches for run_id in ids}
     return {
         "n": len(runs),
-        "n_controlled": sum(1 for r in runs if r.get("kind") in controlled_kinds),
+        "n_controls": sum(bool(r.get("is_control")) for r in runs),
+        "n_matched_claims": sum(bool(ids) for ids in matches),
+        "n_controlled": sum(
+            bool(ids) or r.get("run_id") in used_controls for r, ids in zip(runs, matches)
+        ),
         "n_uncontrolled_claims": sum(
             1
-            for r in runs
-            if not r.get("is_control") and r.get("kind") not in controlled_kinds
+            for r, ids in zip(runs, matches)
+            if not r.get("is_control") and not ids
         ),
         "n_unresolved": sum(1 for r in runs if not r.get("verdict")),
     }
@@ -242,33 +366,46 @@ def _truncate(text, limit=52):
     return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
 
 
-def render_ledger_html(runs, highlight_ids=()):
+def render_ledger_html(runs, highlight_ids=(), lang="en"):
     """Compact HTML table of the ledger, for `mo.Html`.
 
     Everything is escaped: `condition` and `prediction` are student input that
     reaches this function straight from a text box. Styling is inline only --
     a `<style>` block or class names would collide with marimo's own CSS.
     """
+    ko = lang == "ko"
+
+    def label(english, korean):
+        return korean if ko else english
+
     if not runs:
         return (
             f'<div style="border:{_HAIRLINE};border-radius:6px;padding:10px 12px;'
             f'background:{_SOFT_BG};font-size:0.9em;opacity:0.85">'
-            "<em>No runs logged yet. Write a prediction, press ▶, and the run "
-            "lands here — with or without a control.</em></div>"
+            + "<em>" + label(
+                "No runs logged yet. Write a prediction, press ▶, and the run "
+                "lands here — with or without a control.",
+                "아직 실행 기록이 없습니다. 실행하면 결과와 설정, 대조군 연결 여부가 여기에 표시됩니다.",
+            ) + "</em></div>"
         )
 
     counts = ledger_counts(runs)
     highlight = set(highlight_ids or ())
 
-    summary = (
-        f'{counts["n"]} run(s) · {counts["n_controlled"]} in a family that has a '
-        f'control · {counts["n_unresolved"]} still unresolved'
+    summary = label(
+        f'{counts["n"]} run(s) · {counts["n_controlled"]} with matched settings '
+        f'· {counts["n_unresolved"]} still unresolved',
+        f'실행 {counts["n"]}개 · 대조군과 설정이 일치하는 실행 {counts["n_controlled"]}개 '
+        f'· 미판정 {counts["n_unresolved"]}개',
     )
     if counts["n_uncontrolled_claims"] > 0:
         # Loud on purpose: this is the one number the success criterion is about.
         summary += (
             f' · <strong style="color:{_ALARM}">'
-            f'{counts["n_uncontrolled_claims"]} claim(s) with NO control</strong>'
+            + label(
+                f'{counts["n_uncontrolled_claims"]} claim(s) with NO control with matched settings',
+                f'설정이 일치하는 대조군 없는 실행 {counts["n_uncontrolled_claims"]}개',
+            ) + '</strong>'
         )
 
     th = (
@@ -293,9 +430,11 @@ def render_ledger_html(runs, highlight_ids=()):
         # The id is shown, not just the sequence number: `apply_verdict` matches
         # on `run_id`, so an id the student cannot read off the table makes the
         # whole verdict half of the ledger unreachable.
-        "# / id", "kind", "condition", "metric", "changed", "control",
-        *(["prediction"] if show_prediction else []),
-        "verdict",
+        label("# / id", "번호 / 실행 ID"), label("kind", "실험 종류"),
+        label("condition", "조건"), label("metric", "측정값"),
+        label("changed", "바뀐 설정"), label("control", "대조군 / 설정 일치"),
+        *([label("prediction", "예측 / 주장·관측")] if show_prediction else []),
+        label("verdict", "판정"), label("save status", "로컬 저장 상태"),
     ]
     rows = [
         "<tr>" + "".join(f'<th style="{th}">{_esc(h)}</th>' for h in heads) + "</tr>"
@@ -316,22 +455,46 @@ def render_ledger_html(runs, highlight_ids=()):
         )
         if r.get("is_control"):
             control_cell = (
-                f'<span style="{chip};font-weight:600">control</span>'
+                f'<span style="{chip};font-weight:600">'
+                + label("declared control", "대조군으로 지정") + '</span>'
             )
         else:
-            control_cell = '<span style="opacity:0.45">—</span>'
+            ids = matched_control_ids(r, runs)
+            control_cell = (
+                label("matched settings: ", "설정 일치: ") + _esc(", ".join(ids))
+                if ids else '<span style="opacity:0.55">'
+                + label("no matched control", "설정 일치 대조군 없음") + '</span>'
+            )
         prediction = str(r.get("prediction") or "")
         prediction_cell = (
             f'<span title="{_esc(prediction)}">{_esc(_truncate(prediction))}</span>'
             if prediction
-            else f'<span style="color:{_ALARM}">none written</span>'
+            else f'<span style="color:{_ALARM}">'
+            + label("none written", "미작성") + '</span>'
         )
         verdict = str(r.get("verdict") or "")
         rival = str(r.get("rival") or "")
+        shown_verdict = (
+            {"supported": "지지됨", "refuted": "반박됨", "untested": "아직 검증하지 않음"}.get(verdict, verdict)
+            if ko else verdict
+        )
         verdict_cell = (
-            f'<span title="rival: {_esc(rival)}">{_esc(verdict)}</span>'
+            f'<span title="{label("rival", "경쟁 설명")}: {_esc(rival)}">{_esc(shown_verdict)}</span>'
             if verdict
-            else '<span style="opacity:0.55">unresolved</span>'
+            else '<span style="opacity:0.55">' + label("unresolved", "미판정") + '</span>'
+        )
+        save_status = r.get("save_status") or {}
+        save_state = save_status.get("state", "unknown")
+        save_label = {
+            "saved": label("saved locally", "로컬 저장됨"),
+            "failed": label("save failed — retained in memory", "저장 실패 — 메모리에 유지됨"),
+            "memory_only": label("memory only", "메모리에만 있음"),
+        }.get(save_state, label("not verified", "확인되지 않음"))
+        save_detail = " ".join(filter(None, (save_status.get("path"), save_status.get("error"))))
+        save_cell = (
+            f'<span title="{_esc(save_detail)}"'
+            + (f' style="color:{_ALARM}"' if save_state == "failed" else "")
+            + f'>{_esc(save_label)}</span>'
         )
         prediction_td = (
             f'<td style="{td}">{prediction_cell}</td>' if show_prediction else ""
@@ -352,6 +515,7 @@ def render_ledger_html(runs, highlight_ids=()):
             f'<td style="{td}">{control_cell}</td>'
             f"{prediction_td}"
             f'<td style="{td}">{verdict_cell}</td>'
+            f'<td style="{td}">{save_cell}</td>'
             "</tr>"
         )
 
@@ -367,33 +531,48 @@ def render_ledger_html(runs, highlight_ids=()):
 
 
 def _md_cell(text):
-    """Markdown tables end a cell at `|`, and student text contains pipes.
+    """Escape student text as plain Markdown table content, including HTML.
 
     Backslashes are escaped *first*: escaping only the pipe turns `\\|` into
     `\\\\|`, which renders as a literal backslash followed by a live cell break --
     the row splits anyway, one character later.
     """
-    return (
-        str(text if text not in (None, "") else "")
-        .replace("\\", "\\\\")
-        .replace("|", "\\|")
-        .replace("\n", " ")
-    )
+    value = escape(str(text if text not in (None, "") else ""), quote=False)
+    value = value.replace("\\", "\\\\")
+    for character in "|`*_[]!#~":
+        value = value.replace(character, "\\" + character)
+    return value.replace("\r", " ").replace("\n", " ")
+
+
+def _evidence_record(run, runs):
+    return {**run, "matched_control_ids": matched_control_ids(run, runs)}
+
+
+def build_evidence_json(runs, provenance=None):
+    """Full JSON evidence bundle; no row limits, rounding, or field removal.
+
+    Matching is recomputed from the supplied full history. It describes recorded
+    settings only. Callers may attach runtime/model/repository provenance; an
+    empty value records that no provenance was supplied.
+    """
+    runs = list(runs)
+    return json.dumps({
+        "schema_version": 1,
+        "provenance": provenance if provenance is not None else {},
+        "runs": [_evidence_record(run, runs) for run in runs],
+    }, ensure_ascii=False, sort_keys=True, indent=2, default=str) + "\n"
 
 
 def build_worksheet_md(runs, only_ids=None):
-    """Markdown table for pasting into WORKSHEET.md.
+    """Readable summary plus complete per-run JSON for pasting into WORKSHEET.md.
 
     The header states which runs lack a control *before* the table, because the
     student pastes this into a graded document and the missing control is the
     thing a reader must not have to derive for themselves.
     """
-    # Coverage is a property of the whole ledger, not of the slice being pasted.
-    # Computed after the filter, exporting just the experiment -- leaving its
-    # control behind, which is the point of a per-run export -- would stamp
-    # "claims an effect with no control" onto a graded document about a run that
-    # *is* controlled.
-    controlled_kinds = {r.get("kind") for r in runs if r.get("is_control")}
+    # Resolve linked control IDs from the full history before selecting rows.
+    all_runs = list(runs)
+    runs = all_runs
     if only_ids is not None:
         keep = set(only_ids)
         runs = [r for r in runs if r.get("run_id") in keep]
@@ -404,24 +583,27 @@ def build_worksheet_md(runs, only_ids=None):
     uncontrolled = [
         r
         for r in runs
-        if not r.get("is_control") and r.get("kind") not in controlled_kinds
+        if not r.get("is_control") and not matched_control_ids(r, all_runs)
     ]
 
     lines = [f"### Run ledger — {counts['n']} run(s)", ""]
     if uncontrolled:
-        seqs = ", ".join(f"#{r.get('seq', '?')}" for r in uncontrolled)
+        seqs = ", ".join(f"#{_md_cell(r.get('seq', '?'))}" for r in uncontrolled)
         lines.append(
-            f"> **No control:** {len(uncontrolled)} run(s) ({seqs}) claim an effect "
-            "with no control run in the same family. Either add one or say plainly "
-            "that the claim is untested."
+            f"> **No control with matching settings:** {len(uncontrolled)} run(s) ({seqs}). "
+            "Add a control with the same recorded settings or leave the claim untested."
         )
     else:
-        lines.append("> Every run here belongs to a family that includes a control.")
+        lines.append("> Each experiment has a declared control with matching recorded settings.")
+    lines.append(
+        "> Matching settings do not establish scientific validity or prove a null effect. "
+        "A local save does not guarantee that the runtime will retain files after the session ends."
+    )
     show_prediction = any((r.get("prediction") or "").strip() for r in runs)
     cols = (
-        ["#", "Condition"]
-        + (["Prediction (before ▶)"] if show_prediction else [])
-        + ["Metric", "Control", "Verdict", "Rival explanation"]
+        ["#", "Run ID", "Kind", "Condition"]
+        + (["Prediction / claim / observation"] if show_prediction else [])
+        + ["Metric", "Control", "Matched control IDs", "Verdict", "Rival explanation"]
     )
     lines += ["", "| " + " | ".join(cols) + " |", "|" + "---|" * len(cols)]
     for r in runs:
@@ -429,20 +611,36 @@ def build_worksheet_md(runs, only_ids=None):
             f"{r.get('metric_name', '')}: {_fmt_value(r.get('metric_value', ''))} "
             f"{r.get('metric_unit', '') or ''}"
         ).strip()
-        cells = [_md_cell(r.get("seq", "")), _md_cell(r.get("condition", ""))]
+        cells = [
+            _md_cell(r.get("seq", "")), _md_cell(r.get("run_id", "")),
+            _md_cell(r.get("kind", "")), _md_cell(r.get("condition", "")),
+        ]
         if show_prediction:
             cells.append(_md_cell(r.get("prediction", "")) or "_(none written)_")
         cells += [
             _md_cell(metric),
-            "control" if r.get("is_control") else "—",
+            "declared control" if r.get("is_control") else "—",
+            _md_cell(", ".join(matched_control_ids(r, all_runs))) or "—",
             _md_cell(r.get("verdict", "")) or "unresolved",
             _md_cell(r.get("rival", "")) or "—",
         ]
         lines.append("| " + " | ".join(cells) + " |")
+    for run in runs:
+        evidence = json.dumps(
+            _evidence_record(run, all_runs), ensure_ascii=False,
+            sort_keys=True, indent=2, default=str,
+        )
+        # A student's caption can contain Markdown fences. The enclosing fence
+        # must be longer, so every original byte stays inert, readable evidence.
+        fence = "`" * max(3, 1 + max(map(len, re.findall(r"`+", evidence)), default=0))
+        lines.extend([
+            "", f"#### Run {_md_cell(run.get('run_id', ''))} — complete evidence", "",
+            fence + "json", evidence, fence,
+        ])
     return "\n".join(lines) + "\n"
 
 
-def load_log(log_path, max_runs=40):
+def load_log(log_path, max_runs=None):
     """Read a JSONL ledger back, tolerating a truncated final line.
 
     The log is appended to during live GPU work, so a session that ended with a
@@ -454,8 +652,7 @@ def load_log(log_path, max_runs=40):
     prediction text, the control flag) changed. **Last occurrence wins**, keeping
     the position of the first, so a reload reproduces what was on screen rather
     than showing the same run twice with a stale copy above it. `max_runs`
-    mirrors `append_run`'s cap so the seeded list cannot start out longer than
-    the in-memory one.
+    is optional, as in `append_run`; the default restores all unique runs.
     """
     rows = []
     try:

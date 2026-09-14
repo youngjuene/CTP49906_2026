@@ -10,11 +10,15 @@ Classroom interpretability labs for Qwen2.5-Omni and Qwen3.5: **Logit Lens**, **
 
 ## Quick start
 
-Requires [uv](https://docs.astral.sh/uv/), **Python ≥ 3.11**, and an NVIDIA GPU with ≥16 GB VRAM. The Qwen2.5-Omni-3B weights download from Hugging Face on first run.
+For **Creative AI: Creation & Practice**, start with the updated [Korean Molab notebook](avllm_interpretability/CTP49906_avllm_molab_kr.py), [instructor guide](avllm_interpretability/CLASSROOM_GUIDE_kr.md), and [student worksheet](avllm_interpretability/WORKSHEET_kr.md). In [Molab notebooks](https://molab.marimo.io/notebooks), choose **+ New notebook → Mirror from GitHub**, paste the teacher's verified notebook URL, fork your copy, select a GPU in **Configure compute**, then **Save and restart → Run all**. The [Korean README](avllm_interpretability/README_kr.md) explains the matched-control and one-parameter exploration flow.
+
+The September 14 revision passed 293 CPU tests and a Molab RTX Pro 6000 run with seven interactive results, browser reconnection, and kernel restart recovery. [QA details and remaining checks](avllm_interpretability/QA_IMPROVEMENTS.md) include download receipt, server recreation, whole-class GPU allocation, and maximum-input memory. This validation applies to the recorded Korean notebook/helper combination; the English notebook retains its earlier setup and teaching flow.
+
+Local execution requires [uv](https://docs.astral.sh/uv/), **Python ≥ 3.11**, and a compatible NVIDIA GPU. The Qwen2.5-Omni-3B weights download from Hugging Face on first run. GPU and host-memory requirements depend on the input and runtime; the measurements below are a reference run, not a minimum-memory guarantee.
 
 *Measured on an RTX 3090:* the model is 4.70 B parameters (bf16, talker freed) and occupies **8.88 GiB**; a full guided run peaks at **13.70 GiB**. It used to load a second SDPA copy for the logit lens, which peaked at 22.08 GiB and ran out of memory on a 24 GB card — so if you are working from an older checkout and see `CUDA out of memory`, that is why.
 
-> **No GPU?** The avllm notebook has a break-glass replay mode: set `USE_PRECOMPUTED = True` near the top and every non-interactive plot renders from committed artifacts — no GPU, no 8 GB download. The two playgrounds and the teacher-forced measurement still need a GPU and say so rather than failing obscurely. This is the mitigation for the most common day-of problem, so it is worth knowing before the session, not during it.
+> **No GPU?** Set `USE_PRECOMPUTED = True` near the top to read saved guided captions, probes, and summarized attention without model weights or GPU inference. New layer-band generation, playground submissions, and teacher-forced measurements need a GPU. Replay supports interpretation and experiment design; dependency installation and repository access are still needed, and it cannot test new parameters.
 
 ```bash
 cd avllm_interpretability
@@ -77,9 +81,12 @@ uvx --with marimo==0.23.14 marimo export script \
 These are teaching-only materials. Human accessibility, localization, licensing,
 and research-governance review remain open.
 
-The WP-6 bilingual instructor/student runbooks are **not in this repository yet** —
-they are planned, and the PRD (`CTP49906_W7-11_PRD.md`) is the current
-specification for them.
+The Korean AVLLM [instructor guide](avllm_interpretability/CLASSROOM_GUIDE_kr.md),
+[student worksheet](avllm_interpretability/WORKSHEET_kr.md), and
+[setup guide](avllm_interpretability/README_kr.md) are available. They cover the
+updated Korean notebook; the broader WP-6 bilingual package remains planned in
+the [PRD](CTP49906_W7-11_PRD.md). Its unchecked curriculum requirements are not
+certified by the notebook QA.
 
 [`feedback-atlas/`](feedback-atlas/) is a *neighbour* of the blinded
 audience-response surface that PRD also anticipates, and deliberately not the same
@@ -89,7 +96,9 @@ specifies a different data contract — blindness attestation, permission scope,
 withdrawal — and a different release path, a marimo notebook under `audience/`.
 The two overlap on `reviewer_id`/`target_id` and on post-semester
 de-identification, and should be reconciled before either is used for research
-rather than for teaching. The student
-worksheet that does exist is
+rather than for teaching. The English research/design worksheet is
 [`avllm_interpretability/WORKSHEET.md`](avllm_interpretability/WORKSHEET.md); the
-avllm notebook's run ledger exports rows in its format directly.
+English notebook exports its ledger in that format. The Korean notebook also
+exports complete recorded settings, captions, and token results as JSON, with
+Markdown and a visible copy fallback. Verify the exported files on the student
+device before ending the session.

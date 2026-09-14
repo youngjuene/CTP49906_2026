@@ -69,15 +69,16 @@ def test_fifo_cap_holds():
     assert [r["condition"] for r in runs] == [f"run {i}" for i in range(6, 10)]
 
 
-def test_counts_turn_on_whether_the_family_has_a_control():
+def test_counts_require_matching_settings_for_a_control():
     runs = append_run([], _record())
     counts = ledger_counts(runs)
     assert counts["n"] == 1 and counts["n_uncontrolled_claims"] == 1
     assert counts["n_controlled"] == 0 and counts["n_unresolved"] == 1
-    runs = append_run(runs, _record(condition="silent clip", is_control=True,
-                                    config={"clip": "02321_silent.mp4"}))
+    runs = append_run(runs, _record(is_control=True, config={
+        "clip": "02321_silent.mp4", "layers": "0-12", "prompt": "describe",
+    }))
     counts = ledger_counts(runs)
-    assert counts["n_uncontrolled_claims"] == 0  # the family now has a control
+    assert counts["n_uncontrolled_claims"] == 0  # settings match the paired asset
     assert counts["n_controlled"] == 2
     # A second family with no control of its own is still counted.
     runs = append_run(runs, _record(kind="diversity", metric_name="distinct-2",
@@ -116,8 +117,9 @@ def test_render_marks_highlighted_runs_and_shouts_about_missing_controls():
     assert "▸" in html
     assert "NO control" in html
     quiet = render_ledger_html(
-        append_run(runs, _record(condition="silent", is_control=True,
-                                 config={"clip": "silent.mp4"}))
+        append_run(runs, _record(is_control=True, config={
+            "clip": "02321_silent.mp4", "layers": "0-12", "prompt": "describe",
+        }))
     )
     assert "NO control" not in quiet
     assert render_ledger_html([]).startswith("<div")  # friendly empty state, not ""
@@ -141,8 +143,9 @@ def test_worksheet_md_carries_the_prediction_and_flags_the_uncontrolled_run():
     assert "blocking video kills the saxophone" in md
     assert "No control" in md and "#1" in md
     assert "caption similarity: 0.96 cos" in md
-    runs = append_run(runs, _record(condition="silent clip", is_control=True,
-                                    config={"clip": "silent.mp4"}))
+    runs = append_run(runs, _record(is_control=True, config={
+        "clip": "02321_silent.mp4", "layers": "0-12", "prompt": "describe",
+    }))
     assert "No control" not in build_worksheet_md(runs)
     # only_ids narrows the paste to the runs the student wants to report
     assert build_worksheet_md(runs, only_ids=[runs[1]["run_id"]]).count("| 2 |") == 1
@@ -172,13 +175,13 @@ def test_exporting_one_run_does_not_call_a_controlled_run_uncontrolled():
     # coverage from the narrowed slice would stamp the alarm banner onto a graded
     # document about a run whose control is sitting in the ledger it came from.
     control = run_record(
-        kind="teacher_forcing", condition="answer→audio, silent clip",
+        kind="teacher_forcing", condition="answer→audio",
         metric_name="delta_per_token", metric_value=-0.004, metric_unit="nats/token",
         config={"clip": "02321_silent.mp4"}, is_control=True,
         prediction="silent should be ~0",
     )
     experiment = run_record(
-        kind="teacher_forcing", condition="answer→audio, real clip",
+        kind="teacher_forcing", condition="answer→audio",
         metric_name="delta_per_token", metric_value=-0.212, metric_unit="nats/token",
         config={"clip": "02321.mp4"}, prediction="real should be far more negative",
     )
@@ -189,7 +192,7 @@ def test_exporting_one_run_does_not_call_a_controlled_run_uncontrolled():
 
     just_the_experiment = build_worksheet_md(runs, only_ids=[experiment["run_id"]])
     assert experiment["condition"] in just_the_experiment
-    assert control["condition"] not in just_the_experiment
+    assert "02321_silent.mp4" not in just_the_experiment
     assert "No control" not in just_the_experiment
 
     # And a genuinely uncontrolled family still raises the banner.
@@ -214,8 +217,9 @@ def test_worksheet_rows_survive_backslashes_and_pipes():
     md = build_worksheet_md(append_run([], rec))
     row = next(li for li in md.splitlines()
                if li.startswith("|") and "generated" in li)
-    # 7 columns -> 8 delimiters, and not one more.
-    assert row.count("|") - row.count("\\|") == 8, row
+    # Student text must not add delimiters beyond the declared table columns.
+    header = next(li for li in md.splitlines() if li.startswith("|"))
+    assert row.count("|") - row.count("\\|") == header.count("|"), row
     assert "block A" in row
 
 
