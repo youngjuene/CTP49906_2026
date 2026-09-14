@@ -995,6 +995,8 @@ def _(
     LOGIT_CSV_PATH,
     LOGIT_PROMPT,
     MAX_NEW_TOKENS,
+    MODEL_PATH,
+    MODEL_REVISION,
     NFRAMES,
     PRECOMPUTED_DIR,
     USE_PRECOMPUTED,
@@ -1019,7 +1021,8 @@ def _(
         # pinned values — and refusing to relabel a cached run as if it came from
         # the current knobs — is what stops every knob quietly lying for a session.
         _validate_pre(
-            _pre["meta"], clip=VIDEO_PATH.name, nframes=NFRAMES, logit_prompt=LOGIT_PROMPT
+            _pre["meta"], clip=VIDEO_PATH.name, nframes=NFRAMES, logit_prompt=LOGIT_PROMPT,
+            model=MODEL_PATH, model_revision=MODEL_REVISION
         )
         logit_csv_written = _pre["logit_csv"]
         _logit_out = mo.vstack([
@@ -1244,6 +1247,8 @@ def _(
     ATTENTION_PROMPT,
     KNOCKOUT_RULES,
     MAX_NEW_TOKENS,
+    MODEL_PATH,
+    MODEL_REVISION,
     NFRAMES,
     PRECOMPUTED_DIR,
     USE_PRECOMPUTED,
@@ -1268,7 +1273,7 @@ def _(
         # otherwise describe the current knob rather than the cached data.
         _validate_pre(
             _pre["meta"],
-            clip=VIDEO_PATH.name, nframes=NFRAMES,
+            clip=VIDEO_PATH.name, nframes=NFRAMES, model=MODEL_PATH, model_revision=MODEL_REVISION,
             attention_prompt=ATTENTION_PROMPT,
             knockout_rules=[list(_r) for _r in KNOCKOUT_RULES],
             max_new_tokens=MAX_NEW_TOKENS,
@@ -2189,7 +2194,7 @@ def _(
     def _prep(video_path, nframes, prompt):
         # Encoding (video decode + feature extraction) dominates a submit when
         # only the rule/layer band changed — cache it across ▶ presses.
-        _key = caption_cache_key(video_path, nframes, prompt, 0, run_provenance["model_revision"])
+        _key = caption_cache_key(video_path, nframes, prompt, 0, {"id": run_provenance["model_id"], "revision": run_provenance["model_revision"]})
         if _key in playground_caches["encode"]:
             return playground_caches["encode"][_key]
         _conv = [{"role": "user", "content": [
@@ -2592,7 +2597,7 @@ def _(
     def _tf_prep(video_path, nframes, prompt):
         # Shared encode cache with the 🎛️ section: a layer-band or target sweep
         # on the same clip/prompt re-encodes nothing after the first ▶.
-        _key = caption_cache_key(video_path, nframes, prompt, 0, run_provenance["model_revision"])
+        _key = caption_cache_key(video_path, nframes, prompt, 0, {"id": run_provenance["model_id"], "revision": run_provenance["model_revision"]})
         if _key in playground_caches["encode"]:
             return playground_caches["encode"][_key]
         _conv = [{"role": "user", "content": [
@@ -2619,7 +2624,7 @@ def _(
     try:
         # The caption cache includes file content, prompt, frames, model revision,
         # and the generation cap. A rule/layer sweep can reuse the same caption.
-        _tf_cap_key = caption_cache_key(_tf_video, _tf_nframes, _tf_prompt, _tf_max_tokens, run_provenance["model_revision"])
+        _tf_cap_key = caption_cache_key(_tf_video, _tf_nframes, _tf_prompt, _tf_max_tokens, {"id": run_provenance["model_id"], "revision": run_provenance["model_revision"]})
         _tf_cached_c = playground_caches["caption"].get(_tf_cap_key)
         with mo.status.spinner(
             title=f"티처 포싱 · {_tf_nframes} 프레임 · {_tf_video.name}"
@@ -2868,10 +2873,15 @@ def _(ledger_view):
 
 @app.cell
 def _(get_runs, mo, run_provenance, worksheet_md):
+    from html import escape as _escape
     from src.run_ledger import build_evidence_json as _evidence_json
     _runs = get_runs()
     _md = worksheet_md(_runs)
     _json = _evidence_json(_runs, provenance=run_provenance)
+    _preview_style = "white-space:pre-wrap;overflow:auto;max-height:28rem;font-family:monospace"
+    # Preserve literal evidence when captions contain Markdown fences or HTML.
+    _md_preview = mo.Html(f'<pre style="{_preview_style}">{_escape(_md)}</pre>')
+    _json_preview = mo.Html(f'<pre style="{_preview_style}">{_escape(_json)}</pre>')
     mo.vstack([
         mo.md("### 제출할 결과 묶음 — 두 파일을 함께 보관하세요"),
         mo.hstack([
@@ -2880,8 +2890,8 @@ def _(get_runs, mo, run_provenance, worksheet_md):
             mo.download(_json.encode("utf-8"), filename="lab_evidence.json", mimetype="application/json",
                         label=f"⬇ 전체 설정·캡션·토큰 결과 JSON ({len(_runs)}건)"),
         ]),
-        mo.accordion({"Markdown 보기 · 다운로드가 안 되면 복사": mo.md(f"````markdown\n{_md}\n````"),
-                      "JSON 보기 · 다운로드가 안 되면 복사": mo.md(f"````json\n{_json}\n````")}),
+        mo.accordion({"Markdown 보기 · 다운로드가 안 되면 복사": _md_preview,
+                      "JSON 보기 · 다운로드가 안 되면 복사": _json_preview}),
         mo.md("파일을 열어 실행 ID·클립·프롬프트·캡션이 있는지 확인하세요. JSON은 원본 영상 파일을 포함하지 않습니다."),
     ], gap=0.5)
     return

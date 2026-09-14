@@ -363,3 +363,63 @@ def test_korean_figures_render_without_missing_glyphs(replay):
             figure.savefig(io.BytesIO(), format="png")
     assert not [str(w.message) for w in caught
                 if "Glyph" in str(w.message) and "missing" in str(w.message)]
+
+
+def test_export_copy_previews_preserve_literal_fences_and_html(replay):
+    """Execute the notebook's export cell with hostile-looking caption text."""
+    import ast
+    from html.parser import HTMLParser
+
+    from src.run_ledger import append_run, build_evidence_json, build_worksheet_md, run_record
+
+    _, defs = replay
+    caption = '```caption```\n<script>alert("caption")</script><img src="x">'
+    runs = append_run([], run_record(
+        kind="teacher_forcing", condition="answer→audio", metric_name="delta_per_token",
+        metric_value=-0.2, metric_unit="nats/token", config={"clip": "02321.mp4"},
+        prediction=caption, extra={"caption_text": caption, "delta": [-0.2]},
+    ))
+    # Isolate only this cheap display cell; its actual mo.Html/accordion stack
+    # still renders, without executing any live model branches or changing state.
+    tree = ast.parse(NOTEBOOK.read_text())
+    cell = next(node for node in tree.body if isinstance(node, ast.FunctionDef)
+                and {arg.arg for arg in node.args.args}
+                == {"get_runs", "mo", "run_provenance", "worksheet_md"})
+    cell.decorator_list = []
+    cell.name = "render_export_cell"
+    for index, statement in enumerate(cell.body):
+        if isinstance(statement, ast.Expr) and isinstance(statement.value, ast.Call):
+            cell.body[index] = ast.Return(value=statement.value)
+    namespace = {}
+    exec(compile(ast.fix_missing_locations(ast.Module(body=[cell], type_ignores=[])),
+                 str(NOTEBOOK), "exec"), namespace)
+    rendered = namespace["render_export_cell"](
+        lambda: runs, defs["mo"], defs["run_provenance"], build_worksheet_md,
+    ).text
+
+    class PreText(HTMLParser):
+        def __init__(self):
+            super().__init__(convert_charrefs=True)
+            self.blocks, self.tags, self.inside = [], [], False
+
+        def handle_starttag(self, tag, attrs):
+            self.tags.append(tag)
+            if tag == "pre":
+                self.blocks.append("")
+                self.inside = True
+
+        def handle_endtag(self, tag):
+            if tag == "pre":
+                self.inside = False
+
+        def handle_data(self, data):
+            if self.inside:
+                self.blocks[-1] += data
+
+    parsed = PreText()
+    parsed.feed(rendered)
+    assert parsed.blocks == [
+        build_worksheet_md(runs),
+        build_evidence_json(runs, provenance=defs["run_provenance"]),
+    ]
+    assert "script" not in parsed.tags and "img" not in parsed.tags
