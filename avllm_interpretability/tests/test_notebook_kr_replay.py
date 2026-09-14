@@ -203,43 +203,41 @@ def test_the_verdict_dropdown_submits_values_the_ledger_accepts(replay):
 
 
 def test_the_ledger_chrome_is_localized_and_still_matches_the_renderer(replay):
-    # `ledger_view` rewrites `render_ledger_html`'s fixed English, because that
-    # renderer is shared with the English notebook. If its vocabulary drifts, the
-    # rewrite silently stops applying -- so assert the mapping still covers every
-    # header the renderer actually emits.
+    # The view selects the shared renderer's Korean locale. Fixed chrome is
+    # translated while student text, including words that resemble chrome,
+    # remains intact and HTML-escaped.
     import re
+    from html import escape
 
     from src.run_ledger import render_ledger_html, run_record
 
     _, defs = replay
+    prediction = 'supported · unresolved · control <b>직접 쓴 주장</b>'
     record = run_record(
         kind="band_sweep", condition="generated→video [0,12)",
         metric_name="caption_similarity", metric_value=0.83, metric_unit="ratio",
-        config={"clip": "02321.mp4"}, prediction="가설", is_control=False,
+        config={"clip": "02321.mp4"}, prediction=prediction, is_control=False,
     )
-    raw = render_ledger_html([record])
-    emitted = set(re.findall(r"<th[^>]*>([^<]*)</th>", raw))
-    assert emitted, "renderer emitted no <th> row"
-    assert emitted <= set(defs["LEDGER_HEADINGS"]), (
-        f"untranslated ledger headers: {emitted - set(defs['LEDGER_HEADINGS'])}"
-    )
-    assert '<span style="opacity:0.55">unresolved</span>' in raw
+    english = render_ledger_html([record])
+    assert ">prediction</th>" in english and ">save status</th>" in english
 
-    # And the view actually applies it. Seed the state explicitly: `ledger_view`
-    # reads whatever `load_log` found, and notebook_results/ is gitignored -- so
-    # on a fresh clone the ledger is empty and there are no headers to assert on.
-    # This test used to pass only because a previous run had left a log behind.
+    localized = render_ledger_html([record], lang="ko")
+    emitted = set(re.findall(r"<th[^>]*>([^<]*)</th>", localized))
+    assert emitted and all(any("가" <= ch <= "힣" for ch in heading) for heading in emitted)
+
+    # Seed state instead of depending on a local, gitignored log file.
     defs["set_runs"](lambda _prev: [record])
     html = defs["ledger_view"]().text
-    assert "판정 없음" in html
-    for korean in ("종류", "조건", "지표", "대조군", "가설", "판정"):
-        assert f">{korean}</th>" in html, korean
+    assert set(re.findall(r"<th[^>]*>([^<]*)</th>", html)) == emitted
+    assert ">미판정</span>" in html
+    assert escape(prediction, quote=True) in html
+    assert "<b>직접 쓴 주장</b>" not in html
+    assert record["prediction"] == prediction
 
 
 def test_the_ledger_summary_and_verdicts_reach_the_student_in_korean(replay):
-    # The "N claims with NO control" clause is the number the ledger section tells
-    # students to drive to zero, and the verdict cell is what they change it with.
-    # Both are rendered by shared `src/` code, so both are rewritten in the view.
+    # A declared control from another experiment does not imply matched settings.
+    # The view must communicate that distinction and localize the verdict value.
     from src.run_ledger import apply_verdict, run_record
 
     from src.run_ledger import render_ledger_html
@@ -258,20 +256,20 @@ def test_the_ledger_summary_and_verdicts_reach_the_student_in_korean(replay):
     runs = apply_verdict(runs, runs[0]["run_id"], "supported", rival="캡션이 짧아졌을 뿐")
 
     raw = render_ledger_html(runs)
-    # The renderer still emits the English this view is responsible for rewriting;
-    # if it stops, these anchors fail rather than the rewrite silently no-opping.
+    # The default locale remains usable by the English notebook.
     assert "claim(s) with NO control" in raw
     assert 'title="rival: 캡션이 짧아졌을 뿐">supported</span>' in raw
 
     defs["set_runs"](lambda _prev: runs)
     html = defs["ledger_view"]().text
-    assert "대조군 없는 주장" in html and "with NO control" not in html
+    assert "설정이 일치하는 대조군 없는 실행 1개" in html
+    assert "대조군과 설정이 일치하는 실행 0개" in html
+    assert "with NO control" not in html
     assert ">지지됨</span>" in html and ">supported</span>" not in html
-    assert set(defs["LEDGER_VERDICTS"]) == {"supported", "refuted", "untested"}
     # The control chip is display-only and localized; `kind` and `metric` are the
     # keys that also appear in lab_log.jsonl, and deliberately stay English so a
     # student can match a table row against the file.
-    assert ';font-weight:600">대조군</span>' in html
+    assert ';font-weight:600">대조군으로 지정</span>' in html
     assert "band_sweep" in html and "caption_similarity" in html
 
 
@@ -298,6 +296,8 @@ def test_no_form_asks_for_a_hypothesis_any_more(replay):
 def test_the_ledger_drops_the_prediction_column_when_nothing_carries_one(replay):
     # Without this, every row would render the red "none written" alarm -- marking
     # as a defect the field the notebook deliberately stopped collecting.
+    import re
+
     from src.run_ledger import render_ledger_html, run_record
 
     def rec(pred):
@@ -310,16 +310,56 @@ def test_the_ledger_drops_the_prediction_column_when_nothing_carries_one(replay)
 
     without = render_ledger_html([rec("")])
     assert "none written" not in without
-    assert without.count("<th") == 7
+    without_headers = set(re.findall(r"<th[^>]*>([^<]*)</th>", without))
+    assert "prediction" not in without_headers
 
     # ...and keeps it the moment a run has one, so the English notebook and any
     # ledger reloaded from an older lab_log.jsonl are unaffected.
     with_pred = render_ledger_html([rec("앞쪽 레이어가 더 크게 바꿀 것이다")])
-    assert with_pred.count("<th") == 8
-    assert "prediction" in with_pred
+    with_headers = set(re.findall(r"<th[^>]*>([^<]*)</th>", with_pred))
+    assert "prediction" in with_headers
+    assert with_headers - {"prediction"} == without_headers
 
 
 @pytest.mark.parametrize("form_name", ["band_controls", "ko_controls", "tf_controls"])
 def test_the_forms_start_unsubmitted(replay, form_name):
     _, defs = replay
     assert defs[form_name].value is None
+
+
+@pytest.mark.parametrize("form_name", ["ko_controls", "tf_controls"])
+def test_classroom_forms_reject_unsafe_frames_and_blank_prompts(replay, form_name):
+    _, defs = replay
+    form = defs[form_name]
+    valid = {"clip": defs["CLIP_DEFAULT"], "video": None, "nframes": 8,
+             "prompt": "소리를 설명해 주세요", "ko_enable": False,
+             "target": ["audio"], "layers": (0, 36), "max_new_tokens": 32}
+    assert form.validate(valid) is None
+    assert form.validate({**valid, "nframes": 32}) is not None
+    assert form.validate({**valid, "prompt": "  "}) is not None
+
+
+def test_tf_caption_limit_is_a_submitted_form_setting(replay):
+    _, defs = replay
+    form = defs["tf_controls"]
+    assert "max_new_tokens" in form.element.elements
+    valid = {"clip": defs["CLIP_DEFAULT"], "video": None, "nframes": 8,
+             "prompt": "소리를 설명해 주세요", "target": ["audio"],
+             "layers": (0, 36), "max_new_tokens": 64}
+    assert form.validate(valid) is None
+    assert form.validate({**valid, "max_new_tokens": 1024}) is not None
+
+
+def test_korean_figures_render_without_missing_glyphs(replay):
+    import io
+    import warnings
+
+    outputs, _ = replay
+    figures = [o for o in outputs if type(o).__module__.startswith("matplotlib")]
+    assert figures
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        for figure in figures:
+            figure.savefig(io.BytesIO(), format="png")
+    assert not [str(w.message) for w in caught
+                if "Glyph" in str(w.message) and "missing" in str(w.message)]
