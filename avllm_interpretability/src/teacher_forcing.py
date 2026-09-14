@@ -18,11 +18,16 @@ needs the model.
 """
 
 from contextlib import nullcontext
-from typing import Any
 
 import torch
 
 from .attention_knockout_experiment import block_attention
+from .classroom_display import (
+    SPECIAL_TOKEN_DISPLAY,
+    decode_caption_tokens,
+    group_tokens_into_words,
+    selected_drop_share,
+)
 from .probe_metrics import (
     MEASUREMENT_CAVEATS,
     MeasurementKind,
@@ -50,6 +55,8 @@ def caption_logprobs(logits, input_ids, prompt_len):
     `logits[p]` predicts the token at position `p + 1`, so the log-prob of the
     caption token at extended position `p` (for `prompt_len <= p < seq`) is read
     from `logits[p - 1]`. Returns a 1-D tensor of length `seq - prompt_len`.
+    Thus the first answer token is scored from the final prompt query: an
+    answer-only attention rule cannot directly change that first prediction.
     """
     if logits.dim() == 3:
         logits = logits[0]
@@ -122,29 +129,6 @@ def delta_logprobs(knockout_logprobs, baseline_logprobs):
     return knockout_logprobs - baseline_logprobs
 
 
-def group_tokens_into_words(caption_tokens, delta):
-    """Group subword pieces into display words (F2).
-
-    A token that starts with whitespace (or a newline) begins a new word --
-    Qwen's byte-level BPE marks word starts with a leading space, so
-    ` saxophone` -> [` sax`, `ophone`] regroups into one word. Returns a list of
-    `(word_text, word_delta, [(piece, piece_delta), ...])` where `word_delta` is
-    the **sum** of the pieces' deltas (log-probs add: the word's log-likelihood
-    change).
-    """
-    words: list[list[Any]] = []
-    for tok, val in zip(caption_tokens, [float(x) for x in delta]):
-        text = tok or ""
-        starts_word = (not words) or text[:1].isspace()
-        if starts_word:
-            words.append([text, val, [(text, val)]])
-        else:
-            words[-1][0] += text
-            words[-1][1] += val
-            words[-1][2].append((text, val))
-    return [tuple(w) for w in words]
-
-
 def render_delta_strip(
     caption_tokens,
     delta,
@@ -152,6 +136,7 @@ def render_delta_strip(
     word_level=True,
     highlight_below=None,
     vmax=None,
+    token_kinds=None,
 ):
     """Colored caption strip: word-level display, token-level values (F2).
 
@@ -164,7 +149,11 @@ def render_delta_strip(
     one span, not `sax`+`ophone`); a word's color comes from its **summed**
     delta and its hover shows the sum plus the per-token breakdown when the word
     has several pieces. Pass `word_level=False` for the raw one-span-per-token
-    view.
+    view, where blank slots are labeled as byte continuations / special tokens.
+    A completed Unicode display piece can span several scored token IDs;
+    its text is not a per-character probability attribution.
+    Supply ``token_kinds`` to render each special token as a standalone
+    ``⟨special⟩`` unit, so EOS probability changes never color a lexical word.
 
     `highlight_below`, when set to a threshold `t >= 0`, splits the strip in
     two: units below `-t` are outlined and bolded, everything else is dimmed.
@@ -185,14 +174,20 @@ def render_delta_strip(
     vals = [float(x) for x in delta]
     if not vals:
         return "<em>(empty caption)</em>"
+    tokens = list(caption_tokens)
+    kinds = list(token_kinds) if token_kinds is not None else None
+    groups = group_tokens_into_words(tokens, vals, token_kinds=kinds)
 
     if word_level:
         units = [
             (text, val, pieces if len(pieces) > 1 else None)
-            for text, val, pieces in group_tokens_into_words(caption_tokens, vals)
+            for text, val, pieces in groups
         ]
     else:
-        units = [(tok or "", val, None) for tok, val in zip(caption_tokens, vals)]
+        units = [
+            (SPECIAL_TOKEN_DISPLAY if kinds is not None and kinds[index] == "special" else tok or "", val, None)
+            for index, (tok, val) in enumerate(zip(tokens, vals))
+        ]
 
     vmax = max(1e-6, float(vmax) if vmax is not None else max(abs(v) for _, v, _ in units))
     norm = matplotlib.colors.TwoSlopeNorm(vmin=-vmax, vcenter=0.0, vmax=vmax)
@@ -201,13 +196,18 @@ def render_delta_strip(
     def _esc(s):
         return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
 
+    def _piece_label(piece):
+        if not piece:
+            return "byte continuation" if kinds is not None else "byte continuation / special token"
+        return _esc(piece.strip()) or "whitespace"
+
     spans = []
     for text, val, pieces in units:
         bg = matplotlib.colors.to_hex(cmap(norm(val)))
         title = f"Δ={val:+.2f} nats"
         if pieces:
-            title += " (" + ", ".join(f"{_esc(p.strip()) or '·'}: {v:+.2f}" for p, v in pieces) + ")"
-        shown = _esc(text).replace(" ", "&nbsp;") or "&nbsp;"
+            title += " (" + ", ".join(f"{_piece_label(p)}: {v:+.2f}" for p, v in pieces) + ")"
+        shown = _esc(text).replace(" ", "&nbsp;") or f"[{_piece_label('')}]"
         if highlight_below is None:
             emphasis = ""
         elif val < -abs(highlight_below):
@@ -221,7 +221,7 @@ def render_delta_strip(
     return "".join(spans)
 
 
-def threshold_slider_params(caption_tokens, delta, target_fraction=0.25):
+def threshold_slider_params(caption_tokens, delta, target_fraction=0.25, token_kinds=None):
     """Data-driven settings for the notebook's draggable Δ threshold.
 
     The Tangle slider moves by `floor(drag_px / pixels_per_step) * step`, so a
@@ -236,9 +236,10 @@ def threshold_slider_params(caption_tokens, delta, target_fraction=0.25):
     `pixels_per_step=3`), and the default `amount` is the quantile that starts
     the strip with roughly `target_fraction` of the dropped words outlined.
 
-    Returns a dict ready to splat into `TangleSlider(**params)`.
+    Pass the same ``token_kinds`` as the strip to include special tokens as
+    separate scored units. Returns a dict for `TangleSlider(**params)`.
     """
-    words = group_tokens_into_words(caption_tokens, [float(x) for x in delta])
+    words = group_tokens_into_words(caption_tokens, [float(x) for x in delta], token_kinds=token_kinds)
     drops = sorted(-w[1] for w in words if w[1] < 0)  # positive magnitudes
     worst = drops[-1] if drops else 0.0
     max_value = max(0.1, round(worst * 1.05, 2))
@@ -294,11 +295,15 @@ def teacher_forced_delta(
             `[("answer", "audio", 0, 36)]`. Empty -> baseline only.
         max_new_tokens: greedy caption length when not cached.
         cached_caption_ids: reuse a previously generated `C` (shape `[1, n]`) so
-            an unchanged (clip, prompt, nframes) submit skips regeneration.
+            an unchanged clip and generation configuration skips regeneration.
+            Use `classroom_display.caption_cache_key` including the cap and
+            model revision; cached IDs are intentionally scored without edits.
 
     Returns a dict with per-token `delta` (= knockout - baseline), `delta_total`,
-    length-normalized `delta_mean`, the caption token strings, and both log-prob
-    vectors.
+    length-normalized `delta_mean`, intact answer-only `caption_text`, aligned
+    `caption_tokens`/`caption_token_kinds`, generation end information, and both
+    log-prob vectors. Normalizing by length does not make different captions or
+    tokenizations causally comparable; score the same caption for matched tests.
     """
     device = inputs["input_ids"].device
     prompt_len = inputs["input_ids"].shape[1]
@@ -364,6 +369,9 @@ def teacher_forced_delta(
         top_k=distribution_top_k,
         target_token_set_version=target_token_set_version,
     )
+    # Only compact summaries and per-token log probabilities are needed from
+    # here. Do not hold both full-sequence vocabulary tensors during knockout.
+    del base_logits
     if rules:
         knockout_logits = _logits(rules)
         ko_logp = caption_logprobs(knockout_logits, ext["input_ids"], prompt_len)
@@ -378,13 +386,29 @@ def teacher_forced_delta(
     else:
         ko_logp = base_logp
         knockout_distribution = baseline_distribution
-    del base_logits
-
-    caption_tokens = [processor.tokenizer.decode([t]) for t in caption_ids[0].tolist()]
+    token_ids = caption_ids[0].tolist()
+    caption_text, caption_tokens, caption_token_kinds = decode_caption_tokens(processor.tokenizer, token_ids)
+    eos_ids = None
+    for config in (getattr(model.thinker, "generation_config", None),
+                   getattr(model.thinker, "config", None), processor.tokenizer):
+        eos_ids = getattr(config, "eos_token_id", None)
+        if eos_ids is not None:
+            break
+    if isinstance(eos_ids, int):
+        eos_ids = [eos_ids]
+    ended_with_eos = token_ids[-1] in (eos_ids or [])
+    truncated = not ended_with_eos and n_answer >= max_new_tokens
     delta = delta_logprobs(ko_logp, base_logp)
     return {
         "caption_ids": caption_ids,
         "caption_tokens": caption_tokens,
+        "caption_text": caption_text,
+        "caption_token_kinds": caption_token_kinds,
+        "generation_truncated": truncated,
+        "generation_end_reason": "eos" if ended_with_eos else "max_new_tokens" if truncated else "stopped",
+        "generation_end_token_id": token_ids[-1],
+        "generation_token_count": n_answer,
+        "generation_from_cache": cached_caption_ids is not None,
         "baseline_logprobs": base_logp,
         "knockout_logprobs": ko_logp,
         "baseline_distribution": baseline_distribution,
