@@ -32,35 +32,31 @@ def _(mo):
     mo.md(r"""
     # AVLLM 해석 가능성 — molab 실습 (한국어판)
 
-    **Qwen2.5-Omni-3B**로 영상 한 편에 대해 두 가지 해석 가능성(interpretability)
-    실험을 수행합니다.
+    **오늘의 질문:** 선택한 직접 어텐션 연결을 바꾸면, 이 영상에 대한 **같은 캡션**의 확률이 어떻게 달라질까요?
+    Qwen2.5-Omni-3B의 thinker를 사용합니다. 먼저 시범을 읽고, 아래 🎯에서 직접 제출합니다.
 
-    **오늘의 목표:** 같은 클립에서 설정 하나를 바꾸고, 달라진 결과와 다른 가능한 설명을
-    함께 남깁니다. 숫자가 변했다는 관찰과 모델의 능력에 대한 결론을 구분해 봅시다.
-
-    | 순서 | 할 일 | 남길 것 |
+    | 활동 | 바꿀 것 | 남길 근거 |
     |---|---|---|
-    | 1 · 준비 | GPU 연결 → Run all → 시범 결과 읽기 | 입력·출력·두 지표의 의미 |
-    | 2 · 비교 | 🎯에서 한국어 무음/원본 쌍, 이어서 영어 쌍 | 같은 설정의 두 실행 ID와 캡션 |
-    | 3 · 탐색 | 🎛️ 프레임 8→4 또는 🎯 레이어 한 대역만 변경 | 바꾼 변수, 관측, 경쟁 설명 |
-    | 4 · 제출 | 📓에서 해석 기록 → Markdown와 JSON 내려받기 | 재현 가능한 결과와 다음 질문 |
+    | **1 · 직접 연결** | `answer→audio` / `answer→video` | 같은 캡션의 토큰별 Δ와 바뀐 연결 |
+    | **2 · 입력 대조** | 제공 원본 / 무음 | 각 타깃에 대응하는 두 실행 ID와 전체 캡션 |
+    | **3 · 질문의 초점** | 소리 / 보이는 내용 / 시청각 함께 | 같은 언어에서 바꾼 질문과 관측 |
+    | **4 · 레이어 대역** | 전체 / 초반 / 중반 / 후반 | 더 민감한 대역과 경쟁 설명 |
+    | **7 · 새 영상** | 짧은 클립 업로드 | 같은 영상 안의 비교와 일반화의 한계 |
+    | **8 · 경로 확장** | `query_text`, 교차 모달, 복합 규칙 | 단일 규칙과 함께 차단한 규칙의 차이 |
 
-    앞부분은 **교수자와 읽는 시범**, 🎯·🎛️는 **여러분이 제출 버튼으로 실행하는 실험**입니다.
-    처음에는 제공된 클립과 4·8프레임을 사용하세요. 자유 탐색은 기본 쌍을 기록한 뒤 시작합니다.
+    활동 번호는 합의한 탐색 우선순위를 유지합니다. **5번 프레임 수는 원래의 8로 고정**합니다.
+    **6번 언어 비교는 질문 셀의 선택 메모**이며 필수 활동이나 제출 항목이 아닙니다.
 
-    1. **Logit Lens** — thinker 레이어들을 가로질러, **오디오 토큰 위치**에서 모델의
-       중간 표현을 어휘로 투사한 **보정되지 않은 raw probe**를 읽습니다. 모델의 생각이나 확신을 그대로 보여 주는 것은 아닙니다.
-    2. **Attention Knockout(어텐션 녹아웃)** — 선택한 source→target 어텐션 경로를
-       막고 생성한 답변을, 막지 않은 **기준선(baseline)** 답변과 비교합니다.
+    **첫 활동은 네 번의 실행입니다:** 원본×audio, 원본×video, 무음×audio, 무음×video.
+    질문·레이어·생성 상한은 그대로 두고 한 번에 하나만 바꿉니다. 같은 클립 안의 타깃 비교는
+    같은 캡션을 재사용하지만, 원본과 무음은 서로 다른 캡션을 만들 수 있습니다.
 
-    Qwen2.5-Omni는 **thinker**(보고 듣고 글을 쓰는 부분)와 **talker**(그 글을 음성으로
-    바꾸는 부분)로 나뉩니다. 이 실습은 talker를 내려놓고 thinker만 쓰기 때문에, 아래에서
-    계속 "thinker 레이어"라고 부릅니다.
+    앞부분의 **Logit Lens**는 오디오 위치의 중간 표현을 어휘로 투사한 보정되지 않은 프로브입니다.
+    **Attention Knockout**은 선택한 직접 연결을 차단하는 개입입니다. 시범의 새 캡션 생성,
+    🎯의 고정 캡션 채점, 🎛️ 활동 8의 프로브 다양성은 서로 다른 측정입니다.
+    각 측정의 변화를 곧바로 모델의 이해·정답률·생각으로 해석하지 않습니다.
 
-    이 노트북은 `CTP49906_avllm_molab.py`의 **한국어판**입니다. 노브 셀의
-    `LOGIT_PROMPT`와 `ATTENTION_PROMPT`가 한국어이므로 `query_text` 위치에 한국어
-    토큰이 놓이고 캡션도 한국어로 나옵니다. 그 밖의 것 — 클립, 모델, 규칙, 레이어
-    창 — 은 원본과 동일합니다. 그래야 두 노트북을 나란히 놓고 비교할 수 있습니다.
+    활동 뒤에는 📓에 **바꾼 것·고정한 것·주장·경쟁 설명**을 남기고 Markdown와 JSON을 저장합니다.
     """)
     return
 
@@ -80,7 +76,7 @@ def _(mo):
 
     **진행이 멈췄다면:** 실행 중인 셀과 오류 문장을 먼저 확인하세요. GPU가 없으면 제공된
     replay로 시범 결과를 토론할 수 있지만 새 실험은 실행되지 않습니다. 메모리 오류 뒤에는
-    먼저 결과를 내보내고 커널을 재시작한 다음 기본 클립·4프레임으로 돌아오세요.
+    먼저 결과를 내보내고 커널을 재시작한 다음 제공된 기본 클립·고정 8프레임으로 돌아오세요.
 
     **저장은 직접 확인하세요.** 실행 기록은 세션 안의 파일에도 쓰지만 저장 실패와 세션 종료에
     대비해 Markdown와 JSON을 내려받습니다. 자신의 영상은 원격 GPU 서버로 업로드됩니다.
@@ -617,24 +613,26 @@ def _(USE_PRECOMPUTED):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## 파라미터 — 먼저 아래 실험 폼을 사용하세요
+    ## 수업에서 바꾸는 설정 — 활동과 위젯을 연결하기
 
-    **처음에는 코드 셀을 편집할 필요가 없습니다.** 아래 🎛️·🎯 폼에서 값 하나를 바꾸고
-    ▶를 누르세요. 폼 값을 움직이는 것만으로 GPU 실험이 실행되지는 않습니다.
+    코드 셀은 처음에 편집하지 않습니다. 🎯 폼의 활동 **1→2→3→4→7**, 이어서 🎛️ **8**을 사용하세요.
+    폼 값은 **▶로 제출할 때만** 실험에 반영됩니다.
 
-    | 바꿀 것 | 예상되는 변화 | 비교할 때 고정할 것 |
+    | 활동 | 위젯 | 함께 고정할 것 |
     |---|---|---|
-    | 프레임 8→4 | 비디오 토큰 수가 줄어듦. 같은 클립의 오디오 길이는 유지 | 클립·프롬프트·규칙 |
-    | 한국어→영어 프롬프트 | 질문 토큰과 생성 캡션이 함께 달라질 수 있음 | 원본/무음 각각 같은 프롬프트로 쌍 만들기 |
-    | `audio`→`video` 타깃 | 다른 직접 어텐션 연결을 차단 | 클립·프롬프트·레이어 |
-    | 레이어 `[0,12)`→`[12,24)` | 이 개입에 민감한 대역 비교 | `end`는 포함하지 않음; 다른 설정은 유지 |
-    | 🎯 캡션 상한 32→64 | 더 긴 캡션을 생성할 수 있음 | 실제 길이·문장을 함께 기록 |
+    | 1 | 차단할 직접 연결 `audio` / `video` | 클립·질문·레이어·생성 상한 |
+    | 2 | 기본 클립 / 무음 대조군 | 타깃·질문·레이어·생성 상한 |
+    | 3 | 소리 / 보이는 내용 / 시청각 함께 질문 | 클립·타깃·레이어·생성 상한 |
+    | 4 | 전체 / 초반 / 중반 / 후반 | 클립·질문·타깃·생성 상한 |
+    | 7 | 새 클립 업로드 | 새 영상 안에서 단일 변수 비교 |
+    | 8 | `query_text`, source/target, 복합 규칙 | 단일 개입부터 시작하고 규칙 하나씩 추가 |
 
-    **고급:** 아래 코드의 전역 노브를 바꾸면 여러 시범 셀과 폼이 다시 실행/초기화될 수 있습니다.
-    모델은 재사용하지만 추가 연산과 메모리는 필요합니다. 먼저 결과를 내보내세요.
-    프레임은 2–16의 짝수, 시범 어텐션 캡처는 최대 2개 레이어로 제한합니다.
-    입력 토큰 수와 디코딩 크기도 검사하므로 짧고 작은 클립부터 시도하세요.
-    `ATTENTION_CAPTURE_LAYERS=(0,2)`는 히트맵 저장 범위이며 **녹아웃 레이어 범위와 다릅니다.**
+    **프레임 수는 8로 고정**합니다. 언어를 바꾸고 싶으면 질문의 `직접 작성`을 열어 선택 메모를 읽으세요.
+    캡션 최대 토큰 수는 잘림에 대응하는 운영 설정입니다. 상한을 바꿨다면 관련 비교 모두를 다시 만듭니다.
+    출력의 색 강조 임계값과 레이어 보기 조작은 표시를 바꾸며, 차단 대역을 바꾸는 실험과 다릅니다.
+
+    아래 코드는 **교수자용 시범 기준**입니다. 전역 설정을 고치면 여러 셀과 폼이 재실행/초기화될 수 있습니다.
+    먼저 결과를 내보내세요. `ATTENTION_CAPTURE_LAYERS=(0,2)`는 그림 저장 범위이며 차단 레이어 범위와 다릅니다.
     """)
     return
 
@@ -668,9 +666,55 @@ def _(PROJECT_DIR):
     return LOGIT_CSV_PATH, RESULTS_DIR, SILENT_VIDEO_PATH, VIDEO_PATH
 
 
+
+@app.cell
+def _():
+    PROMPT_CHOICES = {
+        "소리 설명": "영상에서 들리는 소리를 설명해 주세요",
+        "보이는 내용 설명": "영상에서 보이는 내용을 설명해 주세요",
+        "시청각 함께 설명": "영상에서 보이는 것과 들리는 소리를 설명해 주세요",
+        "직접 작성": "custom",
+    }
+
+    def resolve_classroom_prompt(selection, custom_text):
+        if isinstance(selection, (list, tuple)):
+            if len(selection) != 1:
+                raise ValueError("질문 프리셋을 하나 선택하세요.")
+            selection = selection[0]
+        selected = PROMPT_CHOICES.get(selection, selection)
+        if selected not in PROMPT_CHOICES.values():
+            raise ValueError("질문 프리셋을 하나 선택하세요.")
+        prompt = custom_text if selected == "custom" else selected
+        if not isinstance(prompt, str) or not prompt.strip():
+            raise ValueError("직접 작성할 질문에 공백이 아닌 내용을 입력하세요.")
+        return prompt.strip()
+
+    def classroom_layer_choices(n_layers):
+        if not isinstance(n_layers, int) or n_layers < 3:
+            raise ValueError("세 대역으로 나누려면 레이어가 3개 이상이어야 합니다.")
+        return {"전체": "all", "초반": "early", "중반": "middle", "후반": "late"}
+
+    def resolve_classroom_layers(selection, n_layers):
+        choices = classroom_layer_choices(n_layers)
+        if isinstance(selection, (list, tuple)):
+            if len(selection) != 1:
+                raise ValueError("레이어 대역을 하나 선택하세요.")
+            selection = selection[0]
+        bands = {"all": (0, n_layers), "early": (0, n_layers // 3),
+                 "middle": (n_layers // 3, 2 * n_layers // 3),
+                 "late": (2 * n_layers // 3, n_layers)}
+        selected = choices.get(selection, selection)
+        if selected not in bands:
+            raise ValueError("레이어 대역을 하나 선택하세요.")
+        return bands[selected]
+
+    return PROMPT_CHOICES, classroom_layer_choices, resolve_classroom_layers, resolve_classroom_prompt
+
+
 @app.cell
 def _(validate_experiment):
-    # The knobs — editing these reruns guided experiments: re-runs the experiments, not the model loads.
+    # Instructor reference settings: classroom forms keep the original 8 frames.
+    # Changing this code reruns guided cells; students use the activity forms.
     NFRAMES = 8
     LOGIT_PROMPT = "영상에서 들리는 소리를 설명해 주세요"
     ATTENTION_PROMPT = "영상에서 보이는 것과 들리는 소리를 설명해 주세요"
@@ -701,7 +745,7 @@ def _(validate_experiment):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## 영상 미리 보기 (프레임 + 내장 오디오가 그대로 Qwen에 들어갑니다)
+    ## 영상 미리 보기 — 모델에는 샘플링·인코딩된 표현이 전달됩니다
     """)
     return
 
@@ -1485,268 +1529,6 @@ def _(attention_summary, baseline_attention_summary, mo, np, plt):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## 🎚️ 선택 탐색: 어느 레이어 대역의 개입에 더 민감한가?
-
-    위의 비교는 **단 하나의** 녹아웃입니다 — 모달리티 하나, 고정된 레이어 대역 하나
-    (36개 레이어 전부). 전 구간을 막은 결과만으로 경로의 중요성이나 위치를 확정할 수 없습니다. 이 섹션은 그 대역을 훑습니다. 타깃 모달리티와
-    레이어 창을 고르고 다시 생성해서, 캡션이 기준선에서 얼마나 멀어지는지 보세요.
-
-    같은 타깃에 대해 `[0, 12)` · `[12, 24)` · `[24, 36)`을 비교해 보세요.
-
-    **널(null) 결과를 읽는 법.** 캡션이 그대로인 대역은 *이 측정에서는 효과가 없음*을
-    보여 줄 뿐입니다. 중복(redundancy), 이 규칙이 자르지 못한 간접 경로, 또는 변화를
-    보기에 너무 거친 지표 — 어느 쪽과도 모순되지 않습니다. 경로가 **없다는 증거는
-    아닙니다**. 문자열 비교는 이분법적입니다. 아래의 티처 포싱 Δ가 같은 질문의 연속적
-    버전이며, *작은* 효과를 보여 줄 수 있는 쪽입니다.
-
-    ▶를 누를 때마다 이미 인코딩된 클립에 대해 greedy 생성 1회가 돌아갑니다. 입력과 런타임에 따라 시간이 달라집니다.
-    기준선은 재사용하며 다시 생성하지 않습니다. 두 캡션 모두 **답변만** 표시됩니다 —
-    공통 프롬프트를 잘라 내야 차이가 지시문이 아니라 모델의 말에 대한 것이 됩니다.
-    서로 다른 설정·결과는 아래 **실습 기록(ledger)**에 남습니다. 동일 재실행은 한 행으로 합쳐집니다. 직전 대역을 기록에서
-    비교할 수 있습니다.
-    """)
-    return
-
-
-@app.cell
-def _(Counter, attention_token_types, mo):
-    # The modality census, shown next to the controls rather than folded into a
-    # dropdown label. `Counter` omits absent keys, so `image` — offered in every
-    # picker — used to be invisible rather than visibly zero, and a rule targeting
-    # it masked nothing while reporting "no effect".
-    _census = Counter(attention_token_types)
-    _rows = [
-        {
-            "모달리티": _m,
-            "이 입력에 있는 토큰 수": _census.get(_m, 0),
-            "여기서 타깃으로 쓸 수 있는가": "예" if _census.get(_m, 0) else "아니오 — 하나도 없음",
-        }
-        for _m in ("video", "audio", "query_text", "image")
-    ]
-    mo.vstack([
-        mo.md("<span style=\"font-size:1.15rem;font-weight:600\">이 인코딩된 입력에 실제로 들어 있는 것</span>"),
-        mo.ui.table(_rows, selection=None, pagination=False),
-        mo.md(
-            "`generated`는 표에 없습니다. 그 위치는 모델이 디코딩하기 전에는 존재하지 "
-            "않기 때문입니다. 그래서 `generated` source는 **생성 중에는 살아 있고**"
-            "(이 섹션) **순전파에서는 작동하지 않습니다**(아래 🎛️ 스코어보드)."
-        ),
-    ], gap=0.4)
-    return
-
-
-@app.cell
-def _(KNOCKOUT_RULES, attention_model, mo):
-    _band_layers = len(attention_model.thinker.model.layers)
-    _band_targets = ["video", "audio", "query_text"]
-    _band_default = KNOCKOUT_RULES[0][1] if KNOCKOUT_RULES else "video"
-
-    def _band_validate(_v):
-        if not _v:
-            return None
-        # `.get` with a default throughout: a batch's value is a partial dict
-        # until the frontend has pushed state for every child, so indexing
-        # directly raises KeyError on the first render instead of validating.
-        _lo, _hi = _v.get("layers") or (0, 1)
-        if int(_hi) <= int(_lo):
-            return (
-                f"[{int(_lo)}, {int(_hi)})는 0개 레이어를 마스킹합니다 — `end`는 배타적입니다. "
-                "이대로면 기준선을 돌려 놓고 '효과 없음'이라고 보고하게 됩니다."
-            )
-        return None
-
-    band_controls = mo.md(
-        "**generated** 토큰이 {target} 에 어텐션하는 것을 thinker 레이어 {layers} "
-        "구간에서 금지\n\n"
-        "{null_band} — 실행 전에 **효과가 작을 것으로 예상한 대역**입니다. "
-        "이 체크는 예상의 기록이며, 대조군 검증이나 무효과 판정이 아닙니다.\n\n"
-        f"(`end`는 배타적입니다. 이 thinker는 레이어가 **{_band_layers}**개입니다. "
-        "클립·프롬프트·프레임 수는 파라미터 셀에 설정된 값 그대로입니다.)"
-    ).batch(
-        target=mo.ui.dropdown(
-            _band_targets,
-            value=_band_default if _band_default in _band_targets else "video",
-        ),
-        layers=mo.ui.range_slider(
-            0, _band_layers, step=1, value=[0, _band_layers // 3], show_value=True, full_width=True
-        ),
-        null_band=mo.ui.checkbox(value=False),
-    ).form(
-        submit_button_label="▶ 이 대역으로 다시 생성",
-        bordered=True,
-        # Refuse the empty band *before* the GPU runs. Dragging both handles onto
-        # the same layer is what a student does to ask "is it exactly layer 12?",
-        # and the answer used to be a confident, bordered "no effect" tile.
-        validate=_band_validate,
-    )
-    band_controls
-    return (band_controls,)
-
-
-@app.cell
-def _(
-    ATTENTION_PROMPT,
-    LEDGER_LOG,
-    MAX_NEW_TOKENS,
-    NFRAMES,
-    USE_PRECOMPUTED,
-    VIDEO_PATH,
-    append_run,
-    attention_baseline_ids,
-    attention_inputs,
-    attention_model,
-    attention_processor,
-    attention_token_types,
-    band_controls,
-    block_attention,
-    experiment_config,
-    mo,
-    run_record,
-    set_runs,
-    torch,
-):
-    import difflib as _difflib
-
-    from wigglystuff import TextCompare as _BandCompare
-
-    _bp = band_controls.value
-    mo.stop(
-        _bp is None,
-        mo.callout(
-            mo.md("타깃과 레이어 대역을 고른 뒤 **▶ 이 대역으로 다시 생성**을 누르세요."),
-            kind="info",
-        ),
-    )
-    mo.stop(
-        USE_PRECOMPUTED or attention_inputs is None,
-        mo.callout(
-            mo.md(
-                "**이 스윕은 라이브 모델이 필요합니다** — 대역마다 캡션을 다시 생성하므로 "
-                "`USE_PRECOMPUTED=True`인 동안에는 건너뜁니다."
-            ),
-            kind="warn",
-        ),
-    )
-
-    _lo, _hi = int(_bp["layers"][0]), int(_bp["layers"][1])
-    _band_rules = [("generated", _bp["target"], _lo, _hi)]
-    _plen = attention_inputs["input_ids"].shape[1]
-    # Answer-only text: slicing off the shared prompt keeps the diff focused on
-    # the generated words (the prompt would otherwise dominate as one big match).
-    _base_ans = attention_processor.batch_decode(
-        attention_baseline_ids[:, _plen:],
-        skip_special_tokens=True,
-        clean_up_tokenization_spaces=False,
-    )[0]
-
-    _band_out = None
-    try:
-        with mo.status.spinner(
-            title=f"녹아웃 생성 · generated→{_bp['target']} [{_lo},{_hi})…"
-        ):
-            with block_attention(
-                attention_model, _band_rules, attention_token_types,
-                len(attention_token_types), track_attention=False,
-            ):
-                with torch.no_grad():
-                    _band_ids = attention_model.thinker.generate(
-                        **attention_inputs, max_new_tokens=MAX_NEW_TOKENS, do_sample=False,
-                    )
-        _band_ans = attention_processor.batch_decode(
-            _band_ids[:, _plen:], skip_special_tokens=True, clean_up_tokenization_spaces=False
-        )[0]
-    except Exception as _e:  # noqa: BLE001 — surface any run failure in-notebook
-        _band_out = mo.callout(
-            mo.md(f"**실행 실패** — `{type(_e).__name__}: {_e}`"), kind="danger"
-        )
-
-    if _band_out is None:
-        _ratio = _difflib.SequenceMatcher(
-            None, _base_ans.split(), _band_ans.split()
-        ).ratio()
-        _unchanged = _band_ans.strip() == _base_ans.strip()
-        _band_out = mo.vstack([
-            mo.md(
-                f"**녹아웃** `generated→{_bp['target']}` **[{_lo}, {_hi})** "
-                f"&nbsp;·&nbsp; 전체 {len(attention_model.thinker.model.layers)}개 중 "
-                f"{_hi - _lo}개 레이어 차단"
-            ),
-            mo.hstack([
-                mo.stat(
-                    value=f"{_ratio:.0%}",
-                    label="기준선 대비 캡션 유사도",
-                    caption="어절 문자열의 겹침 · 100%로 반올림돼도 내부 확률이 같다는 뜻은 아님",
-                    # No `direction=`: an unchanged caption used to get the green
-                    # up-arrow and a moved one the red down-arrow, so a three-band
-                    # sweep read as two failures and one success rather than as a
-                    # localization. Neither outcome is the good one here.
-                    bordered=True,
-                ),
-                mo.stat(
-                    value="변화 없음" if _unchanged else "변화 있음",
-                    label="이 대역의 효과",
-                    caption=(
-                        "이 측정에서는 효과 없음 — 중복이나 간접 경로와 모순되지 않으며, "
-                        "부재의 증거가 아님"
-                        if _unchanged else "여기를 막으니 캡션이 움직였음"
-                    ),
-                    bordered=True,
-                ),
-            ], widths="equal", gap=1),
-            mo.md(
-                "**기준선**(왼쪽) vs **이 대역**(오른쪽) — 공통 구절은 마우스를 올리면 "
-                "강조됩니다. **강조되지 않은 부분이 이 대역이 바꾼 것**입니다."
-            ),
-            mo.ui.anywidget(_BandCompare(
-                text_a=_base_ans, text_b=_band_ans, min_match_words=2
-            )),
-            mo.md(
-                "<span style=\"color:#4C78A8;font-weight:600\">다음 →</span> 같은 타깃으로 `[12,24)`와 `[24,36)`도 돌려 보세요. 세 대역의 "
-                "캡션과 유사도를 나란히 놓고 이 개입에 더 민감한 대역을 찾아보세요. 위치의 확정은 아닙니다."
-            ),
-        ])
-        # Record it. `set_runs` is a SetFunctor, not the State object, so a cell
-        # that only *sets* never re-runs itself — this append cannot re-trigger
-        # the generation above. `run_record(...)` is bound as a default argument
-        # so it evaluates here, in the GPU cell, leaving `prev` as the only lazy
-        # input to the lambda.
-        try:
-            set_runs(
-                lambda _prev, _r=run_record(
-                    kind="band_sweep",
-                    condition=f"generated→{_bp['target']} [{_lo},{_hi})",
-                    metric_name="caption_similarity",
-                    metric_value=round(_ratio, 4),
-                    metric_unit="ratio",
-                    # Every input that can move the number belongs in `config`:
-                    # `run_id` digests config *and* metric, so an input left out
-                    # produces a second row with a different number, an identical
-                    # `condition`, and an empty `changed` column — two runs that
-                    # look controlled and are not.
-                    config=experiment_config(
-                        VIDEO_PATH, nframes=NFRAMES, prompt=ATTENTION_PROMPT,
-                        target=_bp["target"], start=_lo, end=_hi, max_new_tokens=MAX_NEW_TOKENS,
-                    ),
-                    is_control=False,
-                    note="효과가 작을 것으로 예상한 대역" if _bp.get("null_band") else "",
-                    extra={"baseline_caption": _base_ans, "knockout_caption": _band_ans},
-                ): append_run(_prev, _r, log_path=LEDGER_LOG)
-            )
-        except Exception as _le:  # noqa: BLE001 — a ledger bug must never eat a run
-            print("ledger append failed:", type(_le).__name__, _le)
-    _band_out
-    return
-
-
-@app.cell
-def _(ledger_view):
-    ledger_view()
-    return
-
-
-@app.cell(hide_code=True)
-def _(mo):
-    mo.md(r"""
     ## 티처 포싱 Δ log-우도 (고정 파라미터)
 
     **쉽게 말해:** 모델이 방금 생성한 캡션을 고정하고, 각 다음 토큰에 부여하는 조건부
@@ -1929,8 +1711,8 @@ def _(
         f"- 기준선/녹아웃 캡션: {'표시됨' if knockout_text else '확인 필요'}\n"
         f"- 어텐션 비교: {'캡처 결과 있음' if _attention_ok else '캡처 결과 없음'}\n"
         f"- 고정 티처 포싱: {_tf_status}\n\n"
-        "**이제 직접 실험할 차례입니다.** 🎯에서 한국어 무음/원본 쌍부터 시작하세요. "
-        "🎛️에서는 프레임 수 하나를 바꾸고 오디오·비디오 토큰 수가 어떻게 달라지는지 보세요. "
+        "**이제 🎯 활동 1·2를 시작하세요.** 원본/무음 × audio/video 네 실행을 기록합니다. "
+        "이어서 질문(3)·대역(4)·새 클립(7), 마지막으로 🎛️ 경로 확장(8)을 탐색합니다. 프레임은 8로 고정합니다. "
         "시범 출력은 아래 인터랙티브 기록에 자동으로 포함되지 않습니다. 시범을 근거로 쓸 때는 별도로 저장하세요."
     )
     return
@@ -1939,29 +1721,376 @@ def _(
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## 🎛️ 인터랙티브: Logit-lens 다양성 스코어보드
+    ## 🎯 활동 1·2·3·4·7 — 같은 캡션의 직접 경로 시험
 
-    여기까지는 고정 파라미터로 한 번씩 돌린 것입니다. 이 섹션은 **Logit-lens 다양성**
-    측정을 살아 있는 플레이그라운드로 바꿉니다. 클립, 프레임 수, 프롬프트, 그리고
-    (원한다면) 순전파 **도중에** 적용할 어텐션 녹아웃을 고르고 제출하면, 각 thinker
-    레이어가 오디오 토큰 위치들에서 *서로 다른* 토큰을 몇 개나 디코딩하는지로 점수를
-    매깁니다.
+    모델이 만든 캡션을 고정해 기준선과 녹아웃에서 다시 채점합니다.
+    **Δ = 녹아웃 − 기준선**이며, 음수는 그 캡션의 확률이 감소했다는 뜻입니다.
+    첫 캡션 토큰은 마지막 프롬프트 위치에서 예측되므로 answer-only 직접 차단 범위 밖입니다.
 
-    제출을 누르기 전에는 아무것도 실행되지 않으며(컨트롤이 폼으로 감싸여 있습니다),
-    녹아웃 실험에서 쓰던 모델을 재사용합니다. 모델을 다시 로드하지는 않지만 새 입력과
-    순전파에는 추가 시간·메모리가 필요합니다.
+    ### 활동 1·2 · 네 실행으로 연결과 대조군 구분하기
 
-    **무엇이 무엇을 움직이는가.** 점수는 **오디오** 토큰 위치에서 측정되고, 그 개수는
-    클립의 *재생 시간*으로 고정됩니다. 따라서 `프레임 수`는 **비디오** 토큰 수를 바꿀
-    뿐 "채점한 오디오 토큰" 값은 전혀 움직이지 않습니다 — 그 숫자가 변하기를
-    기대하며 값을 훑었다면, 고장 난 것이 아닙니다. 아래에 두 개수를 모두 표시하므로
-    자신이 무엇을 움직였는지 확인할 수 있습니다.
+    1. **기본 클립 · 소리 설명 · 전체 대역 · 상한32**를 두고 타깃 `audio`로 실행합니다.
+    2. 타깃만 `video`로 바꾸어 같은 캡션을 채점합니다. 감소한 토큰을 직접 읽어 보세요.
+    3. **무음 대조군**에서 `audio`, 이어서 `video`를 실행합니다. 각 타깃끼리 원본/무음 ID를 연결합니다.
+    4. 바꾼 설정과 고정한 설정, 관측을 설명할 다른 이유를 한 문장씩 남깁니다.
 
-    이것은 프롬프트에 대한 순전파 1회이므로, **`generated`와 `answer`는 규칙의 어느
-    쪽에 놓이든 여기서는 작동하지 않습니다** — 모델이 디코딩하기 전까지 그런 위치는
-    존재하지 않습니다(맨 위 🧭 그림 ③). 아무것에도 걸리지 않는 규칙은 실행되지 않고
-    거부됩니다. `audio`, `video`, `query_text`를 쓰세요. 드롭다운으로 규칙 하나를 만들거나,
-    고급 필드에 여러 개를 입력하면 됩니다.
+    타깃·대역만 바꾸면 같은 클립의 캡션을 재사용합니다. **클립·질문을 바꾸면 캡션도 달라질 수 있습니다.**
+    서로 다른 캡션의 평균 Δ는 길이를 나눌 뿐 내용·언어 차이를 통제하지 않습니다.
+    무음도 오디오 토큰을 만들므로 Δ=0이 보장되지 않습니다. 작은 효과가 오디오를 전혀 쓰지 않는다는 뜻도 아닙니다.
+
+    ### 활동 3·4 · 질문과 대역을 하나씩 바꾸기
+
+    먼저 질문 프리셋을 **보이는 내용 설명**으로 바꾸고 활동 1·2를 반복합니다.
+    질문 효과를 정리한 뒤 질문을 하나로 고정하고 **전체→초반→중반→후반**을 비교하세요.
+    각 새 대역에도 같은 설정의 무음 실행이 필요합니다. 민감한 대역을 찾았다고 의미가 그곳에만 저장됐다고 결론 내리지 않습니다.
+
+    ### 활동 7 · 새 클립에서도 설명이 유지되는가?
+
+    접힌 업로드 영역을 열고 오디오가 있는 짧은 클립을 넣습니다. 새 영상 안에서 타깃 또는 대역만 바꿉니다.
+    제공된 무음 클립은 새 영상의 대응 대조군이 아닙니다. 임의 업로드는 자동으로 대조군 쌍에 연결되지 않습니다.
+
+    ### 활동 8로 이어가기
+
+    `answer→query_text`도 선택할 수 있습니다. `query_text`에는 질문뿐 아니라 채팅 구조·특수 토큰이 포함됩니다.
+    이후 🎛️에서 source/target과 여러 규칙을 탐색합니다. 그곳의 다양성은 캡션 확률과 다른 지표입니다.
+
+    표시 단위의 색은 해당 토큰 Δ를 합친 값입니다. `⟨special⟩` 점수를 이웃 단어의 의미로 해석하지 마세요.
+    """)
+    return
+
+
+@app.cell
+def _(CLIP_CHOICES, CLIP_DEFAULT, CLIP_UPLOAD, LOGIT_PROMPT, NFRAMES, PROMPT_CHOICES, attention_model, classroom_layer_choices, mo, resolve_classroom_layers, resolve_classroom_prompt, validate_experiment):
+    _n_layers = len(attention_model.thinker.model.layers)
+    _tf_template = (
+        "**활동 1 · 차단할 직접 연결** — source는 `answer`로 고정합니다. {target}\n\n"
+        "같은 캡션에서 audio와 video 타깃을 비교하세요. `query_text`는 활동 8의 확장입니다.\n\n"
+        "**활동 2 · 클립 조건** {clip}\n\n"
+        "먼저 기본 클립과 무음 대조군만 사용합니다. 업로드는 활동 7에서 선택하세요.\n\n"
+        "**활동 3 · 질문의 초점** {prompt_preset}\n\n"
+        "<details><summary>직접 작성 · 언어 비교는 선택 메모</summary>\n\n"
+        "`직접 작성`을 골랐을 때만 아래 문장을 사용합니다. 프리셋을 고르면 아래 입력은 적용하지 않습니다.\n\n"
+        "{prompt}\n\n"
+        "선택 메모: `Describe what you hear in the video`를 직접 넣어 볼 수 있습니다. "
+        "수업 필수 비교는 아닙니다. 언어를 바꾸면 질문·캡션·토큰화가 달라지므로 "
+        "각 언어 안에서 원본/무음 쌍을 새로 만들고, 평균 Δ로 언어별 능력을 순위 매기지 마세요.\n\n"
+        "</details>\n\n"
+        "**활동 4 · 차단할 레이어 대역** {layers}\n\n"
+        f"전체 `[0,{_n_layers})` · 초반 `[0,{_n_layers//3})` · 중반 `[{_n_layers//3},{2*_n_layers//3})` · "
+        f"후반 `[{2*_n_layers//3},{_n_layers})`. 끝 번호는 포함하지 않습니다.\n\n"
+        f"**고정 조건: {NFRAMES}프레임.** 타깃·대역 비교에서는 클립·질문·생성 상한을 유지하세요.\n\n"
+        "<details><summary>활동 7 · 새 클립 업로드</summary>\n\n"
+        "위에서 업로드를 선택한 뒤 파일을 넣으세요. 같은 클립에서 타깃 또는 대역 하나씩 비교합니다. "
+        "제공된 무음 파일은 새 영상의 대응 대조군이 아닙니다.\n\n"
+        "`mp4 / mov / mkv / webm` · 250 MiB·120초·1080p 이하, 누적 RGB 디코딩 512 MiB 이하. "
+        "오디오 트랙이 있는 짧은 샘플을 사용하세요.\n\n{video}\n\n</details>\n\n"
+        "<details><summary>운영 설정 · 캡션이 잘렸을 때</summary>\n\n"
+        "**캡션 최대 토큰 수** {max_new_tokens}\n\n"
+        "처음에는 32로 유지합니다. 잘림 경고가 나오면 상한을 늘리고 비교할 실행 모두를 다시 만드세요. "
+        "생성 길이는 오늘의 탐색 변수가 아닙니다.\n\n</details>"
+    )
+
+    def _tf_validate(_v):
+        if not _v:
+            return None
+        try:
+            _prompt = resolve_classroom_prompt(_v.get("prompt_preset", "소리 설명"), _v.get("prompt", ""))
+            validate_experiment(NFRAMES, _prompt, _v.get("max_new_tokens", 32))
+            resolve_classroom_layers(_v.get("layers"), _n_layers)
+        except (ValueError, TypeError) as _err:
+            return str(_err)
+        if _v.get("clip") in ("Upload", CLIP_UPLOAD) and not _v.get("video"):
+            return "업로드를 선택했지만 파일을 고르지 않았습니다."
+        return None
+
+    tf_controls = mo.md(_tf_template).batch(
+        target=mo.ui.dropdown(["audio", "video", "query_text"], value="audio"),
+        clip=mo.ui.radio(CLIP_CHOICES, value=CLIP_DEFAULT, inline=True),
+        prompt_preset=mo.ui.dropdown(PROMPT_CHOICES, value="소리 설명"),
+        prompt=mo.ui.text(value=LOGIT_PROMPT, full_width=True),
+        layers=mo.ui.dropdown(classroom_layer_choices(_n_layers), value="전체"),
+        video=mo.ui.file(filetypes=[".mp4", ".mov", ".mkv", ".webm"], multiple=False, kind="area"),
+        max_new_tokens=mo.ui.slider(8, 128, step=8, value=32, show_value=True, include_input=True),
+    ).form(submit_button_label="▶ 티처 포싱 Δ log-우도 실행", bordered=True, validate=_tf_validate)
+    tf_controls
+    return (tf_controls,)
+
+
+@app.cell
+def _(
+    LEDGER_LOG,
+    USE_PRECOMPUTED,
+    append_run,
+    attention_model,
+    attention_processor,
+    cache_put,
+    caption_cache_key,
+    create_attention_token_mapping,
+    experiment_config,
+    mo,
+    np,
+    playground_caches,
+    resolve_clip,
+    run_provenance,
+    run_record,
+    set_runs,
+    tf_controls,
+    NFRAMES,
+    resolve_classroom_layers,
+    resolve_classroom_prompt,
+    validate_encoded_inputs,
+    validate_experiment,
+):
+    from qwen_omni_utils import process_mm_info as _tf_mm_info
+
+    from src.teacher_forcing import teacher_forced_delta as _tfd
+
+    _tp = tf_controls.value
+    mo.stop(
+        _tp is None,
+        mo.callout(
+            mo.md("위에서 파라미터를 설정하고 **▶ 티처 포싱 Δ log-우도 실행**을 누르세요."),
+            kind="info",
+        ),
+    )
+    mo.stop(
+        USE_PRECOMPUTED,
+        mo.callout(
+            mo.md(
+                "**이 측정은 라이브 모델이 필요합니다** — 캡션을 생성하고 순전파 2회로 "
+                "채점하므로 `USE_PRECOMPUTED=True`인 동안에는 건너뜁니다."
+            ),
+            kind="warn",
+        ),
+    )
+
+    _tf_video, _tf_is_control, _tf_clip_err = resolve_clip(_tp["clip"], _tp["video"])
+    mo.stop(
+        _tf_clip_err is not None,
+        mo.callout(mo.md(f"**클립을 쓸 수 없습니다** — {_tf_clip_err}"), kind="danger"),
+    )
+    _tf_nframes = NFRAMES
+    _tf_prompt = resolve_classroom_prompt(_tp["prompt_preset"], _tp["prompt"])
+    _tf_max_tokens = int(_tp["max_new_tokens"])
+    validate_experiment(_tf_nframes, _tf_prompt, _tf_max_tokens)
+    _tf_lo, _tf_hi = resolve_classroom_layers(_tp["layers"], len(attention_model.thinker.model.layers))
+    _tf_rules = [("answer", _tp["target"], _tf_lo, _tf_hi)]
+
+    def _tf_prep(video_path, nframes, prompt):
+        # Shared encode cache with the 🎛️ section: a layer-band or target sweep
+        # on the same clip/prompt re-encodes nothing after the first ▶.
+        _key = caption_cache_key(video_path, nframes, prompt, 0, {"id": run_provenance["model_id"], "revision": run_provenance["model_revision"]})
+        if _key in playground_caches["encode"]:
+            return playground_caches["encode"][_key]
+        _conv = [{"role": "user", "content": [
+            {"type": "text", "text": prompt},
+            {"type": "video", "video": str(video_path), "nframes": nframes},
+        ]}]
+        _text = attention_processor.apply_chat_template(
+            _conv, add_generation_prompt=True, tokenize=False
+        )
+        _audios, _images, _videos = _tf_mm_info(_conv, use_audio_in_video=True)
+        _inp = attention_processor(
+            text=_text, audio=_audios, images=_images, videos=_videos,
+            return_tensors="pt", padding=True, use_audio_in_video=True,
+        )
+        validate_encoded_inputs(_inp)
+        _inp = {k: v.to(attention_model.device) for k, v in _inp.items()}
+        _types = create_attention_token_mapping(
+            _inp["input_ids"], attention_model.config.thinker_config
+        )
+        return cache_put(playground_caches["encode"], _key, (_inp, _types))
+
+    tf_result = None
+    _tf_out = None
+    try:
+        # The caption cache includes file content, prompt, frames, model revision,
+        # and the generation cap. A rule/layer sweep can reuse the same caption.
+        _tf_cap_key = caption_cache_key(_tf_video, _tf_nframes, _tf_prompt, _tf_max_tokens, {"id": run_provenance["model_id"], "revision": run_provenance["model_revision"]})
+        _tf_cached_c = playground_caches["caption"].get(_tf_cap_key)
+        with mo.status.spinner(
+            title=f"티처 포싱 · {_tf_nframes} 프레임 · {_tf_video.name}"
+            + (" · 캡션 캐시 사용…" if _tf_cached_c is not None else "…")
+        ):
+            _tf_inp, _tf_types = _tf_prep(_tf_video, _tf_nframes, _tf_prompt)
+            validate_encoded_inputs(_tf_inp, max_tokens=4096 - _tf_max_tokens)
+            _tf_res = _tfd(
+                attention_model, attention_processor, _tf_inp, _tf_types, _tf_rules,
+                # Without this the playground scored 32-token captions (the
+                # function's own default) while the fixed cell above used
+                # MAX_NEW_TOKENS — two different caption lengths, one Σ column.
+                max_new_tokens=_tf_max_tokens,
+                cached_caption_ids=_tf_cached_c,
+            )
+            cache_put(playground_caches["caption"], _tf_cap_key, _tf_res["caption_ids"])
+            tf_result = _tf_res
+    except Exception as _e:  # noqa: BLE001 — surface any failure in-notebook
+        _tf_out = mo.callout(
+            mo.md(f"**실행 실패** — `{type(_e).__name__}: {_e}`"), kind="danger"
+        )
+
+    if _tf_out is None:
+        _tf_delta = [float(x) for x in _tf_res["delta"].detach().cpu().float().tolist()]
+        _tf_total = _tf_res["delta_total"]
+        _tf_toks = _tf_res["caption_tokens"]
+        _tf_worst = int(np.argmin(_tf_delta)) if _tf_delta else 0
+        _tf_rule_txt = f"`answer→{_tp['target']}` [{_tf_lo},{_tf_hi})"
+        _tf_mean = _tf_res["delta_mean"]
+        _tf_stats = [
+            mo.stat(
+                value=f"{_tf_mean:+.3f}",
+                label="토큰당 Δ (nats)",
+                caption="길이로 나눈 값 · 같은 설정의 쌍과 캡션 내용도 함께 비교",
+                direction="decrease" if _tf_mean < 0 else "increase",
+                bordered=True,
+            ),
+            mo.stat(
+                value=f"{_tf_total:+.2f}",
+                label="Σ Δ log-우도 (nats)",
+                caption="녹아웃 − 기준선 · 음수 = 해당 캡션의 확률 감소",
+                direction="decrease" if _tf_total < 0 else "increase",
+                bordered=True,
+            ),
+            mo.stat(
+                value=(_tf_toks[_tf_worst].strip() or "·") if _tf_toks else "—",
+                label="Δ가 가장 작은 토큰",
+                caption=(f"Δ = {_tf_delta[_tf_worst]:+.2f} nats" if _tf_delta else ""),
+                bordered=True,
+            ),
+            mo.stat(
+                value=str(len(_tf_toks)),
+                label="채점한 캡션 토큰 수",
+                caption="티처 포싱, greedy",
+                bordered=True,
+            ),
+        ]
+        _tf_out = mo.vstack([
+            mo.md(
+                f"**클립** `{_tf_video.name}`"
+                + (" _(무음 대조군)_" if _tf_is_control else "")
+                + f" &nbsp;·&nbsp; **프레임 수** {_tf_nframes} "
+                f"&nbsp;·&nbsp; **프롬프트** _{_tf_prompt}_ &nbsp;·&nbsp; **녹아웃** {_tf_rule_txt}"
+            ),
+            mo.callout(mo.md("**채점한 전체 캡션**\n\n" + _tf_res["caption_text"]
+                             + (f"\n\n⚠ 최대 {_tf_max_tokens}토큰에 도달했습니다. 문장이 미완성일 수 있습니다."
+                                if _tf_res["generation_truncated"] else "\n\n생성이 끝났습니다.")),
+                       kind="warn" if _tf_res["generation_truncated"] else "neutral"),
+            mo.hstack(_tf_stats, widths="equal", gap=1),
+            mo.md(
+                "<span style=\"color:#4C78A8;font-weight:600\">다음 →</span> 타깃을 `video`로 바꾸거나 레이어를 `[0,12)`로 좁혀 보세요. "
+                "같은 타깃의 원본·무음 쌍을 기록한 뒤, 질문의 초점이나 대역을 한 번에 하나씩 바꾸세요."
+            ),
+        ])
+        try:
+            set_runs(
+                lambda _prev, _r=run_record(
+                    kind="teacher_forcing",
+                    condition=f"answer→{_tp['target']} [{_tf_lo},{_tf_hi})",
+                    # Δ/token, not Σ: the control and the experiment score
+                    # different captions of different lengths, so the total is not
+                    # the comparable quantity — logging Σ as the headline would
+                    # rebuild the exact confusion this section exists to remove.
+                    metric_name="delta_per_token",
+                    metric_value=_tf_mean,
+                    metric_unit="nats/token",
+                    config=experiment_config(
+                        _tf_video, nframes=_tf_nframes, prompt=_tf_prompt,
+                        target=_tp["target"], start=_tf_lo, end=_tf_hi,
+                        max_new_tokens=_tf_max_tokens,
+                    ),
+                    is_control=_tf_is_control,
+                    extra={"delta_total": _tf_total, "delta_mean": _tf_mean,
+                           "n_tokens": len(_tf_toks), "caption_text": _tf_res["caption_text"],
+                           "caption_ids": _tf_res["caption_ids"][0].detach().cpu().tolist(),
+                           "caption_tokens": _tf_toks, "caption_token_kinds": _tf_res["caption_token_kinds"],
+                           "delta": _tf_delta,
+                           "baseline_logprobs": _tf_res["baseline_logprobs"].detach().cpu().tolist(),
+                           "knockout_logprobs": _tf_res["knockout_logprobs"].detach().cpu().tolist(),
+                           "baseline_distribution": _tf_res["baseline_distribution"],
+                           "knockout_distribution": _tf_res["knockout_distribution"],
+                           "generation_truncated": _tf_res["generation_truncated"],
+                           "generation_end_reason": _tf_res["generation_end_reason"]},
+                ): append_run(_prev, _r, log_path=LEDGER_LOG)
+            )
+        except Exception as _le:  # noqa: BLE001 — a ledger bug must never eat a run
+            print("ledger append failed:", type(_le).__name__, _le)
+    _tf_out
+    return (tf_result,)
+
+
+@app.cell
+def _(mo, tf_result):
+    # No output until the form above has produced a result (and skipped after a
+    # failed run) — mirrors the W9 threshold cells.
+    mo.stop(tf_result is None)
+    from src.teacher_forcing import threshold_slider_params as _tf_params
+    from wigglystuff import TangleSlider as _TfTangle
+
+    tf_threshold = mo.ui.anywidget(_TfTangle(
+        suffix=" nats",
+        **_tf_params(tf_result["caption_tokens"], tf_result["delta"], token_kinds=tf_result.get("caption_token_kinds")),
+    ))
+    mo.md(
+        "<span style=\"font-size:1.15rem;font-weight:600\">토큰별 Δ log-우도 (뜨거운 색 = 녹아웃 뒤 log-확률 감소. 표시 단위에 마우스를 "
+        "올리면 그 토큰들의 nats가 보입니다)</span>\n\n"
+        f"{tf_threshold} 이상 잃은 표시 단위만 표시합니다 — **밑줄 친 숫자를 옆으로 드래그**하거나 "
+        "클릭해서 입력하세요. 다시 그려지는 것은 이 띠뿐이며 모델은 건드리지 않습니다."
+    )
+    return (tf_threshold,)
+
+
+@app.cell
+def _(mo, selected_drop_share, tf_result, tf_threshold):
+    from src.teacher_forcing import group_tokens_into_words as _tf_group
+    from src.teacher_forcing import render_delta_strip as _tf_strip
+
+    _delta = [float(_x) for _x in tf_result["delta"].detach().cpu().float().tolist()]
+    _toks = tf_result["caption_tokens"]
+    _th = abs(float(tf_threshold.value.get("amount", 0.0)))
+    _words = _tf_group(_toks, _delta, token_kinds=tf_result.get("caption_token_kinds"))
+    _hit = [_w for _w in _words if _w[1] < -_th]
+    _share = selected_drop_share(tf_result["caption_tokens"], _delta, _th, token_kinds=tf_result.get("caption_token_kinds"))
+    _rows = [
+        {"위치": _i, "토큰": _t or ("특수 토큰" if tf_result["caption_token_kinds"][_i] == "special" else "문자 이어짐"),
+         "토큰 종류": tf_result["caption_token_kinds"][_i], "Δ log-우도": round(_d, 3)}
+        for _i, (_t, _d) in enumerate(zip(_toks, _delta))
+    ]
+    mo.vstack([
+        mo.Html(
+            "<div style='line-height:2.1;font-family:monospace;font-size:15px'>"
+            + _tf_strip(_toks, _delta, highlight_below=_th, vmax=8.0, token_kinds=tf_result.get("caption_token_kinds"))
+            + "</div>"
+        ),
+        mo.md(
+            f"**{len(_hit)}/{len(_words)}** 표시 단위가 −{_th:.2f} nats보다 크게 떨어졌습니다 — 합쳐서 "
+            f"Δ = {sum(_w[1] for _w in _hit):+.2f} nats입니다. 감소한 표시 단위의 총 감소량 중 "
+            f"선택된 단위가 **{_share:.0f}%**를 차지합니다. 색 범위는 모든 실행에서 ±8 nats입니다."
+        ),
+        mo.ui.table(_rows, selection=None, pagination=True, page_size=16),
+    ])
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## 🎛️ 활동 8 — 교차 모달 경로와 복합 규칙
+
+    🎯에서 같은 캡션의 확률 변화를 설명한 뒤 진행합니다. 이번에는 **오디오 토큰 위치의 raw-probe top-1 문자열 다양성**을 봅니다.
+    다양성 변화는 정답률·이해·융합의 크기가 아닙니다. 프레임은 여기서도 **8로 고정**합니다.
+
+    | 순서 | 바꿀 규칙 | 비교 질문 |
+    |---|---|---|
+    | 8-1 | `audio→video` 한 규칙 | 오디오 위치 프로브가 비디오 키로의 직접 연결에 민감한가? |
+    | 8-2 | `audio→query_text` 한 규칙 | 질문과 구조 토큰으로 향하는 연결에서는 어떻게 다른가? |
+    | 8-3 | 두 규칙을 함께 | 함께 차단한 변화가 각 단일 규칙의 변화와 어떻게 다른가? |
+
+    클립·질문·대역을 고정한 채 하나씩 실행합니다. 고급 입력에 여러 규칙을 쓰면 단일 규칙 드롭다운보다 우선합니다.
+    두 효과가 합쳐져도 단순한 합이나 유일한 인과 설명이라고 가정하지 마세요. 새 클립은 활동 7 영역에서 넣습니다.
+
+    이 측정은 **생성 전 순전파**입니다. `generated`·`answer` 위치가 없으므로 여기서는 source/target으로 쓸 수 없습니다.
+    `audio`·`video`·`query_text`를 사용하세요. `query_text`에는 질문 외 채팅 구조도 포함됩니다.
+    제출할 때만 새 순전파를 실행하며 추가 시간·메모리가 필요합니다.
     """)
     return
 
@@ -1974,6 +2103,8 @@ def _(
     KNOCKOUT_RULES,
     LOGIT_PROMPT,
     NFRAMES,
+    PROMPT_CHOICES,
+    resolve_classroom_prompt,
     attention_model,
     mo,
     validate_experiment,
@@ -1998,11 +2129,15 @@ def _(
     _template = (
         "**클립** {clip} &nbsp; (무음 대조군은 저장소 안에 있습니다 — 이름으로 고르면 "
         "되고, 업로드할 것이 없습니다)\n\n"
-        "**업로드**를 골랐을 때만 — `mp4 / mov / mkv / webm`, 250 MB·120초·1080p 이하이며, 디코딩 크기 512 MiB도 충족해야 합니다. 짧은 클립 권장:\n\n"
-        "{video}\n\n"
-        "**클립에서 샘플링할 프레임 수** {nframes} &nbsp; *(**비디오** 토큰 수를 움직입니다. "
-        "오디오 위치는 재생 시간으로 고정입니다)*\n\n"
-        "**프롬프트** {prompt}\n\n"
+        "<details><summary>활동 7 · 새 클립 업로드</summary>\n\n"
+        "업로드 선택 시에만 사용 · `mp4 / mov / mkv / webm`, 250 MiB·120초·1080p 이하, 누적 RGB 디코딩 512 MiB 이하. "
+        "제공된 무음 클립은 새 영상의 대조군이 아닙니다.\n\n{video}\n\n</details>\n\n"
+        f"**고정 조건: {NFRAMES}프레임** · 이 활동에서는 source/target과 규칙을 탐색합니다.\n\n"
+        "**활동 3 · 질문의 초점** {prompt_preset}\n\n"
+        "<details><summary>직접 작성 · 언어 비교는 선택 메모</summary>\n\n"
+        "`직접 작성`을 선택할 때만 반영합니다. {prompt}\n\n"
+        "선택 메모: `Describe what you hear in the video`도 입력할 수 있습니다. 언어 비교는 필수가 아니며 "
+        "프롬프트와 출력의 차이를 함께 기록하세요.\n\n</details>\n\n"
         "---\n\n"
         "**순전파 도중 어텐션 녹아웃 적용** {ko_enable}\n\n"
         "단일 규칙 — thinker 레이어 {ko_layers} 구간에서 {ko_source} → {ko_target} 차단\n\n"
@@ -2017,8 +2152,8 @@ def _(
         if not _v:
             return None
         try:
-            validate_experiment(_v.get("nframes", NFRAMES), _v.get("prompt", LOGIT_PROMPT),
-                                _v.get("max_new_tokens", 32))
+            _prompt = resolve_classroom_prompt(_v.get("prompt_preset", "소리 설명"), _v.get("prompt", ""))
+            validate_experiment(NFRAMES, _prompt)
         except ValueError as _err:
             return str(_err)
         # The radio carries Korean labels over English values, and `validate` sees
@@ -2058,9 +2193,7 @@ def _(
             multiple=False,
             kind="area",
         ),
-        nframes=mo.ui.slider(
-            2, 16, step=2, value=NFRAMES, show_value=True, include_input=True
-        ),
+        prompt_preset=mo.ui.dropdown(PROMPT_CHOICES, value="소리 설명"),
         prompt=mo.ui.text(value=LOGIT_PROMPT, full_width=True),
         ko_enable=mo.ui.checkbox(value=bool(KNOCKOUT_RULES)),
         ko_source=mo.ui.dropdown(_modalities, value=_def_source),
@@ -2099,6 +2232,8 @@ def _(
     csv,
     experiment_config,
     ko_controls,
+    NFRAMES,
+    resolve_classroom_prompt,
     mo,
     np,
     playground_caches,
@@ -2145,8 +2280,8 @@ def _(
         _clip_err is not None,
         mo.callout(mo.md(f"**클립을 쓸 수 없습니다** — {_clip_err}"), kind="danger"),
     )
-    _nframes = int(_p["nframes"])
-    _prompt = _p["prompt"].strip()
+    _nframes = NFRAMES
+    _prompt = resolve_classroom_prompt(_p["prompt_preset"], _p["prompt"])
     validate_experiment(_nframes, _prompt)
 
     # Build the knockout rules. The advanced text field (several `src,tgt,start,end`
@@ -2331,7 +2466,7 @@ def _(
             mo.stat(
                 value=str(Counter(_types).get("video", 0)),
                 label="인코딩된 비디오 토큰",
-                caption=f"프레임 수={_nframes}가 움직이는 것은 이 값입니다",
+                caption=f"수업에서는 {_nframes}프레임으로 고정합니다",
                 bordered=True,
             ),
         ]
@@ -2441,353 +2576,262 @@ def _(ledger_view):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## 🎯 인터랙티브: 티처 포싱 Δ log-우도
+    ## 🎚️ 활동 4·8 보충 — 새 캡션 생성으로 비교하기
 
-    **질문:** 같은 캡션을 채점할 때, 선택한 직접 어텐션 연결을 차단하면 토큰 확률이
-    얼마나 달라질까요? 먼저 모델이 만든 캡션을 고정하고, 기준선과 녹아웃에서 그 캡션을
-    다시 입력해 점수를 매깁니다. **Δ = 녹아웃 − 기준선**, 단위는 nats입니다.
-    음수는 그 캡션에 부여한 확률이 줄었다는 뜻이며 정답 여부나 모델의 확신 점수는 아닙니다.
+    위의 비교는 **단 하나의** 녹아웃입니다 — 모달리티 하나, 고정된 레이어 대역 하나
+    (36개 레이어 전부). 전 구간을 막은 결과만으로 경로의 중요성이나 위치를 확정할 수 없습니다. 이 섹션은 그 대역을 훑습니다. 타깃 모달리티와
+    레이어 창을 고르고 다시 생성해서, 캡션이 기준선에서 얼마나 멀어지는지 보세요.
 
-    ### 탐색 1 · 원본과 무음을 같은 설정으로 비교하기
+    같은 타깃에 대해 `[0, 12)` · `[12, 24)` · `[24, 36)`을 비교해 보세요.
 
-    1. 한국어 프롬프트, 8프레임, `audio`, `[0,36)`, 상한32로 **무음 대조군**을 실행합니다.
-    2. **클립만 기본 클립으로** 바꾸어 실행합니다. 두 실행의 ID·전체 캡션·토큰당 Δ를 기록하세요.
-    3. 프롬프트를 `Describe what you hear in the video`로 바꾸고 **영어 무음/원본 쌍을 새로** 만듭니다.
-       영어 원본을 한국어 무음과 짝지으면 프롬프트와 오디오가 동시에 바뀝니다.
+    **널(null) 결과를 읽는 법.** 캡션이 그대로인 대역은 *이 측정에서는 효과가 없음*을
+    보여 줄 뿐입니다. 중복(redundancy), 이 규칙이 자르지 못한 간접 경로, 또는 변화를
+    보기에 너무 거친 지표 — 어느 쪽과도 모순되지 않습니다. 경로가 **없다는 증거는
+    아닙니다**. 문자열 비교는 이분법적입니다. 아래의 티처 포싱 Δ가 같은 질문의 연속적
+    버전이며, *작은* 효과를 보여 줄 수 있는 쪽입니다.
 
-    **예상과 관측을 구분하세요.** 이 예제에서는 한국어 쌍의 효과가 작고 영어 쌍에서 차이가
-    커질 수 있습니다. 직접 재현해 확인하세요. 무음도 표현을 만들므로 Δ=0이 보장되지 않습니다.
-    비슷한 캡션이나 작은 Δ는 **이 설정에서 선택한 직접 연결에 대한 민감도가 작았다**는 결과입니다.
-    모델이 소리를 전혀 쓰지 않았거나 측정이 완전하다는 증거는 아닙니다. 다른 연결,
-    중복된 정보, 문장 내용과 지표의 민감도도 가능한 설명입니다.
-
-    ### 탐색 2 · 한 변수만 더 바꾸기
-
-    타깃을 `video`로 바꾸거나 레이어를 `[0,12)`로 좁혀 보세요. 새 설정에 맞는 무음 실행도
-    함께 남깁니다. 캡션이 잘렸다면 최대 토큰 수를 32→64로 바꾸고 같은 쌍을 다시 만드세요.
-    서로 다른 캡션의 평균 Δ는 길이 영향을 줄일 뿐 **내용·언어 차이를 통제하지는 않습니다.**
-
-    `answer`는 채점할 캡션 토큰입니다. 첫 토큰은 마지막 프롬프트 위치에서 예측하므로
-    answer-only 규칙의 직접 차단 범위 밖에 있습니다. `query_text`에는 질문뿐 아니라
-    채팅 구조·특수 토큰도 포함됩니다. 표시 단위(어절·특수 토큰)의 색은 여러 토큰의 Δ를 합친 값입니다.
-    `⟨special⟩`은 문장 종료 같은 특수 토큰으로, 이 점수를 이웃 단어의 의미로 해석하지 마세요.
-    제출 전에는 실행되지 않습니다.
+    ▶를 누를 때마다 이미 인코딩된 클립에 대해 greedy 생성 1회가 돌아갑니다. 입력과 런타임에 따라 시간이 달라집니다.
+    기준선은 재사용하며 다시 생성하지 않습니다. 두 캡션 모두 **답변만** 표시됩니다 —
+    공통 프롬프트를 잘라 내야 차이가 지시문이 아니라 모델의 말에 대한 것이 됩니다.
+    서로 다른 설정·결과는 아래 **실습 기록(ledger)**에 남습니다. 동일 재실행은 한 행으로 합쳐집니다. 직전 대역을 기록에서
+    비교할 수 있습니다.
     """)
     return
 
 
 @app.cell
-def _(
-    CLIP_CHOICES,
-    CLIP_DEFAULT,
-    CLIP_UPLOAD,
-    LOGIT_PROMPT,
-    NFRAMES,
-    attention_model,
-    mo,
-    validate_experiment,
-):
-    _n_layers = len(attention_model.thinker.model.layers)
-    _tf_targets = ["audio", "video", "query_text"]
-    _tf_template = (
-        "**클립** {clip} &nbsp; (반증 가능한 쪽은 `무음 대조군`입니다 — 저장소 안에 "
-        "있으니 업로드하지 말고 이름으로 고르세요)\n\n"
-        "**업로드**를 골랐을 때만 — `mp4 / mov / mkv / webm`, 250 MB·120초·1080p 이하이며, 디코딩 크기 512 MiB도 충족해야 합니다. 짧은 클립 권장:\n\n"
-        "{video}\n\n"
-        "**클립에서 샘플링할 프레임 수** {nframes}\n\n"
-        "**프롬프트** {prompt}\n\n"
-        "---\n\n"
-        "**캡션 최대 토큰 수** {max_new_tokens} — 상한에 닿으면 문장이 끊길 수 있습니다.\n\n"
-        "**answer**가 {target} 에 어텐션하는 것을 thinker 레이어 {layers} 구간에서 금지\n\n"
-        f"(`answer`는 모델 자신의 캡션을 티처 포싱으로 다시 넣은 것입니다. 이 thinker는 "
-        f"레이어가 **{_n_layers}**개이고 `end`는 배타적입니다.)"
-    )
+def _(Counter, attention_token_types, mo):
+    # The modality census, shown next to the controls rather than folded into a
+    # dropdown label. `Counter` omits absent keys, so `image` — offered in every
+    # picker — used to be invisible rather than visibly zero, and a rule targeting
+    # it masked nothing while reporting "no effect".
+    _census = Counter(attention_token_types)
+    _rows = [
+        {
+            "모달리티": _m,
+            "이 입력에 있는 토큰 수": _census.get(_m, 0),
+            "여기서 타깃으로 쓸 수 있는가": "예" if _census.get(_m, 0) else "아니오 — 하나도 없음",
+        }
+        for _m in ("video", "audio", "query_text", "image")
+    ]
+    mo.vstack([
+        mo.md("<span style=\"font-size:1.15rem;font-weight:600\">이 인코딩된 입력에 실제로 들어 있는 것</span>"),
+        mo.ui.table(_rows, selection=None, pagination=False),
+        mo.md(
+            "`generated`는 표에 없습니다. 그 위치는 모델이 디코딩하기 전에는 존재하지 "
+            "않기 때문입니다. 그래서 `generated` source는 **생성 중에는 살아 있고**"
+            "(이 섹션) **순전파에서는 작동하지 않습니다**(아래 🎛️ 스코어보드)."
+        ),
+    ], gap=0.4)
+    return
 
-    def _tf_validate(_v):
+
+@app.cell
+def _(KNOCKOUT_RULES, attention_model, mo):
+    _band_layers = len(attention_model.thinker.model.layers)
+    _band_targets = ["video", "audio", "query_text"]
+    _band_default = KNOCKOUT_RULES[0][1] if KNOCKOUT_RULES else "video"
+
+    def _band_validate(_v):
         if not _v:
             return None
-        try:
-            validate_experiment(_v.get("nframes", NFRAMES), _v.get("prompt", LOGIT_PROMPT),
-                                _v.get("max_new_tokens", 32))
-        except ValueError as _err:
-            return str(_err)
-        # Label *or* value: see the note in the 🎛️ form's validator.
-        if _v.get("clip") in ("Upload", CLIP_UPLOAD) and not _v.get("video"):
-            return "업로드를 선택했지만 파일을 고르지 않았습니다."
-        # `.get` with a default: the batch value is partial on first render.
+        # `.get` with a default throughout: a batch's value is a partial dict
+        # until the frontend has pushed state for every child, so indexing
+        # directly raises KeyError on the first render instead of validating.
         _lo, _hi = _v.get("layers") or (0, 1)
         if int(_hi) <= int(_lo):
-            return f"[{int(_lo)}, {int(_hi)})는 0개 레이어를 마스킹합니다 — `end`는 배타적입니다."
+            return (
+                f"[{int(_lo)}, {int(_hi)})는 0개 레이어를 마스킹합니다 — `end`는 배타적입니다. "
+                "이대로면 기준선을 돌려 놓고 '효과 없음'이라고 보고하게 됩니다."
+            )
         return None
 
-    tf_controls = mo.md(_tf_template).batch(
-        clip=mo.ui.radio(CLIP_CHOICES, value=CLIP_DEFAULT, inline=True),
-        video=mo.ui.file(
-            filetypes=[".mp4", ".mov", ".mkv", ".webm"], multiple=False, kind="area"
+    band_controls = mo.md(
+        "**generated** 토큰이 {target} 에 어텐션하는 것을 thinker 레이어 {layers} "
+        "구간에서 금지\n\n"
+        "{null_band} — 실행 전에 **효과가 작을 것으로 예상한 대역**입니다. "
+        "이 체크는 예상의 기록이며, 대조군 검증이나 무효과 판정이 아닙니다.\n\n"
+        f"(`end`는 배타적입니다. 이 thinker는 레이어가 **{_band_layers}**개입니다. "
+        "클립·프롬프트·프레임 수는 파라미터 셀에 설정된 값 그대로입니다.)"
+    ).batch(
+        target=mo.ui.dropdown(
+            _band_targets,
+            value=_band_default if _band_default in _band_targets else "video",
         ),
-        nframes=mo.ui.slider(2, 16, step=2, value=NFRAMES, show_value=True, include_input=True),
-        prompt=mo.ui.text(value=LOGIT_PROMPT, full_width=True),
-        max_new_tokens=mo.ui.slider(8, 128, step=8, value=32, show_value=True, include_input=True),
-        target=mo.ui.dropdown(_tf_targets, value="audio"),
-        layers=mo.ui.range_slider(0, _n_layers, step=1, value=[0, _n_layers], show_value=True, full_width=True),
+        layers=mo.ui.range_slider(
+            0, _band_layers, step=1, value=[0, _band_layers // 3], show_value=True, full_width=True
+        ),
+        null_band=mo.ui.checkbox(value=False),
     ).form(
-        submit_button_label="▶ 티처 포싱 Δ log-우도 실행",
+        submit_button_label="▶ 이 대역으로 다시 생성",
         bordered=True,
-        validate=_tf_validate,
+        # Refuse the empty band *before* the GPU runs. Dragging both handles onto
+        # the same layer is what a student does to ask "is it exactly layer 12?",
+        # and the answer used to be a confident, bordered "no effect" tile.
+        validate=_band_validate,
     )
-    tf_controls
-    return (tf_controls,)
+    mo.accordion({"선택 보충 · 고정 캡션 채점과 새 캡션 생성 비교": band_controls})
+    return (band_controls,)
 
 
 @app.cell
 def _(
+    ATTENTION_PROMPT,
     LEDGER_LOG,
+    MAX_NEW_TOKENS,
+    NFRAMES,
     USE_PRECOMPUTED,
+    VIDEO_PATH,
     append_run,
+    attention_baseline_ids,
+    attention_inputs,
     attention_model,
     attention_processor,
-    cache_put,
-    caption_cache_key,
-    create_attention_token_mapping,
+    attention_token_types,
+    band_controls,
+    block_attention,
     experiment_config,
     mo,
-    np,
-    playground_caches,
-    resolve_clip,
-    run_provenance,
     run_record,
     set_runs,
-    tf_controls,
-    validate_encoded_inputs,
-    validate_experiment,
+    torch,
 ):
-    from qwen_omni_utils import process_mm_info as _tf_mm_info
+    import difflib as _difflib
 
-    from src.teacher_forcing import teacher_forced_delta as _tfd
+    from wigglystuff import TextCompare as _BandCompare
 
-    _tp = tf_controls.value
+    _bp = band_controls.value
     mo.stop(
-        _tp is None,
+        _bp is None,
         mo.callout(
-            mo.md("위에서 파라미터를 설정하고 **▶ 티처 포싱 Δ log-우도 실행**을 누르세요."),
+            mo.md("타깃과 레이어 대역을 고른 뒤 **▶ 이 대역으로 다시 생성**을 누르세요."),
             kind="info",
         ),
     )
     mo.stop(
-        USE_PRECOMPUTED,
+        USE_PRECOMPUTED or attention_inputs is None,
         mo.callout(
             mo.md(
-                "**이 측정은 라이브 모델이 필요합니다** — 캡션을 생성하고 순전파 2회로 "
-                "채점하므로 `USE_PRECOMPUTED=True`인 동안에는 건너뜁니다."
+                "**이 스윕은 라이브 모델이 필요합니다** — 대역마다 캡션을 다시 생성하므로 "
+                "`USE_PRECOMPUTED=True`인 동안에는 건너뜁니다."
             ),
             kind="warn",
         ),
     )
 
-    _tf_video, _tf_is_control, _tf_clip_err = resolve_clip(_tp["clip"], _tp["video"])
-    mo.stop(
-        _tf_clip_err is not None,
-        mo.callout(mo.md(f"**클립을 쓸 수 없습니다** — {_tf_clip_err}"), kind="danger"),
-    )
-    _tf_nframes = int(_tp["nframes"])
-    _tf_prompt = _tp["prompt"].strip()
-    _tf_max_tokens = int(_tp["max_new_tokens"])
-    validate_experiment(_tf_nframes, _tf_prompt, _tf_max_tokens)
-    _tf_lo, _tf_hi = int(_tp["layers"][0]), int(_tp["layers"][1])
-    _tf_rules = [("answer", _tp["target"], _tf_lo, _tf_hi)]
+    _lo, _hi = int(_bp["layers"][0]), int(_bp["layers"][1])
+    _band_rules = [("generated", _bp["target"], _lo, _hi)]
+    _plen = attention_inputs["input_ids"].shape[1]
+    # Answer-only text: slicing off the shared prompt keeps the diff focused on
+    # the generated words (the prompt would otherwise dominate as one big match).
+    _base_ans = attention_processor.batch_decode(
+        attention_baseline_ids[:, _plen:],
+        skip_special_tokens=True,
+        clean_up_tokenization_spaces=False,
+    )[0]
 
-    def _tf_prep(video_path, nframes, prompt):
-        # Shared encode cache with the 🎛️ section: a layer-band or target sweep
-        # on the same clip/prompt re-encodes nothing after the first ▶.
-        _key = caption_cache_key(video_path, nframes, prompt, 0, {"id": run_provenance["model_id"], "revision": run_provenance["model_revision"]})
-        if _key in playground_caches["encode"]:
-            return playground_caches["encode"][_key]
-        _conv = [{"role": "user", "content": [
-            {"type": "text", "text": prompt},
-            {"type": "video", "video": str(video_path), "nframes": nframes},
-        ]}]
-        _text = attention_processor.apply_chat_template(
-            _conv, add_generation_prompt=True, tokenize=False
-        )
-        _audios, _images, _videos = _tf_mm_info(_conv, use_audio_in_video=True)
-        _inp = attention_processor(
-            text=_text, audio=_audios, images=_images, videos=_videos,
-            return_tensors="pt", padding=True, use_audio_in_video=True,
-        )
-        validate_encoded_inputs(_inp)
-        _inp = {k: v.to(attention_model.device) for k, v in _inp.items()}
-        _types = create_attention_token_mapping(
-            _inp["input_ids"], attention_model.config.thinker_config
-        )
-        return cache_put(playground_caches["encode"], _key, (_inp, _types))
-
-    tf_result = None
-    _tf_out = None
+    _band_out = None
     try:
-        # The caption cache includes file content, prompt, frames, model revision,
-        # and the generation cap. A rule/layer sweep can reuse the same caption.
-        _tf_cap_key = caption_cache_key(_tf_video, _tf_nframes, _tf_prompt, _tf_max_tokens, {"id": run_provenance["model_id"], "revision": run_provenance["model_revision"]})
-        _tf_cached_c = playground_caches["caption"].get(_tf_cap_key)
         with mo.status.spinner(
-            title=f"티처 포싱 · {_tf_nframes} 프레임 · {_tf_video.name}"
-            + (" · 캡션 캐시 사용…" if _tf_cached_c is not None else "…")
+            title=f"녹아웃 생성 · generated→{_bp['target']} [{_lo},{_hi})…"
         ):
-            _tf_inp, _tf_types = _tf_prep(_tf_video, _tf_nframes, _tf_prompt)
-            validate_encoded_inputs(_tf_inp, max_tokens=4096 - _tf_max_tokens)
-            _tf_res = _tfd(
-                attention_model, attention_processor, _tf_inp, _tf_types, _tf_rules,
-                # Without this the playground scored 32-token captions (the
-                # function's own default) while the fixed cell above used
-                # MAX_NEW_TOKENS — two different caption lengths, one Σ column.
-                max_new_tokens=_tf_max_tokens,
-                cached_caption_ids=_tf_cached_c,
-            )
-            cache_put(playground_caches["caption"], _tf_cap_key, _tf_res["caption_ids"])
-            tf_result = _tf_res
-    except Exception as _e:  # noqa: BLE001 — surface any failure in-notebook
-        _tf_out = mo.callout(
+            with block_attention(
+                attention_model, _band_rules, attention_token_types,
+                len(attention_token_types), track_attention=False,
+            ):
+                with torch.no_grad():
+                    _band_ids = attention_model.thinker.generate(
+                        **attention_inputs, max_new_tokens=MAX_NEW_TOKENS, do_sample=False,
+                    )
+        _band_ans = attention_processor.batch_decode(
+            _band_ids[:, _plen:], skip_special_tokens=True, clean_up_tokenization_spaces=False
+        )[0]
+    except Exception as _e:  # noqa: BLE001 — surface any run failure in-notebook
+        _band_out = mo.callout(
             mo.md(f"**실행 실패** — `{type(_e).__name__}: {_e}`"), kind="danger"
         )
 
-    if _tf_out is None:
-        _tf_delta = [float(x) for x in _tf_res["delta"].detach().cpu().float().tolist()]
-        _tf_total = _tf_res["delta_total"]
-        _tf_toks = _tf_res["caption_tokens"]
-        _tf_worst = int(np.argmin(_tf_delta)) if _tf_delta else 0
-        _tf_rule_txt = f"`answer→{_tp['target']}` [{_tf_lo},{_tf_hi})"
-        _tf_mean = _tf_res["delta_mean"]
-        _tf_stats = [
-            mo.stat(
-                value=f"{_tf_mean:+.3f}",
-                label="토큰당 Δ (nats)",
-                caption="길이로 나눈 값 · 같은 설정의 쌍과 캡션 내용도 함께 비교",
-                direction="decrease" if _tf_mean < 0 else "increase",
-                bordered=True,
-            ),
-            mo.stat(
-                value=f"{_tf_total:+.2f}",
-                label="Σ Δ log-우도 (nats)",
-                caption="녹아웃 − 기준선 · 음수 = 해당 캡션의 확률 감소",
-                direction="decrease" if _tf_total < 0 else "increase",
-                bordered=True,
-            ),
-            mo.stat(
-                value=(_tf_toks[_tf_worst].strip() or "·") if _tf_toks else "—",
-                label="Δ가 가장 작은 토큰",
-                caption=(f"Δ = {_tf_delta[_tf_worst]:+.2f} nats" if _tf_delta else ""),
-                bordered=True,
-            ),
-            mo.stat(
-                value=str(len(_tf_toks)),
-                label="채점한 캡션 토큰 수",
-                caption="티처 포싱, greedy",
-                bordered=True,
-            ),
-        ]
-        _tf_out = mo.vstack([
+    if _band_out is None:
+        _ratio = _difflib.SequenceMatcher(
+            None, _base_ans.split(), _band_ans.split()
+        ).ratio()
+        _unchanged = _band_ans.strip() == _base_ans.strip()
+        _band_out = mo.vstack([
             mo.md(
-                f"**클립** `{_tf_video.name}`"
-                + (" _(무음 대조군)_" if _tf_is_control else "")
-                + f" &nbsp;·&nbsp; **프레임 수** {_tf_nframes} "
-                f"&nbsp;·&nbsp; **프롬프트** _{_tf_prompt}_ &nbsp;·&nbsp; **녹아웃** {_tf_rule_txt}"
+                f"**녹아웃** `generated→{_bp['target']}` **[{_lo}, {_hi})** "
+                f"&nbsp;·&nbsp; 전체 {len(attention_model.thinker.model.layers)}개 중 "
+                f"{_hi - _lo}개 레이어 차단"
             ),
-            mo.callout(mo.md("**채점한 전체 캡션**\n\n" + _tf_res["caption_text"]
-                             + (f"\n\n⚠ 최대 {_tf_max_tokens}토큰에 도달했습니다. 문장이 미완성일 수 있습니다."
-                                if _tf_res["generation_truncated"] else "\n\n생성이 끝났습니다.")),
-                       kind="warn" if _tf_res["generation_truncated"] else "neutral"),
-            mo.hstack(_tf_stats, widths="equal", gap=1),
+            mo.hstack([
+                mo.stat(
+                    value=f"{_ratio:.0%}",
+                    label="기준선 대비 캡션 유사도",
+                    caption="어절 문자열의 겹침 · 100%로 반올림돼도 내부 확률이 같다는 뜻은 아님",
+                    # No `direction=`: an unchanged caption used to get the green
+                    # up-arrow and a moved one the red down-arrow, so a three-band
+                    # sweep read as two failures and one success rather than as a
+                    # localization. Neither outcome is the good one here.
+                    bordered=True,
+                ),
+                mo.stat(
+                    value="변화 없음" if _unchanged else "변화 있음",
+                    label="이 대역의 효과",
+                    caption=(
+                        "이 측정에서는 효과 없음 — 중복이나 간접 경로와 모순되지 않으며, "
+                        "부재의 증거가 아님"
+                        if _unchanged else "여기를 막으니 캡션이 움직였음"
+                    ),
+                    bordered=True,
+                ),
+            ], widths="equal", gap=1),
             mo.md(
-                "<span style=\"color:#4C78A8;font-weight:600\">다음 →</span> 타깃을 `video`로 바꾸거나 레이어를 `[0,12)`로 좁혀 보세요. "
-                "영어로 바꾸면 차이가 날 수 있습니다. 같은 조건의 원본·무음 쌍으로 확인하세요."
+                "**기준선**(왼쪽) vs **이 대역**(오른쪽) — 공통 구절은 마우스를 올리면 "
+                "강조됩니다. **강조되지 않은 부분이 이 대역이 바꾼 것**입니다."
+            ),
+            mo.ui.anywidget(_BandCompare(
+                text_a=_base_ans, text_b=_band_ans, min_match_words=2
+            )),
+            mo.md(
+                "<span style=\"color:#4C78A8;font-weight:600\">다음 →</span> 같은 타깃으로 `[12,24)`와 `[24,36)`도 돌려 보세요. 세 대역의 "
+                "캡션과 유사도를 나란히 놓고 이 개입에 더 민감한 대역을 찾아보세요. 위치의 확정은 아닙니다."
             ),
         ])
+        # Record it. `set_runs` is a SetFunctor, not the State object, so a cell
+        # that only *sets* never re-runs itself — this append cannot re-trigger
+        # the generation above. `run_record(...)` is bound as a default argument
+        # so it evaluates here, in the GPU cell, leaving `prev` as the only lazy
+        # input to the lambda.
         try:
             set_runs(
                 lambda _prev, _r=run_record(
-                    kind="teacher_forcing",
-                    condition=f"answer→{_tp['target']} [{_tf_lo},{_tf_hi})",
-                    # Δ/token, not Σ: the control and the experiment score
-                    # different captions of different lengths, so the total is not
-                    # the comparable quantity — logging Σ as the headline would
-                    # rebuild the exact confusion this section exists to remove.
-                    metric_name="delta_per_token",
-                    metric_value=_tf_mean,
-                    metric_unit="nats/token",
+                    kind="band_sweep",
+                    condition=f"generated→{_bp['target']} [{_lo},{_hi})",
+                    metric_name="caption_similarity",
+                    metric_value=round(_ratio, 4),
+                    metric_unit="ratio",
+                    # Every input that can move the number belongs in `config`:
+                    # `run_id` digests config *and* metric, so an input left out
+                    # produces a second row with a different number, an identical
+                    # `condition`, and an empty `changed` column — two runs that
+                    # look controlled and are not.
                     config=experiment_config(
-                        _tf_video, nframes=_tf_nframes, prompt=_tf_prompt,
-                        target=_tp["target"], start=_tf_lo, end=_tf_hi,
-                        max_new_tokens=_tf_max_tokens,
+                        VIDEO_PATH, nframes=NFRAMES, prompt=ATTENTION_PROMPT,
+                        target=_bp["target"], start=_lo, end=_hi, max_new_tokens=MAX_NEW_TOKENS,
                     ),
-                    is_control=_tf_is_control,
-                    extra={"delta_total": _tf_total, "delta_mean": _tf_mean,
-                           "n_tokens": len(_tf_toks), "caption_text": _tf_res["caption_text"],
-                           "caption_ids": _tf_res["caption_ids"][0].detach().cpu().tolist(),
-                           "caption_tokens": _tf_toks, "caption_token_kinds": _tf_res["caption_token_kinds"],
-                           "delta": _tf_delta,
-                           "baseline_logprobs": _tf_res["baseline_logprobs"].detach().cpu().tolist(),
-                           "knockout_logprobs": _tf_res["knockout_logprobs"].detach().cpu().tolist(),
-                           "baseline_distribution": _tf_res["baseline_distribution"],
-                           "knockout_distribution": _tf_res["knockout_distribution"],
-                           "generation_truncated": _tf_res["generation_truncated"],
-                           "generation_end_reason": _tf_res["generation_end_reason"]},
+                    is_control=False,
+                    note="효과가 작을 것으로 예상한 대역" if _bp.get("null_band") else "",
+                    extra={"baseline_caption": _base_ans, "knockout_caption": _band_ans},
                 ): append_run(_prev, _r, log_path=LEDGER_LOG)
             )
         except Exception as _le:  # noqa: BLE001 — a ledger bug must never eat a run
             print("ledger append failed:", type(_le).__name__, _le)
-    _tf_out
-    return (tf_result,)
+    _band_out
+    return
 
 
 @app.cell
-def _(mo, tf_result):
-    # No output until the form above has produced a result (and skipped after a
-    # failed run) — mirrors the W9 threshold cells.
-    mo.stop(tf_result is None)
-    from src.teacher_forcing import threshold_slider_params as _tf_params
-    from wigglystuff import TangleSlider as _TfTangle
-
-    tf_threshold = mo.ui.anywidget(_TfTangle(
-        suffix=" nats",
-        **_tf_params(tf_result["caption_tokens"], tf_result["delta"], token_kinds=tf_result.get("caption_token_kinds")),
-    ))
-    mo.md(
-        "<span style=\"font-size:1.15rem;font-weight:600\">토큰별 Δ log-우도 (뜨거운 색 = 녹아웃 뒤 log-확률 감소. 표시 단위에 마우스를 "
-        "올리면 그 토큰들의 nats가 보입니다)</span>\n\n"
-        f"{tf_threshold} 이상 잃은 표시 단위만 표시합니다 — **밑줄 친 숫자를 옆으로 드래그**하거나 "
-        "클릭해서 입력하세요. 다시 그려지는 것은 이 띠뿐이며 모델은 건드리지 않습니다."
-    )
-    return (tf_threshold,)
-
-
-@app.cell
-def _(mo, selected_drop_share, tf_result, tf_threshold):
-    from src.teacher_forcing import group_tokens_into_words as _tf_group
-    from src.teacher_forcing import render_delta_strip as _tf_strip
-
-    _delta = [float(_x) for _x in tf_result["delta"].detach().cpu().float().tolist()]
-    _toks = tf_result["caption_tokens"]
-    _th = abs(float(tf_threshold.value.get("amount", 0.0)))
-    _words = _tf_group(_toks, _delta, token_kinds=tf_result.get("caption_token_kinds"))
-    _hit = [_w for _w in _words if _w[1] < -_th]
-    _share = selected_drop_share(tf_result["caption_tokens"], _delta, _th, token_kinds=tf_result.get("caption_token_kinds"))
-    _rows = [
-        {"위치": _i, "토큰": _t or ("특수 토큰" if tf_result["caption_token_kinds"][_i] == "special" else "문자 이어짐"),
-         "토큰 종류": tf_result["caption_token_kinds"][_i], "Δ log-우도": round(_d, 3)}
-        for _i, (_t, _d) in enumerate(zip(_toks, _delta))
-    ]
-    mo.vstack([
-        mo.Html(
-            "<div style='line-height:2.1;font-family:monospace;font-size:15px'>"
-            + _tf_strip(_toks, _delta, highlight_below=_th, vmax=8.0, token_kinds=tf_result.get("caption_token_kinds"))
-            + "</div>"
-        ),
-        mo.md(
-            f"**{len(_hit)}/{len(_words)}** 표시 단위가 −{_th:.2f} nats보다 크게 떨어졌습니다 — 합쳐서 "
-            f"Δ = {sum(_w[1] for _w in _hit):+.2f} nats입니다. 감소한 표시 단위의 총 감소량 중 "
-            f"선택된 단위가 **{_share:.0f}%**를 차지합니다. 색 범위는 모든 실행에서 ±8 nats입니다."
-        ),
-        mo.ui.table(_rows, selection=None, pagination=True, page_size=16),
-    ])
+def _(ledger_view):
+    ledger_view()
     return
 
 
