@@ -651,3 +651,31 @@ def test_tf_form_reports_invalid_layer_selection_instead_of_submitting(replay, i
                "prompt_preset": ["소리 설명"], "prompt": "", "target": ["audio"],
                "layers": invalid_layers, "max_new_tokens": 32}
     assert defs["tf_controls"].validate(payload) is not None
+
+
+
+def test_core_tf_results_have_a_run_ledger_before_advanced_activity_controls():
+    """Students need the first four run IDs before moving into advanced work.
+
+    Require a cheap, independent ledger display immediately in the core lesson
+    region, after all TF result displays and before the diversity controls.
+    """
+    import ast
+
+    tree = ast.parse(NOTEBOOK.read_text())
+    cells = [node for node in tree.body if isinstance(node, ast.FunctionDef)]
+    tf_result_cells = [node for node in cells
+                       if "tf_result" in {arg.arg for arg in node.args.args}]
+    ko_form = next(node for node in cells if any(
+        isinstance(child, ast.Name) and isinstance(child.ctx, ast.Store)
+        and child.id == "ko_controls" for child in ast.walk(node)))
+    last_tf_display_line = max(node.end_lineno for node in tf_result_cells)
+    ledger_displays = [node for node in cells if any(
+        isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call)
+        and isinstance(stmt.value.func, ast.Name)
+        and stmt.value.func.id == "ledger_view" for stmt in node.body)]
+    core_ledgers = [node for node in ledger_displays
+                    if last_tf_display_line < node.lineno < ko_form.lineno]
+    assert core_ledgers, "Core TF runs have no nearby ledger/IDs before advanced activity 8"
+    assert any({arg.arg for arg in node.args.args} <= {"ledger_view", "mo"}
+               for node in core_ledgers), "The core ledger must remain an independent display"
