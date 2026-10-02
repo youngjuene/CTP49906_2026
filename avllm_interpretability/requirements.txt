@@ -33,7 +33,8 @@ transformers==4.52.4
 # Notebook runtime. The molab notebook installs these itself (molab ignores the
 # `# /// script` block), but a local `uv pip install -r requirements.txt` needs
 # them listed or the notebook will not open.
-marimo
+marimo==0.25.0
+marimo-studio==0.2.3
 matplotlib
 numpy
 # PyAV backs the `torchvision.io.read_video` shim: torchvision >= 0.23 dropped

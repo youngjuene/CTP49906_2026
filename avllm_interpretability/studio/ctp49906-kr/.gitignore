@@ -1,0 +1,5 @@
+.artifacts/
+.locks/
+.bundle-manifest.json
+*/.artifacts/
+*/.locks/

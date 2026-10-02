@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CTP49906 AVLLM Studio</title>
+    <link rel="stylesheet" href="./style.css" />
+    <script src="./main.js" defer></script>
+  </head>
+  <body>
+    <div id="app-shell" data-panel="explore" data-method="diversity">
+      <header class="shell-header" aria-label="CTP49906 실험 패널">
+        <nav class="top-tabs" role="tablist" aria-label="상단 패널">
+          <button type="button" class="tab-button" id="tab-explore" role="tab" aria-selected="true" aria-controls="panel-explore" data-panel-target="explore">
+            실험실
+          </button>
+          <button type="button" class="tab-button" id="tab-guide" role="tab" aria-selected="false" aria-controls="panel-guide" data-panel-target="guide" tabindex="-1">
+            가이드
+          </button>
+          <button type="button" class="tab-button" id="tab-evidence" role="tab" aria-selected="false" aria-controls="panel-evidence" data-panel-target="evidence" tabindex="-1">
+            실습 기록
+          </button>
+        </nav>
+      </header>
+
+      <section class="status-strip" aria-label="실행 상태">
+        <div class="projection-frame projection-frame--status" aria-live="polite">
+          <marimo-cell name="studio_status"></marimo-cell>
+        </div>
+      </section>
+
+      <main class="panel-stack">
+        <section class="panel is-active" id="panel-explore" role="tabpanel" aria-labelledby="tab-explore" data-panel="explore">
+          <div class="method-header">
+            <div class="method-tabs" role="tablist" aria-label="실험 방법">
+              <button type="button" class="method-button" id="method-diversity" role="tab" aria-selected="true" aria-controls="method-panel-diversity" data-method-target="diversity">
+                다양성
+              </button>
+              <button type="button" class="method-button" id="method-band" role="tab" aria-selected="false" aria-controls="method-panel-band" data-method-target="band" tabindex="-1">
+                경로 차단
+              </button>
+              <button type="button" class="method-button" id="method-tf" role="tab" aria-selected="false" aria-controls="method-panel-tf" data-method-target="tf" tabindex="-1">
+                근거 점검
+              </button>
+            </div>
+          </div>
+
+          <section class="method-panel is-active" id="method-panel-diversity" role="tabpanel" aria-labelledby="method-diversity" data-method="diversity">
+            <article class="method-card">
+              <div class="method-body">
+                <section class="projection-frame projection-frame--form" aria-label="프로브 다양성 입력">
+                  <marimo-cell name="diversity_form"></marimo-cell>
+                </section>
+                <section class="projection-frame projection-frame--result" aria-label="프로브 다양성 결과">
+                  <marimo-cell name="diversity_result_panel"></marimo-cell>
+                </section>
+              </div>
+            </article>
+          </section>
+
+          <section class="method-panel" id="method-panel-band" role="tabpanel" aria-labelledby="method-band" data-method="band">
+            <article class="method-card">
+              <div class="method-body">
+                <section class="projection-frame projection-frame--form" aria-label="생성 경로 차단 입력">
+                  <marimo-cell name="band_form"></marimo-cell>
+                </section>
+                <section class="projection-frame projection-frame--result" aria-label="생성 경로 차단 결과">
+                  <marimo-cell name="band_result_panel"></marimo-cell>
+                </section>
+              </div>
+            </article>
+          </section>
+
+          <section class="method-panel" id="method-panel-tf" role="tabpanel" aria-labelledby="method-tf" data-method="tf">
+            <article class="method-card">
+              <div class="method-body method-body--tf">
+                <section class="projection-frame projection-frame--form" aria-label="답변 근거 점검 입력">
+                  <marimo-cell name="tf_form"></marimo-cell>
+                </section>
+                <section class="projection-frame projection-frame--result projection-frame--result-stack" aria-label="답변 근거 점검 결과">
+                  <marimo-cell name="tf_result_panel"></marimo-cell>
+                  <details>
+                    <summary>표시 임계값과 토큰</summary>
+                    <div class="result-detail-stack">
+                      <marimo-cell name="tf_threshold_panel"></marimo-cell>
+                      <marimo-cell name="tf_tokens_panel"></marimo-cell>
+                    </div>
+                  </details>
+                </section>
+              </div>
+            </article>
+          </section>
+        </section>
+
+        <section class="panel" id="panel-guide" role="tabpanel" aria-labelledby="tab-guide" data-panel="guide">
+          <div class="guide-grid">
+            <section class="guide-section guide-section--intro">
+              <div class="section-heading">
+                <p class="section-kicker">수업 맥락</p>
+                <h2>관찰, 개입, 해석을 분리합니다</h2>
+              </div>
+              <div class="projection-frame">
+                <marimo-cell name="lab_intro"></marimo-cell>
+              </div>
+              <div class="projection-frame">
+                <marimo-cell name="method_guide"></marimo-cell>
+              </div>
+            </section>
+
+            <section class="guide-section">
+              <div class="section-heading">
+                <p class="section-kicker">가이드 예제</p>
+                <h2>고정 클립과 기본 산출물</h2>
+                <p class="muted">아래 산출물은 수업용 기본 예제입니다. 현재 업로드한 실험의 결과로 해석하지 않습니다.</p>
+              </div>
+              <div class="projection-frame projection-frame--media">
+                <marimo-cell name="clip_preview"></marimo-cell>
+              </div>
+              <div class="projection-frame projection-frame--detail">
+                <marimo-cell name="token_census"></marimo-cell>
+              </div>
+              <div class="projection-frame projection-frame--result">
+                <marimo-cell name="guided_captions"></marimo-cell>
+              </div>
+            </section>
+
+            <section class="guide-section">
+              <div class="section-heading">
+                <p class="section-kicker">프로브와 attention</p>
+                <h2>내용/잡음/해석 한계를 함께 봅니다</h2>
+              </div>
+              <div class="projection-frame projection-frame--result">
+                <marimo-cell name="probe_grid_panel"></marimo-cell>
+              </div>
+              <div class="projection-frame projection-frame--detail">
+                <marimo-cell name="probe_summary_panel"></marimo-cell>
+              </div>
+              <div class="projection-frame projection-frame--detail">
+                <marimo-cell name="attention_mass_panel"></marimo-cell>
+              </div>
+            </section>
+
+            <section class="guide-section">
+              <div class="section-heading">
+                <p class="section-kicker">teacher forcing</p>
+                <h2>답변 토큰의 점수 변화와 표시 임계값</h2>
+              </div>
+              <div class="projection-frame projection-frame--result">
+                <marimo-cell name="guided_tf_panel"></marimo-cell>
+              </div>
+              <div class="projection-frame projection-frame--detail">
+                <marimo-cell name="guided_tf_threshold"></marimo-cell>
+              </div>
+              <div class="projection-frame projection-frame--detail">
+                <marimo-cell name="guided_tf_tokens"></marimo-cell>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section class="panel" id="panel-evidence" role="tabpanel" aria-labelledby="tab-evidence" data-panel="evidence">
+          <div class="evidence-grid">
+            <section class="evidence-section evidence-section--ledger">
+              <div class="section-heading">
+                <p class="section-kicker">실습 기록</p>
+                <h2>제출된 실행과 단위를 확인합니다</h2>
+              </div>
+              <div class="projection-frame projection-frame--result">
+                <marimo-cell name="ledger_panel"></marimo-cell>
+              </div>
+            </section>
+
+            <section class="evidence-section">
+              <div class="section-heading">
+                <p class="section-kicker">결론 기록</p>
+                <h2>verdict와 저장 상태</h2>
+              </div>
+              <div class="projection-frame projection-frame--form">
+                <marimo-cell name="verdict_panel"></marimo-cell>
+              </div>
+              <div class="projection-frame projection-frame--status" aria-live="polite">
+                <marimo-cell name="verdict_submit_handler"></marimo-cell>
+              </div>
+              <div class="projection-frame projection-frame--detail">
+                <marimo-cell name="worksheet_panel"></marimo-cell>
+              </div>
+            </section>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>
