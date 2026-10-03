@@ -107,80 +107,80 @@ def studio_files(mo):
         return {"root": str(root), "written": pending, "bundle": expected_digest}
 
     _payload = (
-        "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"
-        "0p+IxJkzd6sJASBVv/v/HhqKyQ=="
+        "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"
     )
     try:
         _location = mo.notebook_location()
         if _location is None:
             raise ValueError("노트북을 저장한 뒤 셀을 다시 실행하세요.")
-        studio_bundle_status = _restore_studio_bundle(_location, _payload, "358666eb82c87ee410954d7c6406e0c69d02dea8578543e88afad665a8ad3559")
+        studio_bundle_status = _restore_studio_bundle(_location, _payload, "36163ed86d3dd89c978f5af060c984d16df16153692736817e0cd9bbc0e393f3")
         _message = "Studio 보기 파일을 준비했습니다. Molab의 Studio에서 explore 보기를 여세요."
         _kind = "info"
     except (ValueError, OSError) as _error:
@@ -205,11 +205,11 @@ def lab_intro(mo):
     | 순서 | 할 일 | 남길 것 |
     |---|---|---|
     | 1 · 준비 | GPU 연결 → Run all → 시범 결과 읽기 | 입력·출력·두 지표의 의미 |
-    | 2 · 비교 | 🎯에서 한국어 무음/원본 쌍, 이어서 영어 쌍 | 같은 설정의 두 실행 ID와 캡션 |
-    | 3 · 탐색 | 🎛️ 프레임 8→4 또는 🎯 레이어 한 대역만 변경 | 바꾼 변수, 관측, 경쟁 설명 |
-    | 4 · 제출 | 📓에서 해석 기록 → Markdown와 JSON 내려받기 | 재현 가능한 결과와 다음 질문 |
+    | 2 · 비교 | 티처 포싱에서 한국어 무음/원본 쌍을 실행한 뒤 영어 쌍 비교 | 같은 설정의 두 실행 ID와 캡션 |
+    | 3 · 탐색 | 다양성 실험의 프레임 수 또는 티처 포싱의 레이어 구간 변경 | 바꾼 변수, 관측, 경쟁 설명 |
+    | 4 · 제출 | 실습 기록에서 해석 작성 → Markdown과 JSON 내려받기 | 재현 가능한 결과와 다음 질문 |
 
-    앞부분은 **교수자와 읽는 시범**, 🎯·🎛️는 **여러분이 제출 버튼으로 실행하는 실험**입니다.
+    가이드 예제는 교수자와 함께 읽고, 각 실험은 실행 버튼을 눌러 진행합니다. Studio에서는 ‘실험실’의 ‘다양성’, ‘경로 차단’, ‘캡션 확률 변화’와 ‘실습 기록’ 탭을 사용하세요.
     처음에는 제공된 클립과 4·8프레임을 사용하세요. 자유 탐색은 기본 쌍을 기록한 뒤 시작합니다.
 
     1. **Logit Lens** — thinker 레이어들을 가로질러, **오디오 토큰 위치**에서 모델의
@@ -218,13 +218,11 @@ def lab_intro(mo):
        막고 생성한 답변을, 막지 않은 **기준선(baseline)** 답변과 비교합니다.
 
     Qwen2.5-Omni는 **thinker**(보고 듣고 글을 쓰는 부분)와 **talker**(그 글을 음성으로
-    바꾸는 부분)로 나뉩니다. 이 실습은 talker를 내려놓고 thinker만 쓰기 때문에, 아래에서
-    계속 "thinker 레이어"라고 부릅니다.
+    바꾸는 부분)로 나뉩니다. 이 실습은 talker를 비활성화하고 thinker만 사용하므로, 아래에서는 ‘thinker 레이어’라고 부릅니다.
 
     이 노트북은 `CTP49906_avllm_molab.py`의 **한국어판**입니다. 노브 셀의
     `LOGIT_PROMPT`와 `ATTENTION_PROMPT`가 한국어이므로 `query_text` 위치에 한국어
-    토큰이 놓이고 캡션도 한국어로 나옵니다. 그 밖의 것 — 클립, 모델, 규칙, 레이어
-    창 — 은 원본과 동일합니다. 그래야 두 노트북을 나란히 놓고 비교할 수 있습니다.
+    토큰이 놓이고 캡션도 한국어로 나옵니다. 그 밖의 것 — 클립, 모델, 규칙, 레이어 구간 — 은 원본과 동일합니다. 그래야 두 노트북을 나란히 놓고 비교할 수 있습니다.
     """)
     return
 
@@ -247,7 +245,7 @@ def molab_setup_note(mo):
     먼저 결과를 내보내고 커널을 재시작한 다음 기본 클립·4프레임으로 돌아오세요.
 
     **저장은 직접 확인하세요.** 실행 기록은 세션 안의 파일에도 쓰지만 저장 실패와 세션 종료에
-    대비해 Markdown와 JSON을 내려받습니다. 자신의 영상은 원격 GPU 서버로 업로드됩니다.
+    대비해 Markdown과 JSON을 내려받습니다. 자신의 영상은 원격 GPU 서버로 업로드됩니다.
     수업에서는 제공된 샘플이나 공유에 동의받은 짧은 클립을 사용하세요.
     """)
     return
@@ -258,8 +256,7 @@ def method_guide(mo):
     mo.md(r"""
     ## 🧭 시작하기 전에 — 그림 넷
 
-    이 노트북의 두 실험은 전부 **토큰**과 **어텐션 화살표** 위에서 벌어집니다. 아래 넷만
-    알면 나머지는 따라옵니다.
+    이 노트북의 두 실험은 전부 **토큰**과 **어텐션 화살표** 위에서 벌어집니다. 아래 네 가지를 살펴본 뒤 실험을 시작합니다.
 
     ### 1. 영상도 소리도 질문도, 전부 한 줄의 토큰이 됩니다
 
@@ -371,7 +368,7 @@ def method_guide(mo):
     <svg viewBox="0 0 720 178" style="width:100%;max-width:940px;height:auto" >
       <title>두 측정값을 읽는 법</title>
       <defs><marker id="a44k" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 z" fill="currentColor"/></marker></defs>
-      <text x="10" y="16" font-size="12.5" fill="currentColor" font-weight="600">다양성 — 레이어별 서로 다른 예측 수</text>
+      <text x="10" y="16" font-size="12.5" fill="currentColor" font-weight="600">다양성 — 레이어별 서로 다른 출력 문자열 수</text>
       <g fill="#4C78A8" fill-opacity="0.55" stroke="#4C78A8">
         <rect x="14" y="70" width="20" height="34"/><rect x="40" y="52" width="20" height="52"/>
         <rect x="66" y="38" width="20" height="66"/><rect x="92" y="60" width="20" height="44"/>
@@ -381,7 +378,7 @@ def method_guide(mo):
       <path d="M10 104 L300 104" stroke="currentColor" stroke-width="1.2"/>
       <text x="10" y="122" font-size="11.5" fill="currentColor">서술적 통계입니다.</text>
       <text x="10" y="138" font-size="11.5" fill="currentColor">크다고 좋은 것도, 작다고 나쁜 것도 아닙니다.</text>
-      <text x="390" y="16" font-size="12.5" fill="currentColor" font-weight="600">Δ log-우도 — 토큰당</text>
+      <text x="390" y="16" font-size="12.5" fill="currentColor" font-weight="600">토큰당 평균 Δ 로그 확률</text>
       <path d="M400 74 L700 74" stroke="currentColor" stroke-width="1.2"/>
       <path d="M550 62 L550 86" stroke="currentColor" stroke-width="1.2"/>
       <text x="550" y="54" font-size="11.5" fill="currentColor" text-anchor="middle">0</text>
@@ -389,14 +386,12 @@ def method_guide(mo):
       <text x="550" y="100" font-size="11.5" fill="currentColor" text-anchor="middle">무음 효과도 직접 측정</text>
       <path d="M534 124 L406 124" stroke="currentColor" stroke-width="1.4" marker-end="url(#a44k)"/>
       <path d="M566 124 L694 124" stroke="currentColor" stroke-width="1.4" marker-end="url(#a44k)"/>
-      <text x="400" y="144" font-size="11.5" fill="currentColor">← 덜 믿게 됨</text>
-      <text x="700" y="144" font-size="11.5" fill="currentColor" text-anchor="end">더 믿게 됨 →</text>
+      <text x="400" y="144" font-size="11.5" fill="currentColor">← 평균 로그 확률 감소</text>
+      <text x="700" y="144" font-size="11.5" fill="currentColor" text-anchor="end">평균 로그 확률 증가 →</text>
       <text x="390" y="164" font-size="11.5" fill="currentColor" font-style="italic">여러분의 클립은 0에서 얼마나 멀어지나?</text>
     </svg>
 
-    **다양성**은 "무슨 일이 있었나"를 적은 것이지 "좋아졌나"가 아닙니다. **Δ log-우도**는
-    **부호**가 방향을(음수 = 자기 답을 덜 믿게 됨, 양수 = 더 믿게 됨), **크기**가 세기를
-    말합니다. 같은 설정의 **원본·무음 쌍**과 캡션을 함께 보세요. 무음의 효과가 꼭 0인 것은
+    **다양성**은 "무슨 일이 있었나"를 적은 것이지 "좋아졌나"가 아닙니다. Δ는 연결 차단 후 값에서 기준선 값을 뺀 값입니다. 음수는 감소, 양수는 증가를 뜻하며 단위는 nats입니다. 평균 Δ가 작아도 토큰별 증가와 감소가 상쇄됐을 수 있으므로 토큰별 Δ도 함께 확인하세요. 같은 설정의 **원본·무음 쌍**과 캡션을 함께 보세요. 무음의 효과가 꼭 0인 것은
     아닙니다. 확률 변화의 크기는 정답 여부나 듣기 능력의 점수가 아닙니다.
     """)
     return
@@ -665,7 +660,7 @@ def _(mo, studio_bundle_status):
 
     # A release identity is explicit; never destroy a student's edited clone.
     import os as _os
-    REPO_REF = _os.environ.get("CTP49906_REPO_REF", "5e9cb63e469809b8aa5c7e11721748a550005f3e")
+    REPO_REF = _os.environ.get("CTP49906_REPO_REF", "e3c640bd5a5ccbc90b3b645888972c2459d64e69")
     _repo_url = "https://github.com/youngjuene/CTP49906_2026.git"
 
     def _notebook_dir_from_location(location):
@@ -858,7 +853,7 @@ def _(USE_PRECOMPUTED):
         print(f"torch={torch.__version__}, USE_PRECOMPUTED=True → CPU (GPU 불필요)")
     else:
         assert torch.cuda.is_available(), (
-            "GPU가 보이지 않습니다. molab에서는 헤더의 notebook-specs 버튼으로 GPU를 연결하세요. "
+            "GPU가 보이지 않습니다. 화면 위쪽의 Configure compute에서 GPU를 선택하고 Save and restart를 누르세요. "
             "(또는 위 셀에서 USE_PRECOMPUTED=True로 두면 커밋된 산물로 가이드 예제를 재생합니다.)"
         )
         DEVICE = torch.device("cuda:0")
@@ -880,10 +875,10 @@ def _(mo):
     | 프레임 8→4 | 비디오 토큰 수가 줄어듦. 같은 클립의 오디오 길이는 유지 | 클립·프롬프트·규칙 |
     | 한국어→영어 프롬프트 | 질문 토큰과 생성 캡션이 함께 달라질 수 있음 | 원본/무음 각각 같은 프롬프트로 쌍 만들기 |
     | `audio`→`video` 타깃 | 다른 직접 어텐션 연결을 차단 | 클립·프롬프트·레이어 |
-    | 레이어 `[0,12)`→`[12,24)` | 이 개입에 민감한 대역 비교 | `end`는 포함하지 않음; 다른 설정은 유지 |
+    | 레이어 `[0,12)`→`[12,24)` | 이 개입에 민감한 구간 비교 | `end`는 포함하지 않음; 다른 설정은 유지 |
     | 🎯 캡션 상한 32→64 | 더 긴 캡션을 생성할 수 있음 | 실제 길이·문장을 함께 기록 |
 
-    **고급:** 아래 코드의 전역 노브를 바꾸면 여러 시범 셀과 폼이 다시 실행/초기화될 수 있습니다.
+    **고급:** 아래 코드의 공통 설정값을 바꾸면 여러 시범 셀과 폼이 다시 실행/초기화될 수 있습니다.
     모델은 재사용하지만 추가 연산과 메모리는 필요합니다. 먼저 결과를 내보내세요.
     프레임은 2–16의 짝수, 시범 어텐션 캡처는 최대 2개 레이어로 제한합니다.
     입력 토큰 수와 디코딩 크기도 검사하므로 짧고 작은 클립부터 시도하세요.
@@ -1349,8 +1344,7 @@ def _(mo):
     mo.md(r"""
     ## 레이어별 Logit-lens 다양성
 
-    왼쪽: 각 레이어에서 오디오 토큰 위치들을 가로질러 **서로 다른** 예측이 몇 개
-    디코딩되는지. 오른쪽: 그중 최빈 예측이 얼마나 지배적인지.
+    각 레이어의 오디오 위치에서 최고 점수 토큰을 골라 문자열로 바꿉니다. 왼쪽은 서로 다른 문자열의 수, 오른쪽은 가장 자주 나온 문자열의 비율입니다.
 
     둘 다 **무슨 일이 있었는지**를 적은 서술적 통계입니다. 값이 크다고 표현이 좋아진
     것도, 작다고 나빠진 것도 아닙니다.
@@ -1385,9 +1379,9 @@ def _(Counter, USE_PRECOMPUTED, csv, logit_csv_written, mo, np, plt):
     _x = np.arange(len(_layer_names))
     _fig, _axes = plt.subplots(1, 2, figsize=(14, 4), constrained_layout=True)
     _axes[0].bar(_x, _unique, color="#4C78A8")
-    _axes[0].set(title="레이어별 Logit-lens 다양성", xlabel="Thinker 레이어", ylabel="서로 다른 예측 수")
+    _axes[0].set(title="레이어별 Logit-lens 다양성", xlabel="Thinker 레이어", ylabel="서로 다른 출력 문자열 수")
     _axes[1].plot(_x, _dominant, marker="o", color="#F58518")
-    _axes[1].set(title="최빈 예측 비율", xlabel="Thinker 레이어", ylabel="비율", ylim=(0, 1))
+    _axes[1].set(title="최빈 출력 문자열 비율", xlabel="Thinker 레이어", ylabel="비율", ylim=(0, 1))
     for _ax in _axes:
         _ax.grid(axis="y", alpha=0.25)
     if USE_PRECOMPUTED:
@@ -1406,10 +1400,9 @@ def _(mo):
     mo.md(r"""
     ## 🎞️ 인터랙티브: 프로브 표면, 36개 레이어를 한눈에
 
-    위의 다양성 막대그래프는 모델이 *무엇을* 예측하는지를 뭉개 버립니다. 이 그리드는
-    모든 레이어 × 모든 오디오 위치를 한 번에 보여 줍니다. **y = thinker 레이어,
+    프로브 그리드에서 각 레이어와 오디오 위치의 출력을 확인할 수 있습니다. **y = thinker 레이어,
     x = 오디오 위치**이고, 색은 프로브가 어떤 종류의 토큰으로 디코딩되는지를
-    나타냅니다 — **내용(content)**, **잡토큰(junk)**(구두점·공백·기호), 또는
+    나타냅니다 — **기타 문자열(content)**, **잡토큰(junk)**(구두점·공백·기호), 또는
     **디코딩 불가(undecodable)**. 얇은 테두리는 그 위치의 마지막 레이어 토큰과 이미
     같아진 칸을 표시합니다.
 
@@ -1417,16 +1410,9 @@ def _(mo):
     어휘 투사 결과이므로 다국어 추론이나 모델의 생각을 증명하지 않습니다. 실제 비율은
     아래 집계로 확인하세요. 문자가 깨진 경우와 읽을 수 있는 다른 문자도 구분합니다.
 
-    **그리드 위를 드래그**하면 활성 레이어가 움직이고, 아래 칩 띠가 파이썬을 거치지
-    않고 갱신됩니다. **열을 클릭**하면 그 위치가 고정되어, 36개 레이어를 지나는
-    궤적 전체를 토큰으로 읽을 수 있습니다.
+    그리드를 드래그하면 선택한 레이어의 출력 문자열이 아래에 표시됩니다. 열을 클릭하면 그 위치를 고정하고 레이어별 출력을 비교할 수 있습니다.
 
-    > **여기서 눈여겨볼 것.** "초기 레이어의 잡음이 최종 예측으로 정리되어 간다"고
-    > 읽고 싶어지지만, 그 전에 마지막 레이어들이 실제로 무엇으로 디코딩되는지 보세요.
-    > 프로브는 오디오 위치에서 **보정되어 있지 않습니다**. 그 퇴화(degeneracy) 자체가
-    > 이번 주의 결과이고,
-    > 잡토큰/내용 구분이 그것을 눈에 보이게 만듭니다. 잡토큰 판정 규칙은 위젯 안에
-    > 그대로 출력되므로 그 규칙에 이의를 제기할 수 있습니다.
+    각 레이어의 오디오 위치에서 중간 표현에 lm_head를 적용해 가장 높은 점수의 토큰을 표시합니다. 모델이 실제로 생성한 토큰을 뜻하지는 않습니다. 마지막 레이어의 출력과 ‘잡토큰(junk)’의 비율·분류 기준을 함께 확인하세요.
 
     위에서 쓴 CSV를 다시 그리는 것뿐입니다. GPU가 필요 없고 `USE_PRECOMPUTED` 재생
     모드에서도 동작합니다.
@@ -1448,7 +1434,7 @@ def probe_grid_panel(logit_csv_written, mo):
     mo.stop(
         _pack is None,
         mo.callout(
-            mo.md("**표시할 것이 없습니다** — 위 Logit-lens 실행이 오디오 토큰 행을 쓰지 못했습니다."),
+            mo.md("Logit-lens 계산 결과에 오디오 위치 데이터가 없어 프로브 그리드를 표시할 수 없습니다."),
             kind="warn",
         ),
     )
@@ -1458,7 +1444,18 @@ def probe_grid_panel(logit_csv_written, mo):
     # marimo re-run anything. That is what lets it sit upstream of the GPU cells.
     probe_grid = mo.ui.anywidget(_ProbeGrid(**_pack))
     probe_summary = _layer_summary(_pack)
-    probe_grid
+    mo.vstack([
+        mo.md('행은 레이어, 열은 오디오 위치입니다. 각 칸은 해당 위치의 최고 점수 토큰을 디코딩한 문자열입니다.'),
+        probe_grid,
+        mo.md(
+            '<details>\n<summary>해석 도움말</summary>\n\n'
+            '오디오 위치의 레이어 출력에 최종 RMSNorm을 적용하지 않고 lm_head를 적용한 결과입니다. '
+            '각 위치의 최고 점수 토큰을 문자열로 표시하며, 모델의 실제 생성 결과나 오디오 인식 정답률을 뜻하지 않습니다.\n\n'
+            '기타 문자열(content)은 의미 있는 출력이라는 판정이 아닙니다. '
+            '잡토큰(junk)은 빈 문자열 또는 모든 문자가 Unicode 구두점·구분자·제어 문자·기호인 문자열입니다. '
+            '�(U+FFFD)가 포함된 문자열은 디코딩 불가로 분류합니다.\n\n</details>'
+        ),
+    ], gap=0.4)
     return (probe_summary,)
 
 
@@ -1470,21 +1467,21 @@ def probe_summary_panel(mo, probe_summary):
     _rows = [
         {
             "레이어": _r["name"].replace("Layer_", ""),
-            "서로 다른 토큰": _r["unique"],
+            "서로 다른 출력 문자열 수": _r["unique"],
             "잡토큰(junk)": _r["junk"],
             "디코딩 불가": _r["undecodable"],
-            "마지막 레이어와 일치": _r["matches_final"],
-            "최빈 토큰": repr(_r["modal_token"]),
+            "마지막 레이어와 출력이 같은 위치 수": _r["matches_final"],
+            "최빈 출력 문자열": repr(_r["modal_token"]),
         }
         for _r in probe_summary
     ]
     mo.vstack([
         mo.md(
-            f"<span style=\"font-size:1.15rem;font-weight:600\">레이어별 집계 — 잡토큰이 가장 많은 레이어는 **{_worst['name']}**로, "
-            f"잡토큰 칸 **{_worst['junk']}**개에 모든 오디오 위치를 통틀어 서로 다른 토큰이 "
-            f"**{_worst['unique']}**개뿐입니다</span>"
+            f"<span style=\"font-size:1.15rem;font-weight:600\">잡토큰이 가장 많은 레이어는 {_worst['name']}이며, "
+            f"잡토큰 칸은 {_worst['junk']}개, 서로 다른 출력 문자열은 {_worst['unique']}개입니다.</span>"
         ),
         mo.ui.table(_rows, selection=None, pagination=True, page_size=12),
+        mo.md('문자 분류는 의미의 유무를 판정하지 않습니다. 마지막 레이어와 출력이 같아도 이후 모든 레이어에서 유지된다는 뜻은 아닙니다. 마지막 레이어 자체는 비교 기준이므로 모든 위치가 일치합니다.'),
     ], gap=0.4)
     return
 
@@ -1625,10 +1622,8 @@ def guided_captions(
 
     _ko_cmp = mo.vstack([
         mo.md(
-            f"**기준선**(왼쪽) vs **녹아웃** `{_ko_rules}`(오른쪽) — 공통 구절은 마우스를 "
-            "올리면 강조됩니다. **강조되지 않은 부분이 녹아웃이 캡션을 바꾼 곳**입니다. "
-            "여기는 고정된 레이어 대역 하나이며, 아래 🎚️ 섹션에서 대역을 직접 훑어 "
-            "볼 수 있습니다."
+            f"**기준선**(왼쪽) vs **녹아웃** `{_ko_rules}`(오른쪽) — "
+            '공통 구절에 마우스를 올리면 해당 부분이 강조됩니다. 강조되지 않은 부분도 두 캡션에서 직접 비교하세요. 레이어 구간을 바꾸려면 ‘선택 탐색’을 사용하세요. Studio에서는 ‘실험실 → 경로 차단’을 엽니다.'
         ),
         mo.ui.anywidget(_TextCompare(
             text_a=baseline_text, text_b=knockout_text, min_match_words=2
@@ -1651,20 +1646,9 @@ def _(ATTENTION_CAPTURE_LAYERS, mo):
     mo.md(f"""
     ## 키 모달리티별 캡처된 어텐션 — 기준선 **과** 녹아웃
 
-    인과적 중요도가 아니라 **서술적** 요약입니다. 캡처한 레이어마다 헤드를 평균 내고,
-    마지막 쿼리의 어텐션을 토큰 그룹별로 합산합니다.
+    각 칸은 생성 단계별로 헤드를 평균 내고, 해당 모달리티의 키로 향하는 어텐션 가중치를 합산한 뒤, 캡처한 후속 생성 단계들에 걸쳐 평균낸 값입니다. 여러 쿼리를 함께 처리하는 프롬프트 단계는 제외합니다. 기준선과 차단 실행은 캡션과 생성 길이가 달라질 수 있으므로, Δ는 서로 다른 생성 문맥에서 얻은 평균의 차이일 수 있습니다. 이 값만으로 모달리티의 인과적 중요도를 판단할 수는 없습니다.
 
-    **읽는 법.** 한 행(레이어)의 값을 모두 더하면 1이 됩니다 — 즉 **비율**입니다
-    (0.90 = 90%). 그래서 기준선 패널에서 `generated` 열이 가장 큰 것은 **정상**입니다.
-    토큰은 대체로 자기 자신과 방금 쓴 이웃을 봅니다. 구조이지 발견이 아닙니다.
-
-    두 패널은 반드시 함께 읽으세요. 색 스케일을 공유하므로, 더 어두워 보이는 칸은
-    실제로 더 작은 값입니다. **녹아웃** 패널에서 막힌 열이 0에 가까운 것은 **설계상
-    당연한 결과**입니다. 개입이 작동했다는 뜻이지 모델에 대한 발견이 아닙니다. 이
-    모델의 어텐션이 평소 어디로 가는지는 **기준선** 패널만이 말해 주고, 마스크가
-    질량을 어디로 밀어냈는지는 **Δ** 패널만이 보여 줍니다. 녹아웃 패널만 보고
-    "모델이 영상을 무시한다"고 결론짓는 것은, 영상을 무시하라고 지시받은 셀에서
-    그 결론을 읽어 내는 일입니다.
+    기준선과 차단 패널은 같은 색 범위를 쓰며, 어두울수록 값이 작고 각 행의 합은 약 1입니다. Δ 패널은 차단 후 평균에서 기준선 평균을 뺀 값으로, 붉은색은 증가, 푸른색은 감소를 뜻합니다. 차단 규칙이 적용된 레이어에서 해당 열의 값을 확인하세요.
 
     레이어 `{ATTENTION_CAPTURE_LAYERS[0]}`–`{ATTENTION_CAPTURE_LAYERS[1] - 1}`만
     표시됩니다. 파라미터 셀의 `ATTENTION_CAPTURE_LAYERS` 값입니다. 이 창을 넓히는
@@ -1734,7 +1718,10 @@ def attention_mass_panel(attention_summary, baseline_attention_summary, mo, np, 
                     _ax.text(_ci, _ri, _label, ha="center", va="center",
                              color=_color, fontsize=9)
             _fig.colorbar(_im, ax=_ax, label="어텐션 질량")
-        _out = _fig
+        _out = mo.vstack([
+            _fig,
+            mo.md('<details>\n<summary>해석 도움말</summary>\n\n각 칸은 생성 단계별로 헤드를 평균 내고, 해당 모달리티의 키로 향하는 어텐션 가중치를 합산한 뒤, 캡처한 후속 생성 단계들에 걸쳐 평균낸 값입니다. 여러 쿼리를 함께 처리하는 프롬프트 단계는 제외합니다. 기준선과 차단 실행은 캡션과 생성 길이가 달라질 수 있으므로, Δ는 서로 다른 생성 문맥에서 얻은 평균의 차이일 수 있습니다. 이 값만으로 모달리티의 인과적 중요도를 판단할 수는 없습니다.\n\n기준선과 차단 패널은 같은 색 범위를 쓰며, 어두울수록 값이 작고 각 행의 합은 약 1입니다. Δ 패널은 차단 후 평균에서 기준선 평균을 뺀 값으로, 붉은색은 증가, 푸른색은 감소를 뜻합니다. 차단 규칙이 적용된 레이어에서 해당 열의 값을 확인하세요.\n\n</details>'),
+        ])
     _out
     return
 
@@ -1742,24 +1729,24 @@ def attention_mass_panel(attention_summary, baseline_attention_summary, mo, np, 
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## 🎚️ 선택 탐색: 어느 레이어 대역의 개입에 더 민감한가?
+    ## 🎚️ 선택 탐색: 어느 레이어 구간의 개입에 더 민감한가?
 
-    위의 비교는 **단 하나의** 녹아웃입니다 — 모달리티 하나, 고정된 레이어 대역 하나
-    (36개 레이어 전부). 전 구간을 막은 결과만으로 경로의 중요성이나 위치를 확정할 수 없습니다. 이 섹션은 그 대역을 훑습니다. 타깃 모달리티와
-    레이어 창을 고르고 다시 생성해서, 캡션이 기준선에서 얼마나 멀어지는지 보세요.
+    위의 비교는 **단 하나의** 녹아웃입니다 — 모달리티 하나, 고정된 레이어 구간 하나
+    (36개 레이어 전부). 전 구간을 막은 결과만으로 경로의 중요성이나 위치를 확정할 수 없습니다. 이 섹션은 그 구간을 훑습니다. 타깃 모달리티와
+    레이어 구간을 고르고 다시 생성해서, 캡션이 기준선에서 얼마나 멀어지는지 보세요.
 
     같은 타깃에 대해 `[0, 12)` · `[12, 24)` · `[24, 36)`을 비교해 보세요.
 
-    **널(null) 결과를 읽는 법.** 캡션이 그대로인 대역은 *이 측정에서는 효과가 없음*을
+    **널(null) 결과를 읽는 법.** 캡션이 그대로인 구간은 *이 측정에서는 효과가 없음*을
     보여 줄 뿐입니다. 중복(redundancy), 이 규칙이 자르지 못한 간접 경로, 또는 변화를
     보기에 너무 거친 지표 — 어느 쪽과도 모순되지 않습니다. 경로가 **없다는 증거는
-    아닙니다**. 문자열 비교는 이분법적입니다. 아래의 티처 포싱 Δ가 같은 질문의 연속적
+    아닙니다**. 문자열 유사도는 캡션의 차이를 보여 주지만 토큰 확률의 변화는 보여 주지 않습니다. 아래의 티처 포싱 Δ가 같은 질문의 연속적
     버전이며, *작은* 효과를 보여 줄 수 있는 쪽입니다.
 
     ▶를 누를 때마다 이미 인코딩된 클립에 대해 greedy 생성 1회가 돌아갑니다. 입력과 런타임에 따라 시간이 달라집니다.
     기준선은 재사용하며 다시 생성하지 않습니다. 두 캡션 모두 **답변만** 표시됩니다 —
     공통 프롬프트를 잘라 내야 차이가 지시문이 아니라 모델의 말에 대한 것이 됩니다.
-    서로 다른 설정·결과는 아래 **실습 기록(ledger)**에 남습니다. 동일 재실행은 한 행으로 합쳐집니다. 직전 대역을 기록에서
+    서로 다른 설정·결과는 아래 **실습 기록(ledger)**에 남습니다. 동일 재실행은 한 행으로 합쳐집니다. 직전 구간을 기록에서
     비교할 수 있습니다.
     """)
     return
@@ -1785,8 +1772,8 @@ def token_census(Counter, attention_token_types, mo):
         mo.ui.table(_rows, selection=None, pagination=False),
         mo.md(
             "`generated`는 표에 없습니다. 그 위치는 모델이 디코딩하기 전에는 존재하지 "
-            "않기 때문입니다. 그래서 `generated` source는 **생성 중에는 살아 있고**"
-            "(이 섹션) **순전파에서는 작동하지 않습니다**(아래 🎛️ 스코어보드)."
+            "않기 때문입니다. "
+            'generated source는 생성 중에는 작동하고, 다양성 실험의 입력 순전파에서는 작동하지 않습니다.'
         ),
     ], gap=0.4)
     return
@@ -1807,7 +1794,7 @@ def band_form(KNOCKOUT_RULES, USE_PRECOMPUTED, attention_model, mo):
         _lo, _hi = _v.get("layers") or (0, 1)
         if int(_hi) <= int(_lo):
             return (
-                f"[{int(_lo)}, {int(_hi)})는 0개 레이어를 마스킹합니다 — `end`는 배타적입니다. "
+                f"[{int(_lo)}, {int(_hi)})는 0개 레이어를 마스킹합니다 — 끝 번호는 포함하지 않습니다. "
                 "이대로면 기준선을 돌려 놓고 '효과 없음'이라고 보고하게 됩니다."
             )
         return None
@@ -1815,13 +1802,13 @@ def band_form(KNOCKOUT_RULES, USE_PRECOMPUTED, attention_model, mo):
     band_controls = mo.md(
 
         "generated → {target} · 레이어 {layers}\n\n"
-        "{null_band} **무효과 대역(null band)**으로 기록\n\n"
+        "{null_band} **캡션 변화가 작을 것으로 예상**\n\n"
         "<details>\n"
-        "<summary>대역 도움말</summary>\n\n"
+        "<summary>구간 도움말</summary>\n\n"
         "이 실행은 선택한 thinker 레이어 구간에서 generated 토큰이 선택한 타깃에 "
-        "어텐션하는 경로를 금지합니다. 무효과 대역은 아무 일도 없으리라 예상하는 "
-        "대조군 실행입니다.\n\n"
-        f"`end`는 배타적입니다. 이 thinker는 레이어가 **{_band_layers}**개입니다. "
+        "어텐션하는 경로를 금지합니다. "
+        '체크박스에는 실행 전에 예상한 결과를 기록합니다. 체크 여부는 차단 규칙을 바꾸거나 이 실행을 대조군으로 지정하지 않습니다. 실행 후 실제 결과와 비교하세요.\n\n'
+        f"끝 번호는 포함하지 않습니다. 이 thinker는 레이어가 <strong>{_band_layers}</strong>개입니다. "
         "클립·프롬프트·프레임 수는 파라미터 셀 값을 그대로 씁니다.\n\n"
         "</details>"
 
@@ -1835,7 +1822,7 @@ def band_form(KNOCKOUT_RULES, USE_PRECOMPUTED, attention_model, mo):
         ),
         null_band=mo.ui.checkbox(value=False),
     ).form(
-        submit_button_label="▶ 이 대역으로 다시 생성",
+        submit_button_label="▶ 이 구간으로 다시 생성",
         submit_button_disabled=USE_PRECOMPUTED,
         submit_button_tooltip=(
             "재생 모드에서는 저장된 가이드 결과만 볼 수 있습니다."
@@ -1884,7 +1871,7 @@ def band_result_panel(
             mo.md(
                 "저장된 예제는 **가이드**에서 볼 수 있습니다. 새 실행에는 라이브 모델이 필요합니다."
                 if USE_PRECOMPUTED else
-                "타깃과 레이어 대역을 고른 뒤 **▶ 이 대역으로 다시 생성**을 누르세요."
+                "타깃과 레이어 구간을 고른 뒤 **▶ 이 구간으로 다시 생성**을 누르세요."
             ),
             kind="info",
         ),
@@ -1893,7 +1880,7 @@ def band_result_panel(
         USE_PRECOMPUTED or attention_inputs is None,
         mo.callout(
             mo.md(
-                "**이 스윕은 라이브 모델이 필요합니다** — 대역마다 캡션을 다시 생성하므로 "
+                "**이 스윕은 라이브 모델이 필요합니다** — 구간마다 캡션을 다시 생성하므로 "
                 "`USE_PRECOMPUTED=True`인 동안에는 건너뜁니다."
             ),
             kind="warn",
@@ -1956,25 +1943,24 @@ def band_result_panel(
                 ),
                 mo.stat(
                     value="변화 없음" if _unchanged else "변화 있음",
-                    label="이 대역의 효과",
+                    label="캡션 변화 여부",
                     caption=(
-                        "이 측정에서는 효과 없음 — 중복이나 간접 경로와 모순되지 않으며, "
-                        "부재의 증거가 아님"
-                        if _unchanged else "여기를 막으니 캡션이 움직였음"
+                        '생성된 캡션은 같습니다. 토큰 확률까지 같다는 뜻은 아닙니다.'
+                        if _unchanged else "이 레이어 구간의 연결을 차단한 뒤 캡션이 달라졌습니다."
                     ),
                     bordered=True,
                 ),
             ], widths="equal", gap=1),
             mo.md(
-                "**기준선**(왼쪽) vs **이 대역**(오른쪽) — 공통 구절은 마우스를 올리면 "
-                "강조됩니다. **강조되지 않은 부분이 이 대역이 바꾼 것**입니다."
+                "**기준선**(왼쪽) vs **이 구간**(오른쪽) — "
+                '공통 구절에 마우스를 올리면 해당 부분이 강조됩니다. 강조되지 않은 부분도 두 캡션에서 직접 비교하세요.'
             ),
             mo.ui.anywidget(_BandCompare(
                 text_a=_base_ans, text_b=_band_ans, min_match_words=2
             )),
             mo.md(
-                "<span style=\"color:#4C78A8;font-weight:600\">다음 →</span> 같은 타깃으로 `[12,24)`와 `[24,36)`도 돌려 보세요. 세 대역의 "
-                "캡션과 유사도를 나란히 놓고 이 개입에 더 민감한 대역을 찾아보세요. 위치의 확정은 아닙니다."
+                "<span style=\"color:#4C78A8;font-weight:600\">다음 →</span> 같은 타깃으로 `[12,24)`와 `[24,36)`도 돌려 보세요. 세 구간의 "
+                "캡션과 유사도를 나란히 놓고 이 개입에 더 민감한 구간을 찾아보세요. 위치의 확정은 아닙니다."
             ),
         ])
         # Record it. `set_runs` is a SetFunctor, not the State object, so a cell
@@ -2000,7 +1986,7 @@ def band_result_panel(
                         target=_bp["target"], start=_lo, end=_hi, max_new_tokens=MAX_NEW_TOKENS,
                     ),
                     is_control=False,
-                    note="효과가 작을 것으로 예상한 대역" if _bp.get("null_band") else "",
+                    note="연결 차단 후 캡션 변화가 작을 것으로 예상한 레이어 구간" if _bp.get("null_band") else "",
                     extra={"baseline_caption": _base_ans, "knockout_caption": _band_ans},
                 ): append_run(_prev, _r, log_path=LEDGER_LOG)
             )
@@ -2019,22 +2005,20 @@ def _(ledger_view):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## 티처 포싱 Δ log-우도 (고정 파라미터)
+    ## 티처 포싱 Δ 로그 확률 (고정 파라미터)
 
     **쉽게 말해:** 모델이 방금 생성한 캡션을 고정하고, 각 다음 토큰에 부여하는 조건부
     확률을 연결 차단 전후로 비교합니다. 정답 여부나 보정된 확신을 측정하지는 않습니다.
 
-    위의 문자열 비교는 **직관적이지만 이분법적**입니다. *작은* 효과는 보이지 않고,
-    생성이 어떻게 이어지느냐에 따라 달라집니다. 이 셀은 같은 질문을 **측정**으로
-    바꿉니다. 기준선 캡션을 `answer`로 태그해 다시 입력한 뒤, 그 답변이
+    문자열 유사도는 캡션의 차이를 보여 주지만 토큰 확률의 변화는 보여 주지 않습니다. 기준선 캡션을 `answer`로 태그해 다시 입력한 뒤, 그 답변이
     `KNOCKOUT_RULES`와 같은 타깃 모달리티로부터 차단됐을 때 **그 캡션의 토큰 확률이
     얼마나 달라지는지**를 점수화합니다(같은 클립, 같은 프롬프트, 같은
     레이어 — source만 `answer`가 됩니다. 이제 캡션은 생성물이 아니라 *입력*이기
     때문입니다).
 
-    캡션 토큰마다 **Δ = 녹아웃 − 기준선**이며, *음수 = 덜 믿음 = 뜨거운 색*입니다.
+    캡션 토큰마다 **Δ = 녹아웃 − 기준선**입니다. 붉은색 계열은 음의 Δ, 푸른색 계열은 양의 Δ를 나타냅니다.
     아래 🎯 플레이그라운드 섹션에서는 같은 측정을 여러분의 클립·프롬프트·레이어
-    대역으로 직접 돌려 볼 수 있습니다.
+    구간으로 직접 돌려 볼 수 있습니다.
     """)
     return
 
@@ -2100,14 +2084,14 @@ def guided_tf_panel(
                 mo.hstack([
                     mo.stat(
                         value=f"{_w9_total:+.2f}",
-                        label="Σ Δ log-우도 (nats)",
+                        label="Δ 로그 우도 합계 (nats)",
                         caption="녹아웃 − 기준선 · 음수 = 해당 캡션의 확률 감소",
                         direction="decrease" if _w9_total < 0 else "increase",
                         bordered=True,
                     ),
                     mo.stat(
                         value=f"{w9_tf_result['delta_mean']:+.3f}",
-                        label="토큰당 Δ (nats)",
+                        label="토큰당 평균 Δ 로그 확률 (nats/token)",
                         caption=(
                             "길이로 나눈 값 · 같은 설정의 쌍과 전체 캡션을 함께 비교하세요"
                         ),
@@ -2121,6 +2105,7 @@ def guided_tf_panel(
                         bordered=True,
                     ),
                 ], widths="equal", gap=1),
+                mo.md('<details>\n<summary>해석 도움말</summary>\n\n평균 Δ가 0에 가까워도 토큰별 증가와 감소가 상쇄됐을 수 있습니다. 토큰별 Δ도 함께 확인하세요. 평균은 채점한 모델 토큰 수로 나눈 값이며 특수 토큰도 포함될 수 있습니다.\n\n</details>'),
             ])
     _w9_out
     return (w9_tf_result,)
@@ -2139,15 +2124,13 @@ def guided_tf_threshold(mo, w9_tf_result):
         # Bounds/step/default derived from this caption's own drops, so the drag
         # spans the range in ~300 px and starts with a meaningful set outlined.
         w9_threshold = mo.ui.anywidget(_W9Tangle(
-            suffix=" nats",
+            suffix="",
             **_w9_params(w9_tf_result["caption_tokens"], w9_tf_result["delta"], token_kinds=w9_tf_result.get("caption_token_kinds")),
         ))
         _out = mo.md(
-            '<span style="font-size:1.15rem;font-weight:600">토큰별 Δ log-우도 (표시 단위에 마우스를 올리면 그 토큰들의 nats가 보입니다)</span>\n\n'
-            f"{w9_threshold} 이상 잃은 표시 단위만 표시합니다 — **밑줄 친 숫자를 옆으로 드래그**하거나 "
-            "클릭해서 입력하세요. 임계값을 넘은 표시 단위는 **굵게 테두리**가 생기고 나머지는 "
-            "흐려지므로, 드래그하는 대로 띠가 다시 정렬되는 것이 보입니다. 여기서는 모델을 "
-            "전혀 건드리지 않습니다."
+            '<span style="font-size:1.15rem;font-weight:600">토큰별 Δ 로그 확률 (표시 단위에 마우스를 올리면 그 토큰들의 nats가 보입니다)</span>\n\n'
+            '붉은색 계열은 음의 Δ, 푸른색 계열은 양의 Δ를 나타냅니다.\n\n'
+            f'화면의 한 표시 단위에는 여러 모델 토큰이 묶일 수 있습니다. 색은 그 토큰들의 Δ 합계로 정합니다. 합계가 −{w9_threshold} nats보다 작으면 테두리와 굵은 글씨로 강조하고, 나머지는 흐리게 표시합니다. 숫자를 좌우로 드래그하거나 클릭해 바꾸세요. 강조 표시와 선택된 단위의 집계가 바뀌며, 모델은 다시 실행하지 않습니다.'
         )
     _out
     return (w9_threshold,)
@@ -2177,6 +2160,7 @@ def guided_tf_tokens(mo, selected_drop_share, w9_threshold, w9_tf_result):
                 f"Δ = {sum(_w[1] for _w in _hit):+.2f} nats입니다. 감소한 표시 단위의 총 감소량 중 "
                 f"선택된 단위가 **{_share:.0f}%**를 차지합니다. 색 범위는 모든 실행에서 ±8 nats입니다."
             ),
+            mo.md('<details>\n<summary>해석 도움말</summary>\n\n선택 비율은 Δ 합계가 음수인 표시 단위들의 총 감소량 중, 임계값을 넘어 강조된 단위가 차지하는 비율입니다. ⟨special⟩은 문장 종료 등 특수 토큰이며 별도로 채점합니다. 그 값을 이웃 단어의 의미로 해석하지 마세요.\n\n</details>'),
         ])
     _out
 
@@ -2222,13 +2206,9 @@ def _(
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## 🎛️ 인터랙티브: Logit-lens 다양성 스코어보드
+    ## 🎛️ 인터랙티브: Logit-lens 다양성 결과표
 
-    여기까지는 고정 파라미터로 한 번씩 돌린 것입니다. 이 섹션은 **Logit-lens 다양성**
-    측정을 살아 있는 플레이그라운드로 바꿉니다. 클립, 프레임 수, 프롬프트, 그리고
-    (원한다면) 순전파 **도중에** 적용할 어텐션 녹아웃을 고르고 제출하면, 각 thinker
-    레이어가 오디오 토큰 위치들에서 *서로 다른* 토큰을 몇 개나 디코딩하는지로 점수를
-    매깁니다.
+    클립·프레임 수·프롬프트·차단 규칙을 바꾸며 결과를 비교합니다.
 
     제출을 누르기 전에는 아무것도 실행되지 않으며(컨트롤이 폼으로 감싸여 있습니다),
     녹아웃 실험에서 쓰던 모델을 재사용합니다. 모델을 다시 로드하지는 않지만 새 입력과
@@ -2236,7 +2216,7 @@ def _(mo):
 
     **무엇이 무엇을 움직이는가.** 점수는 **오디오** 토큰 위치에서 측정되고, 그 개수는
     클립의 *재생 시간*으로 고정됩니다. 따라서 `프레임 수`는 **비디오** 토큰 수를 바꿀
-    뿐 "채점한 오디오 토큰" 값은 전혀 움직이지 않습니다 — 그 숫자가 변하기를
+    뿐 "분석한 오디오 토큰 위치 수" 값은 전혀 움직이지 않습니다 — 그 숫자가 변하기를
     기대하며 값을 훑었다면, 고장 난 것이 아닙니다. 아래에 두 개수를 모두 표시하므로
     자신이 무엇을 움직였는지 확인할 수 있습니다.
 
@@ -2272,12 +2252,12 @@ def diversity_form(
     _def_target = KNOCKOUT_RULES[0][1] if KNOCKOUT_RULES else "video"
 
     _hint = (
-        f"source/target ∈ `audio · video · query_text` — 다만 "
-        f"`generated`는 규칙의 *어느 쪽*에 놓이든 여기서는 **작동하지 않고**(순전파 "
-        f"중에는 생성 위치가 존재하지 않습니다), `image`는 영상 클립에서 0 토큰입니다. "
-        f"아무것에도 걸리지 않는 규칙은 실행되지 않고 거부됩니다. 레이어 `end`는 "
-        f"배타적입니다. 이 thinker는 레이어가 **{_n_layers}**개이므로 "
-        f"`[0, {_n_layers})`가 전체를 뜻합니다."
+        f"source/target ∈ <code>audio · video · query_text</code> — 다만 "
+        f"<code>generated</code>는 규칙의 <em>어느 쪽</em>에 놓이든 여기서는 <strong>작동하지 않고</strong>(순전파 "
+        f"중에는 생성 위치가 존재하지 않습니다), <code>image</code>는 영상 클립에서 0 토큰입니다. "
+        f"아무것에도 걸리지 않는 규칙은 실행되지 않고 거부됩니다. 끝 번호는 포함하지 않습니다. "
+        f"이 thinker는 레이어가 <strong>{_n_layers}</strong>개이므로 "
+        f"<code>[0, {_n_layers})</code>가 전체를 뜻합니다."
     )
     _template = (
 
@@ -2288,9 +2268,9 @@ def diversity_form(
         "**기준선도 함께 비교** {compare}\n\n"
         '<details style="margin:0;padding:0 8px">\n'
         '<summary style="padding:6px 0">업로드 · 고급 규칙 · 도움말</summary>\n\n'
-        "`업로드`를 골랐을 때만 파일을 넣으세요. 250 MB / 120초 / 1080p 이하.\n\n"
+        "<code>업로드</code>를 골랐을 때만 파일을 넣으세요. 250 MB / 120초 / 1080p 이하.\n\n"
         "{video}\n\n"
-        "`source,target,start,end` 형식의 규칙 여러 개를 `;`로 구분해 입력합니다. "
+        "<code>source,target,start,end</code> 형식의 규칙 여러 개를 <code>;</code>로 구분해 입력합니다. "
         "채우면 위의 단일 규칙보다 우선합니다.\n\n"
         "{ko_rules_text}\n\n"
         + _hint + "\n\n"
@@ -2326,7 +2306,7 @@ def diversity_form(
         if _v.get("ko_enable") and not (_v.get("ko_rules_text") or "").strip():
             if int(_hi) <= int(_lo):
                 return (
-                    f"[{int(_lo)}, {int(_hi)})는 0개 레이어를 마스킹합니다 — `end`는 배타적입니다."
+                    f"[{int(_lo)}, {int(_hi)})는 0개 레이어를 마스킹합니다 — 끝 번호는 포함하지 않습니다."
                 )
             if _one(_v.get("ko_source")) == "generated" or _one(_v.get("ko_target")) == "generated":
                 return (
@@ -2595,7 +2575,7 @@ def diversity_result_panel(
 
         _rows = []
         for _rank, _i in enumerate(_order, 1):
-            _row = {"순위": _rank, "레이어": _i, "서로 다른 예측": _primary_u[_i]}
+            _row = {"순위": _rank, "레이어": _i, "서로 다른 출력 문자열 수": _primary_u[_i]}
             if _both:
                 _row["기준선"] = _bl_u[_i]
                 _row["Δ (기준선 대비)"] = _ko_u[_i] - _bl_u[_i]
@@ -2608,18 +2588,18 @@ def diversity_result_panel(
             mo.stat(
                 value=f"레이어 {_peak}",
                 label="다양성 최고점",
-                caption=f"서로 다른 예측 {_primary_u[_peak]}개",
+                caption=f"서로 다른 출력 문자열 {_primary_u[_peak]}개",
                 bordered=True,
             ),
             mo.stat(
                 value=f"{sum(_primary_u) / _n_l:.1f}",
-                label="레이어당 평균 고유 예측 수",
+                label="레이어당 평균 출력 문자열 종류 수",
                 caption=f"thinker 레이어 {_n_l}개 전체",
                 bordered=True,
             ),
             mo.stat(
                 value=str(_n_audio),
-                label="채점한 오디오 토큰",
+                label="분석한 오디오 토큰 위치 수",
                 caption="클립 재생 시간으로 고정 — 프레임 수는 이 값을 움직이지 않습니다",
                 bordered=True,
             ),
@@ -2649,19 +2629,19 @@ def diversity_result_panel(
             _axes[0].bar(_x, _ko_u, color="#4C78A8", label="녹아웃")
             _axes[0].plot(_x, _bl_u, color="#F58518", marker="o", ms=3, lw=1.5, label="기준선")
             _axes[0].legend()
-            _axes[0].set(title="레이어별 서로 다른 예측 수",
-                         xlabel="Thinker 레이어", ylabel="서로 다른 예측 수")
+            _axes[0].set(title="레이어별 서로 다른 출력 문자열 수",
+                         xlabel="Thinker 레이어", ylabel="서로 다른 출력 문자열 수")
             _delta = [_ko_u[k] - _bl_u[k] for k in range(_n_l)]
             _axes[1].bar(_x, _delta, color=["#E45756" if d < 0 else "#54A24B" for d in _delta])
             _axes[1].axhline(0, color="black", lw=0.8)
             _axes[1].set(title="Δ 다양성 (녹아웃 − 기준선)",
-                         xlabel="Thinker 레이어", ylabel="Δ 서로 다른 예측 수")
+                         xlabel="Thinker 레이어", ylabel="Δ 서로 다른 출력 문자열 수")
         else:
             _axes[0].bar(_x, _primary_u, color="#4C78A8")
             _axes[0].set(title="레이어별 Logit-lens 다양성",
-                         xlabel="Thinker 레이어", ylabel="서로 다른 예측 수")
+                         xlabel="Thinker 레이어", ylabel="서로 다른 출력 문자열 수")
             _axes[1].plot(_x, _primary_d, marker="o", color="#F58518")
-            _axes[1].set(title="최빈 예측 비율",
+            _axes[1].set(title="최빈 출력 문자열 비율",
                          xlabel="Thinker 레이어", ylabel="비율", ylim=(0, 1))
         for _ax in _axes:
             _ax.grid(axis="y", alpha=0.25)
@@ -2679,11 +2659,15 @@ def diversity_result_panel(
             ),
             mo.hstack(_stats, widths="equal", gap=1),
             _fig,
-            mo.md("<span style=\"font-size:1.15rem;font-weight:600\">디코딩된 예측의 다양성 순으로 정렬한 레이어 (클수록 오디오 토큰 예측이 더 다양함)</span>"),
+            mo.md(
+                '왼쪽은 기준선과 연결 차단 후의 문자열 종류 수입니다. 오른쪽은 차단 후 값에서 기준선 값을 뺀 차이입니다.'
+                if _both else '왼쪽은 레이어별 서로 다른 출력 문자열 수, 오른쪽은 최빈 출력 문자열 비율입니다.'
+            ),
+            mo.md("<span style=\"font-size:1.15rem;font-weight:600\">서로 다른 출력 문자열 수로 정렬한 레이어 (클수록 출력 문자열의 종류가 더 많음)</span>"),
             _table,
             mo.md(
                 "<span style=\"color:#4C78A8;font-weight:600\">다음 →</span> source를 `video`로 바꾸거나, 같은 규칙을 **무음 대조군**에 "
-                "돌려 두 스코어보드를 비교해 보세요."
+                "돌려 두 결과표를 비교해 보세요."
             ),
         ]
         _scoreboard = mo.vstack(_children)
@@ -2736,7 +2720,7 @@ def _(ledger_view):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## 🎯 인터랙티브: 티처 포싱 Δ log-우도
+    ## 🎯 인터랙티브: 티처 포싱 Δ 로그 확률
 
     **질문:** 같은 캡션을 채점할 때, 선택한 직접 어텐션 연결을 차단하면 토큰 확률이
     얼마나 달라질까요? 먼저 모델이 만든 캡션을 고정하고, 기준선과 녹아웃에서 그 캡션을
@@ -2752,7 +2736,7 @@ def _(mo):
 
     **예상과 관측을 구분하세요.** 이 예제에서는 한국어 쌍의 효과가 작고 영어 쌍에서 차이가
     커질 수 있습니다. 직접 재현해 확인하세요. 무음도 표현을 만들므로 Δ=0이 보장되지 않습니다.
-    비슷한 캡션이나 작은 Δ는 **이 설정에서 선택한 직접 연결에 대한 민감도가 작았다**는 결과입니다.
+    평균 Δ가 작다는 것은 이 캡션의 평균 로그 확률 순변화가 작다는 뜻입니다. 토큰별 증가와 감소가 상쇄됐을 수 있으므로 토큰별 Δ도 확인하세요. 캡션이 비슷해도 토큰 확률까지 비슷하다는 뜻은 아닙니다.
     모델이 소리를 전혀 쓰지 않았거나 측정이 완전하다는 증거는 아닙니다. 다른 연결,
     중복된 정보, 문장 내용과 지표의 민감도도 가능한 설명입니다.
 
@@ -2787,17 +2771,18 @@ def tf_form(
     _tf_targets = ["audio", "video", "query_text"]
     _tf_template = (
 
+        '이 실행에서 생성한 캡션을 고정하고, 선택한 직접 어텐션 연결을 차단하기 전후의 토큰 로그 확률을 비교합니다.\n\n'
         "**클립** {clip} · **프레임** {nframes}\n\n"
         "**프롬프트** {prompt}\n\n"
         "**answer** → {target} · 레이어 {layers}\n\n"
         '<details style="margin:0;padding:0 8px">\n'
         '<summary style="padding:6px 0">업로드 · 캡션 상한 · 도움말</summary>\n\n'
-        "**캡션 최대 토큰 수** {max_new_tokens} — 상한에 닿으면 문장이 끊길 수 있습니다.\n\n"
-        "`업로드`를 골랐을 때만 파일을 넣으세요. 250 MB / 120초 / 1080p 이하.\n\n"
+        "<strong>캡션 최대 토큰 수</strong> {max_new_tokens} — 상한에 닿으면 문장이 끊길 수 있습니다.\n\n"
+        "<code>업로드</code>를 골랐을 때만 파일을 넣으세요. 250 MB / 120초 / 1080p 이하.\n\n"
         "{video}\n\n"
-        f"`answer`는 모델 자신의 캡션을 티처 포싱으로 다시 넣은 것입니다. 이 thinker는 "
-        f"레이어가 **{_n_layers}**개이고 `end`는 배타적입니다. 반증 가능한 쪽은 "
-        "`무음 대조군`입니다. 저장소 안에 있으니 업로드하지 말고 이름으로 고르세요.\n\n"
+        f"이 thinker는 레이어가 <strong>{_n_layers}</strong>개입니다. 끝 번호는 포함하지 않습니다.\n\n"
+        '무음 대조군은 원본과 같은 영상에 디지털 무음 오디오를 넣은 클립입니다. 오디오 트랙과 토큰은 그대로 존재합니다. 같은 설정으로 두 클립을 각각 실행하고, 캡션 내용과 Δ를 함께 비교하세요.\n\n'
+        '같은 캡션은 한 실행의 기준선·차단 비교 안에서 고정됩니다. 클립·프롬프트·생성 상한이 달라지면 캡션도 달라질 수 있으며, 토큰당 평균을 비교해도 내용·언어 차이가 통제되지는 않습니다. answer는 채점할 캡션 토큰입니다. 첫 캡션 토큰은 마지막 프롬프트 위치에서 예측되므로 answer만 차단하는 규칙의 직접 영향을 받지 않습니다. query_text에는 질문뿐 아니라 채팅 구조와 특수 토큰도 포함됩니다.\n\n'
         "</details>"
 
     )
@@ -2816,7 +2801,7 @@ def tf_form(
         # `.get` with a default: the batch value is partial on first render.
         _lo, _hi = _v.get("layers") or (0, 1)
         if int(_hi) <= int(_lo):
-            return f"[{int(_lo)}, {int(_hi)})는 0개 레이어를 마스킹합니다 — `end`는 배타적입니다."
+            return f"[{int(_lo)}, {int(_hi)})는 0개 레이어를 마스킹합니다 — 끝 번호는 포함하지 않습니다."
         return None
 
     tf_controls = mo.md(_tf_template).batch(
@@ -2832,7 +2817,7 @@ def tf_form(
         target=mo.ui.dropdown(_tf_targets, value="audio"),
         layers=mo.ui.range_slider(0, _n_layers, step=1, value=[0, _n_layers], show_value=True, full_width=True),
     ).form(
-        submit_button_label="▶ 티처 포싱 Δ log-우도 실행",
+        submit_button_label="▶ 티처 포싱 Δ 로그 확률 실행",
         submit_button_disabled=USE_PRECOMPUTED,
         submit_button_tooltip=(
             "재생 모드에서는 저장된 가이드 결과만 볼 수 있습니다."
@@ -2874,7 +2859,7 @@ def tf_result_panel(
             mo.md(
                 "티처 포싱의 새 측정에는 라이브 모델이 필요합니다. 저장된 다른 예제는 **가이드**에서 볼 수 있습니다."
                 if USE_PRECOMPUTED else
-                "파라미터를 설정하고 **▶ 티처 포싱 Δ log-우도 실행**을 누르세요."
+                "파라미터를 설정하고 **▶ 티처 포싱 Δ 로그 확률 실행**을 누르세요."
             ),
             kind="info",
         )
@@ -2966,22 +2951,28 @@ def tf_result_panel(
                 _tf_stats = [
                     mo.stat(
                         value=f"{_tf_mean:+.3f}",
-                        label="토큰당 Δ (nats)",
+                        label="토큰당 평균 Δ 로그 확률 (nats/token)",
                         caption="길이로 나눈 값 · 같은 설정의 쌍과 캡션 내용도 함께 비교",
                         direction="decrease" if _tf_mean < 0 else "increase",
                         bordered=True,
                     ),
                     mo.stat(
                         value=f"{_tf_total:+.2f}",
-                        label="Σ Δ log-우도 (nats)",
+                        label="Δ 로그 우도 합계 (nats)",
                         caption="녹아웃 − 기준선 · 음수 = 해당 캡션의 확률 감소",
                         direction="decrease" if _tf_total < 0 else "increase",
                         bordered=True,
                     ),
                     mo.stat(
                         value=(_tf_toks[_tf_worst].strip() or "·") if _tf_toks else "—",
-                        label="Δ가 가장 작은 토큰",
-                        caption=(f"Δ = {_tf_delta[_tf_worst]:+.2f} nats" if _tf_delta else ""),
+                        label="Δ가 가장 작은 모델 토큰",
+                        caption=(
+                            f"위치 {_tf_worst} · "
+                            f"{ {'text': '텍스트 조각', 'byte_continuation': '문자 이어짐', 'special': '특수 토큰'}[_tf_res['caption_token_kinds'][_tf_worst]]}"
+                            f" · Δ = {_tf_delta[_tf_worst]:+.2f} nats. "
+                            "한 모델 토큰의 값이며 표시된 글자 전체의 값과 다를 수 있습니다."
+                            if _tf_delta else ""
+                        ),
                         bordered=True,
                     ),
                     mo.stat(
@@ -3003,6 +2994,7 @@ def tf_result_panel(
                                         if _tf_res["generation_truncated"] else "\n\n생성이 끝났습니다.")),
                                kind="warn" if _tf_res["generation_truncated"] else "neutral"),
                     mo.hstack(_tf_stats, widths="equal", gap=1),
+                    mo.md('<details>\n<summary>해석 도움말</summary>\n\n평균 Δ가 0에 가까워도 토큰별 증가와 감소가 상쇄됐을 수 있습니다. 토큰별 Δ도 함께 확인하세요. 평균은 채점한 모델 토큰 수로 나눈 값이며 특수 토큰도 포함될 수 있습니다.\n\n</details>'),
                     mo.md(
                         '<span style="color:#4C78A8;font-weight:600">다음 →</span> 타깃을 `video`로 바꾸거나 레이어를 `[0,12)`로 좁혀 보세요. '
                         "영어로 바꾸면 차이가 날 수 있습니다. 같은 조건의 원본·무음 쌍으로 확인하세요."
@@ -3056,13 +3048,13 @@ def tf_threshold_panel(mo, tf_result):
         from src.teacher_forcing import threshold_slider_params as _tf_params
 
         tf_threshold = mo.ui.anywidget(_TfTangle(
-            suffix=" nats",
+            suffix="",
             **_tf_params(tf_result["caption_tokens"], tf_result["delta"], token_kinds=tf_result.get("caption_token_kinds")),
         ))
         _out = mo.md(
-            '<span style="font-size:1.15rem;font-weight:600">토큰별 Δ log-우도 (뜨거운 색 = 녹아웃 뒤 log-확률 감소. 표시 단위에 마우스를 올리면 그 토큰들의 nats가 보입니다)</span>\n\n'
-            f"{tf_threshold} 이상 잃은 표시 단위만 표시합니다 — **밑줄 친 숫자를 옆으로 드래그**하거나 "
-            "클릭해서 입력하세요. 다시 그려지는 것은 이 띠뿐이며 모델은 건드리지 않습니다."
+            '<span style="font-size:1.15rem;font-weight:600">토큰별 Δ 로그 확률 (표시 단위에 마우스를 올리면 그 토큰들의 nats가 보입니다)</span>\n\n'
+            '붉은색 계열은 음의 Δ, 푸른색 계열은 양의 Δ를 나타냅니다.\n\n'
+            f'화면의 한 표시 단위에는 여러 모델 토큰이 묶일 수 있습니다. 색은 그 토큰들의 Δ 합계로 정합니다. 합계가 −{tf_threshold} nats보다 작으면 테두리와 굵은 글씨로 강조하고, 나머지는 흐리게 표시합니다. 숫자를 좌우로 드래그하거나 클릭해 바꾸세요. 강조 표시와 선택된 단위의 집계가 바뀌며, 모델은 다시 실행하지 않습니다.'
         )
     _out
     return (tf_threshold,)
@@ -3084,7 +3076,7 @@ def tf_tokens_panel(mo, selected_drop_share, tf_result, tf_threshold):
         _share = selected_drop_share(tf_result["caption_tokens"], _delta, _th, token_kinds=tf_result.get("caption_token_kinds"))
         _rows = [
             {"위치": _i, "토큰": _t or ("특수 토큰" if tf_result["caption_token_kinds"][_i] == "special" else "문자 이어짐"),
-             "토큰 종류": tf_result["caption_token_kinds"][_i], "Δ log-우도": round(_d, 3)}
+             "토큰 종류": tf_result["caption_token_kinds"][_i], "Δ 로그 확률 (nats)": round(_d, 3)}
             for _i, (_t, _d) in enumerate(zip(_toks, _delta))
         ]
         _out = mo.vstack([
@@ -3098,6 +3090,7 @@ def tf_tokens_panel(mo, selected_drop_share, tf_result, tf_threshold):
                 f"Δ = {sum(_w[1] for _w in _hit):+.2f} nats입니다. 감소한 표시 단위의 총 감소량 중 "
                 f"선택된 단위가 **{_share:.0f}%**를 차지합니다. 색 범위는 모든 실행에서 ±8 nats입니다."
             ),
+            mo.md('<details>\n<summary>해석 도움말</summary>\n\n선택 비율은 Δ 합계가 음수인 표시 단위들의 총 감소량 중, 임계값을 넘어 강조된 단위가 차지하는 비율입니다. ⟨special⟩은 문장 종료 등 특수 토큰이며 별도로 채점합니다. 그 값을 이웃 단어의 의미로 해석하지 마세요.\n\n</details>'),
             mo.ui.table(_rows, selection=None, pagination=True, page_size=16),
         ])
     _out
@@ -3113,12 +3106,12 @@ def _(mo):
     서로 다른 설정·결과를 기록합니다. **같은 실행은 한 행으로 합치며 판정은 보존합니다.**
     프롬프트·프레임·규칙·캡션 상한·코드/모델 버전이 같은 제공 클립 쌍만 연결됩니다.
     “짝 없음”은 아직 대응 실행이 없다는 뜻입니다. 짝이 있다는 표시도 인과 결론을 보증하지는 않습니다.
-    업로드와 대역의 무효과 예상은 자동으로 검증된 대조군이 되지 않습니다.
+    업로드와 ‘캡션 변화가 작을 것으로 예상’ 기록은 자동으로 검증된 대조군이 되지 않습니다.
 
     **기록할 세 문장:** 무엇을 하나 바꾸었나? 무엇을 관측했나? 같은 결과의 다른 설명은 무엇인가?
     판정은 그 문장에 대해 내립니다. 가설이 없거나 근거가 부족하면 **미검증**을 선택하세요.
 
-    **Markdown는 읽는 제출물, JSON은 전체 결과와 설정을 보존하는 파일**입니다. 두 파일을 함께
+    **Markdown은 읽는 제출물, JSON은 전체 결과와 설정을 보존하는 파일**입니다. 두 파일을 함께
     내려받으세요. 기록표의 저장 상태가 실패/메모리 전용이면 세션 안에서 보이더라도 디스크에
     저장됐다고 가정하지 마세요. 세션 종료 전에 내보내고 실제 파일을 열어 확인하세요.
     """)
@@ -3135,7 +3128,7 @@ def verdict_panel(mo):
         "**실행에 판정 내리기** — 위 기록에서 `id`를 복사해 오세요.\n\n"
         "실행 {run_id}에서 남길 **내 주장 또는 관측**: {claim}\n\n"
         "이 주장에 대한 판정 {verdict}. 지지됨/반박됨에는 주장을 적어야 합니다.\n\n"
-        "같은 숫자를 낳을 수 있는 **경쟁 설명**: {rival}"
+        "같은 관측을 설명할 수 있는 다른 가능한 설명(경쟁 설명): {rival}"
     ).batch(
         run_id=mo.ui.text(placeholder="예: 3f9a1c02"),
         claim=mo.ui.text_area(placeholder="예: 이 설정의 직접 audio 연결 차단에서 캡션 확률 감소가 관측됐다", full_width=True),
@@ -3145,7 +3138,7 @@ def verdict_panel(mo):
              "미검증 (untested)": "untested"},
             value="미검증 (untested)",
         ),
-        rival=mo.ui.text(placeholder="예: 캡션이 그냥 짧아졌을 뿐이다", full_width=True),
+        rival=mo.ui.text(placeholder="관측 결과를 설명할 다른 가능성과 이를 확인할 추가 비교를 적으세요.", full_width=True),
     ).form(submit_button_label="판정 기록", bordered=True)
     verdict_form
     return (verdict_form,)

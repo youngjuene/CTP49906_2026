@@ -92,7 +92,7 @@ def test_native_forms_keep_field_sets_validators_and_submit_gates() -> None:
             "returns": "band_controls",
             "fields": {"target", "layers", "null_band"},
             "validator": "_band_validate",
-            "submit": "▶ 이 대역으로 다시 생성",
+            "submit": "▶ 이 구간으로 다시 생성",
         },
         "diversity_form": {
             "returns": "ko_controls",
@@ -115,7 +115,7 @@ def test_native_forms_keep_field_sets_validators_and_submit_gates() -> None:
             "returns": "tf_controls",
             "fields": {"clip", "video", "nframes", "prompt", "max_new_tokens", "target", "layers"},
             "validator": "_tf_validate",
-            "submit": "▶ 티처 포싱 Δ log-우도 실행",
+            "submit": "▶ 티처 포싱 Δ 로그 확률 실행",
         },
         "verdict_panel": {
             "returns": "verdict_form",

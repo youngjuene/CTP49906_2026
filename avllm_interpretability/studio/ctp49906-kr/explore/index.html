@@ -40,7 +40,7 @@
                 경로 차단
               </button>
               <button type="button" class="method-button" id="method-tf" role="tab" aria-selected="false" aria-controls="method-panel-tf" data-method-target="tf" tabindex="-1">
-                근거 점검
+                캡션 확률 변화
               </button>
             </div>
           </div>
@@ -74,10 +74,10 @@
           <section class="method-panel" id="method-panel-tf" role="tabpanel" aria-labelledby="method-tf" data-method="tf">
             <article class="method-card">
               <div class="method-body method-body--tf">
-                <section class="projection-frame projection-frame--form" aria-label="답변 근거 점검 입력">
+                <section class="projection-frame projection-frame--form" aria-label="캡션 확률 변화 입력">
                   <marimo-cell name="tf_form"></marimo-cell>
                 </section>
-                <section class="projection-frame projection-frame--result projection-frame--result-stack" aria-label="답변 근거 점검 결과">
+                <section class="projection-frame projection-frame--result projection-frame--result-stack" aria-label="캡션 확률 변화 결과">
                   <marimo-cell name="tf_result_panel"></marimo-cell>
                   <details>
                     <summary>표시 임계값과 토큰</summary>
@@ -110,7 +110,7 @@
             <section class="guide-section">
               <div class="section-heading">
                 <p class="section-kicker">가이드 예제</p>
-                <h2>고정 클립과 기본 산출물</h2>
+                <h2>예제 영상과 실행 결과</h2>
                 <p class="muted">아래 산출물은 수업용 기본 예제입니다. 현재 업로드한 실험의 결과로 해석하지 않습니다.</p>
               </div>
               <div class="projection-frame projection-frame--media">
@@ -127,7 +127,7 @@
             <section class="guide-section">
               <div class="section-heading">
                 <p class="section-kicker">프로브와 attention</p>
-                <h2>내용/잡음/해석 한계를 함께 봅니다</h2>
+                <h2>레이어별 프로브 출력과 어텐션 분포</h2>
               </div>
               <div class="projection-frame projection-frame--result">
                 <marimo-cell name="probe_grid_panel"></marimo-cell>
@@ -143,7 +143,7 @@
             <section class="guide-section">
               <div class="section-heading">
                 <p class="section-kicker">teacher forcing</p>
-                <h2>답변 토큰의 점수 변화와 표시 임계값</h2>
+                <h2>같은 캡션의 토큰 확률 비교</h2>
               </div>
               <div class="projection-frame projection-frame--result">
                 <marimo-cell name="guided_tf_panel"></marimo-cell>
@@ -163,7 +163,7 @@
             <section class="evidence-section evidence-section--ledger">
               <div class="section-heading">
                 <p class="section-kicker">실습 기록</p>
-                <h2>제출된 실행과 단위를 확인합니다</h2>
+                <h2>실행 기록과 측정 단위</h2>
               </div>
               <div class="projection-frame projection-frame--result">
                 <marimo-cell name="ledger_panel"></marimo-cell>
@@ -173,7 +173,7 @@
             <section class="evidence-section">
               <div class="section-heading">
                 <p class="section-kicker">결론 기록</p>
-                <h2>verdict와 저장 상태</h2>
+                <h2>판정 기록과 결과 저장</h2>
               </div>
               <div class="projection-frame projection-frame--form">
                 <marimo-cell name="verdict_panel"></marimo-cell>

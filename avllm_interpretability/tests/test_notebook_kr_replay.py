@@ -39,10 +39,17 @@ ATTENTION_PROMPT = "영상에서 보이는 것과 들리는 소리를 설명해 
 
 
 @pytest.fixture(scope="module")
-def replay():
+def replay_figures():
+    return []
+
+
+@pytest.fixture(scope="module")
+def replay(replay_figures):
     import importlib
     import os
     import subprocess
+
+    import matplotlib.pyplot as plt
 
     from marimo._ast.load import load_app
 
@@ -50,19 +57,30 @@ def replay():
     os.chdir(PROJECT)
     try:
         app = load_app(str(NOTEBOOK))
-        outputs, defs = app.run(defs={
-            # the setup cell: every name it defines, so it does not run at all
-            "PROJECT_DIR": PROJECT,
-            "Path": Path,
-            "REPO_DIR": PROJECT.parent,
-            "REPO_REF": "local-checkout",
-            "importlib": importlib,
-            "subprocess": subprocess,
-            "sys": sys,
-            # the replay switch
-            "USE_PRECOMPUTED": True,
-            "PRECOMPUTED_DIR": PACK,
-        })
+        # Figures are now displayed with interpretation help in HTML stacks.
+        # Observe the real plot objects while preserving the actual renderer.
+        original_subplots = plt.subplots
+
+        def collect_subplots(*args, **kwargs):
+            figure, axes = original_subplots(*args, **kwargs)
+            replay_figures.append(figure)
+            return figure, axes
+
+        with pytest.MonkeyPatch.context() as patch:
+            patch.setattr(plt, "subplots", collect_subplots)
+            outputs, defs = app.run(defs={
+                # the setup cell: every name it defines, so it does not run at all
+                "PROJECT_DIR": PROJECT,
+                "Path": Path,
+                "REPO_DIR": PROJECT.parent,
+                "REPO_REF": "local-checkout",
+                "importlib": importlib,
+                "subprocess": subprocess,
+                "sys": sys,
+                # the replay switch
+                "USE_PRECOMPUTED": True,
+                "PRECOMPUTED_DIR": PACK,
+            })
     finally:
         os.chdir(cwd)
     return outputs, defs
@@ -111,9 +129,8 @@ def test_replay_refuses_the_english_pack():
         validate_precompute_meta(english, logit_prompt=LOGIT_PROMPT)
 
 
-def test_the_attention_panels_are_baseline_knockout_and_delta(replay):
-    outputs, _ = replay
-    figures = [o for o in outputs if type(o).__module__.startswith("matplotlib")]
+def test_the_attention_panels_are_baseline_knockout_and_delta(replay, replay_figures):
+    figures = replay_figures
     heatmap = next(
         (f for f in figures if any(ax.get_title() == "녹아웃 실행" for ax in f.axes)),
         None,
@@ -123,9 +140,8 @@ def test_the_attention_panels_are_baseline_knockout_and_delta(replay):
     assert {"기준선 (녹아웃 없음)", "녹아웃 실행", "Δ = 녹아웃 − 기준선"} <= titles
 
 
-def test_the_two_mass_panels_share_one_color_scale(replay):
-    outputs, _ = replay
-    figures = [o for o in outputs if type(o).__module__.startswith("matplotlib")]
+def test_the_two_mass_panels_share_one_color_scale(replay, replay_figures):
+    figures = replay_figures
     heatmap = next(f for f in figures if any(ax.get_title() == "녹아웃 실행" for ax in f.axes))
     clims = [
         ax.images[0].get_clim()
@@ -350,12 +366,11 @@ def test_tf_caption_limit_is_a_submitted_form_setting(replay):
     assert form.validate({**valid, "max_new_tokens": 1024}) is not None
 
 
-def test_korean_figures_render_without_missing_glyphs(replay):
+def test_korean_figures_render_without_missing_glyphs(replay, replay_figures):
     import io
     import warnings
 
-    outputs, _ = replay
-    figures = [o for o in outputs if type(o).__module__.startswith("matplotlib")]
+    figures = replay_figures
     assert figures
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")

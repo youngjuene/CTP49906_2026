@@ -356,13 +356,14 @@ marimo-output {
 @media (min-width: 1000px) {
   .method-body {
     grid-template-columns: minmax(360px, 0.95fr) minmax(420px, 1.05fr);
-    grid-template-rows: minmax(260px, auto);
-    align-items: start;
+    /* Keep long expanded help inside each panel's scroll area. */
+    grid-template-rows: minmax(0, 1fr);
+    align-items: stretch;
   }
 
   .method-body--tf {
     grid-template-columns: minmax(360px, 0.95fr) minmax(420px, 1.05fr);
-    grid-template-rows: minmax(260px, auto);
+    grid-template-rows: minmax(0, 1fr);
   }
 
 }
