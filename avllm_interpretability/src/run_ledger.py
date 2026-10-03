@@ -434,7 +434,7 @@ def render_ledger_html(runs, highlight_ids=(), lang="en"):
         label("condition", "조건"), label("metric", "측정값"),
         label("changed", "바뀐 설정"), label("control", "대조군 / 설정 일치"),
         *([label("prediction", "예측 / 주장·관측")] if show_prediction else []),
-        label("verdict", "판정"), label("save status", "로컬 저장 상태"),
+        label("verdict", "판정"), label("save status", "세션 파일 저장 상태"),
     ]
     rows = [
         "<tr>" + "".join(f'<th style="{th}">{_esc(h)}</th>' for h in heads) + "</tr>"
@@ -486,7 +486,7 @@ def render_ledger_html(runs, highlight_ids=(), lang="en"):
         save_status = r.get("save_status") or {}
         save_state = save_status.get("state", "unknown")
         save_label = {
-            "saved": label("saved locally", "로컬 저장됨"),
+            "saved": label("saved locally", "세션 파일에 저장됨"),
             "failed": label("save failed — retained in memory", "저장 실패 — 메모리에 유지됨"),
             "memory_only": label("memory only", "메모리에만 있음"),
         }.get(save_state, label("not verified", "확인되지 않음"))
