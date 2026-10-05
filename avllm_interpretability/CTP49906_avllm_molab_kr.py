@@ -662,7 +662,7 @@ def _(mo, studio_bundle_status):
 
     # A release identity is explicit; never destroy a student's edited clone.
     import os as _os
-    REPO_REF = _os.environ.get("CTP49906_REPO_REF", "f4a3bf5ec26c1896803c6c60c212932ae56dcfd6")
+    REPO_REF = _os.environ.get("CTP49906_REPO_REF", "409db993bcc041dc63f6929625916e7bfd430328")
     _repo_url = "https://github.com/youngjuene/CTP49906_2026.git"
 
     def _notebook_dir_from_location(location):
@@ -2148,6 +2148,8 @@ def guided_tf_threshold(mo, w9_tf_result):
 def guided_tf_tokens(mo, selected_drop_share, w9_threshold, w9_tf_result):
     if w9_tf_result is None or w9_threshold is None:
         _out = mo.md("> 표시할 티처 포싱 토큰이 아직 없습니다.")
+    elif w9_threshold.value is None:
+        _out = mo.md("> 강조 임계값을 입력하세요. 숫자를 입력하면 토큰 표시가 다시 나타납니다.")
     else:
         from src.teacher_forcing import group_tokens_into_words as _w9_group
         from src.teacher_forcing import render_delta_strip as _w9_strip
@@ -3074,6 +3076,8 @@ def tf_threshold_panel(mo, tf_result):
 def tf_tokens_panel(mo, selected_drop_share, tf_result, tf_threshold):
     if tf_result is None or tf_threshold is None:
         _out = mo.md("> 표시할 티처 포싱 토큰이 아직 없습니다.")
+    elif tf_threshold.value is None:
+        _out = mo.md("> 강조 임계값을 입력하세요. 숫자를 입력하면 토큰 표시가 다시 나타납니다.")
     else:
         from src.teacher_forcing import group_tokens_into_words as _tf_group
         from src.teacher_forcing import render_delta_strip as _tf_strip

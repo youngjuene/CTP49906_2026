@@ -320,3 +320,30 @@ def test_last_run_heading_matches_recorded_inputs_after_draft_changes(tmp_path, 
     assert "unsubmitted draft" not in output.text
     assert "16토큰" in output.text
     assert len(calls["tfd"]) == 1 and len(env["runs"]) == 1
+
+
+@pytest.mark.parametrize("cell,result_key,control_key", [
+    ("tf_tokens_panel", "tf_result", "tf_threshold"),
+    ("guided_tf_tokens", "w9_tf_result", "w9_threshold"),
+])
+def test_cleared_threshold_shows_prompt_and_retyping_restores_counts(cell, result_key, control_key):
+    import torch
+    import CTP49906_avllm_molab_kr as notebook
+    from src.classroom_display import selected_drop_share
+    result = {"caption_tokens": [" low", " high"], "delta": torch.tensor([-1.59, -6.8]),
+              "caption_token_kinds": ["text", "text"]}
+    threshold_cell = "tf_threshold_panel" if cell == "tf_tokens_panel" else "guided_tf_threshold"
+    control = _extract_function(threshold_cell)(marimo, result)[0]
+    control._update(None)
+    output, _ = getattr(notebook, cell).run(**{
+        "mo": marimo, "selected_drop_share": selected_drop_share,
+        result_key: result, control_key: control,
+    })
+    assert "강조 임계값을 입력" in output.text
+    control._update(1.52)
+    output, _ = getattr(notebook, cell).run(**{
+        "mo": marimo, "selected_drop_share": selected_drop_share,
+        result_key: result, control_key: control,
+    })
+    assert "2/2" in output.text
+    assert control.value == 1.52

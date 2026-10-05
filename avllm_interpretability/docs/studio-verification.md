@@ -115,11 +115,11 @@ execution remain separate qualification steps.
 
 ## Classroom interface verification, 2026-10-06
 
-Helper revision: `f4a3bf5ec26c1896803c6c60c212932ae56dcfd6`.
+Helper revision: `409db993bcc041dc63f6929625916e7bfd430328`.
 Python 3.12, marimo 0.25.0, marimo-studio 0.2.3. The earlier dated
 checks above describe their own source/runtime; they are not fresh release evidence.
 
-- CPU suite: 339 passed. Includes real notebook execution-boundary checks,
+- CPU suite: 341 passed. Includes real notebook execution-boundary checks,
   last-result ID/config consistency, threshold value round-trip, host theme
   resolution and exact UTF-8 download callback payloads.
 - Official marimo check and Studio static validation/build passed (24 projections).
@@ -132,6 +132,9 @@ checks above describe their own source/runtime; they are not fresh release evide
   -0.454 nats/token and -9.08 nats total. Threshold 1.52 selected 2/17 units
   (-8.40 nats, 87% of negative mass); 0 selected 9/17 (-9.68, 100%);
   7.14 selected none. Re-entering 1.52 preserved it and ArrowUp gave 1.53.
+  Final review also caught an empty number-input exception. Both the explorer
+  and guide now show an input prompt on clear and recover 2/17, -8.40 nats,
+  87% after entering 1.52 again; confirmed in Chrome with the actual display cells.
 - Expanded TF details followed the full result height with an 8px gap.
   Long token strips wrapped without horizontal overflow.
 - A separate exact-source CPU replay used a copy of the 17-run ledger.
@@ -139,7 +142,9 @@ checks above describe their own source/runtime; they are not fresh release evide
   (112px frame, 100px cell, no clipped content); a valid annotation updated
   the ledger and reported a saved session file. The original evidence was untouched.
 - Probe foreground became #1f2328 on the light Studio surface, and Home
-  changed the visible layer summary. Both theme precedence directions are unit tested.
+  changed the visible layer summary. Both theme resolution directions are unit tested. An actual-CSS Chrome
+  fixture with conflicting ancestor themes returned #1f2328 for a light widget
+  and #e7eaee for a dark widget; the widget theme now wins the CSS cascade.
 - The bundled 10-second MP4 loaded with readyState 4, played and sought in
   Chrome after conversion to an inline video URI.
 
