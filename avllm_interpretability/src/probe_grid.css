@@ -41,9 +41,9 @@
 
 /* marimo sets its theme with an attribute/class on the document root, which
  * beats prefers-color-scheme when the user has picked one explicitly. */
-html.dark .ctp-probe-grid,
-body.dark .ctp-probe-grid,
-[data-theme="dark"] .ctp-probe-grid,
+:where(html.dark) .ctp-probe-grid,
+:where(body.dark) .ctp-probe-grid,
+:where([data-theme="dark"]) .ctp-probe-grid,
 .ctp-probe-grid[data-theme="dark"] {
   --ctp-pg-content: #2dd4bf;
   --ctp-pg-junk: #40464f;
@@ -54,8 +54,9 @@ body.dark .ctp-probe-grid,
   --ctp-pg-pin: #fbbf24;
 }
 
-html.light .ctp-probe-grid,
-[data-theme="light"] .ctp-probe-grid,
+:where(html.light) .ctp-probe-grid,
+:where(body.light) .ctp-probe-grid,
+:where([data-theme="light"]) .ctp-probe-grid,
 .ctp-probe-grid[data-theme="light"] {
   --ctp-pg-content: #0f766e;
   --ctp-pg-junk: #c3c8d0;
