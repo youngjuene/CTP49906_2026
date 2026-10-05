@@ -1,3 +1,14 @@
+// Resolve the effective host theme across an anywidget shadow boundary.
+export function syncTheme(el) {
+  const scheme = getComputedStyle(el).colorScheme.trim();
+  const roots = [el.ownerDocument.documentElement, el.ownerDocument.body].filter(Boolean);
+  const explicit = roots.map(root => root.dataset.theme ||
+    (root.classList.contains("dark") ? "dark" : root.classList.contains("light") ? "light" : ""))
+    .find(theme => theme === "light" || theme === "dark");
+  el.dataset.theme = (scheme === "light" || scheme === "dark") ? scheme :
+    explicit || (typeof matchMedia === "function" && matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+}
+
 // probe_grid.js -- the whole 36 x 248 logit-lens probe surface at once.
 //
 // Plain ES2020, zero imports: molab's CSP blocks third-party hosts, so no React,
@@ -314,6 +325,7 @@ function build(model, el) {
   }
 
   function draw() {
+    syncTheme(el);
     const ctx = layout();
     const pal = readPalette(el);
     ctx.clearRect(0, 0, cssW, cssH);
@@ -626,10 +638,16 @@ function build(model, el) {
   let themeObserver = null;
   if (typeof MutationObserver === "function") {
     themeObserver = new MutationObserver(schedule);
-    themeObserver.observe(document.documentElement, {
+    themeObserver.observe(el.ownerDocument.documentElement, {
       attributes: true,
       attributeFilter: ["class", "data-theme", "style"],
     });
+    if (el.ownerDocument.body) {
+      themeObserver.observe(el.ownerDocument.body, {
+        attributes: true,
+        attributeFilter: ["class", "data-theme", "style"],
+      });
+    }
   }
   const media =
     typeof matchMedia === "function" ? matchMedia("(prefers-color-scheme: dark)") : null;
@@ -659,6 +677,7 @@ function build(model, el) {
 
 export function render({ model, el }) {
   el.classList.add("ctp-probe-grid");
+  syncTheme(el);
   let teardown = null;
 
   const rebuild = () => {

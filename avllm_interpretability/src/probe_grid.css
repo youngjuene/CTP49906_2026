@@ -43,7 +43,8 @@
  * beats prefers-color-scheme when the user has picked one explicitly. */
 html.dark .ctp-probe-grid,
 body.dark .ctp-probe-grid,
-[data-theme="dark"] .ctp-probe-grid {
+[data-theme="dark"] .ctp-probe-grid,
+.ctp-probe-grid[data-theme="dark"] {
   --ctp-pg-content: #2dd4bf;
   --ctp-pg-junk: #40464f;
   --ctp-pg-undecodable: #f87171;
@@ -54,7 +55,8 @@ body.dark .ctp-probe-grid,
 }
 
 html.light .ctp-probe-grid,
-[data-theme="light"] .ctp-probe-grid {
+[data-theme="light"] .ctp-probe-grid,
+.ctp-probe-grid[data-theme="light"] {
   --ctp-pg-content: #0f766e;
   --ctp-pg-junk: #c3c8d0;
   --ctp-pg-undecodable: #dc2626;

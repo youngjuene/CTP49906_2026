@@ -345,3 +345,44 @@ if __name__ == "__main__":
             print("FAIL", fn.__name__, "->", type(e).__name__, e)
     print(f"\n{len(fns) - fails} passed, {fails} failed")
     sys.exit(1 if fails else 0)
+
+
+def test_effective_theme_overrides_os_across_shadow_boundary(tmp_path):
+    """Studio's light host must remain readable when the OS prefers dark."""
+    import shutil
+    import subprocess
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("theme boundary test requires Node")
+    module = tmp_path / "probe_grid.mjs"
+    module.write_bytes(JS_PATH.read_bytes())
+    script = """
+import {syncTheme} from './probe_grid.mjs';
+import assert from 'node:assert/strict';
+const root = {dataset: {}, classList: {contains: () => false}};
+const el = {dataset: {}, ownerDocument: {documentElement: root, body: null}};
+let scheme = 'light';
+let osDark = true;
+globalThis.getComputedStyle = () => ({colorScheme: scheme});
+globalThis.matchMedia = () => ({matches: osDark});
+syncTheme(el);
+assert.equal(el.dataset.theme, 'light');
+scheme = 'dark'; osDark = false;
+syncTheme(el);
+assert.equal(el.dataset.theme, 'dark');
+scheme = 'normal'; root.dataset.theme = 'light'; osDark = true;
+syncTheme(el);
+assert.equal(el.dataset.theme, 'light');
+root.dataset.theme = 'dark'; osDark = false;
+syncTheme(el);
+assert.equal(el.dataset.theme, 'dark');
+root.dataset.theme = ''; scheme = 'normal';
+syncTheme(el);
+assert.equal(el.dataset.theme, 'light');
+osDark = true;
+syncTheme(el);
+assert.equal(el.dataset.theme, 'dark');
+"""
+    test_file = tmp_path / "theme.mjs"
+    test_file.write_text(script)
+    subprocess.run([node, str(test_file)], check=True, capture_output=True, text=True)

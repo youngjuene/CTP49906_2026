@@ -218,7 +218,8 @@ def render_delta_strip(
             f'<span title="{title}" '
             f'style="background:{bg};{emphasis}padding:1px 2px;border-radius:2px">{shown}</span>'
         )
-    return "".join(spans)
+    # Break between display units without splitting the token attribution.
+    return "<wbr>".join(spans)
 
 
 def threshold_slider_params(caption_tokens, delta, target_fraction=0.25, token_kinds=None):

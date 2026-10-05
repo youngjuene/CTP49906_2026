@@ -217,11 +217,11 @@ marimo-output:focus-visible,
 
 .method-body {
   height: 100%;
-  grid-template-rows: minmax(0, 4fr) minmax(90px, 1fr);
+  grid-template-rows: minmax(180px, 1fr) minmax(300px, 1fr);
 }
 
 .method-body--tf {
-  grid-template-rows: minmax(0, 4fr) minmax(104px, 1fr);
+  grid-template-rows: minmax(180px, 1fr) minmax(300px, 1fr);
 }
 
 .section-heading {
@@ -245,6 +245,11 @@ marimo-output:focus-visible,
   padding: 4px 8px;
 }
 
+.projection-frame--feedback {
+  padding: 6px 8px;
+  overflow-wrap: anywhere;
+}
+
 .projection-frame--form {
   overflow: auto;
   border-color: var(--border-strong);
@@ -257,6 +262,8 @@ marimo-output:focus-visible,
 
 .projection-frame--result-stack {
   display: grid;
+  grid-auto-rows: max-content;
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
   align-content: start;
 }
@@ -279,6 +286,8 @@ marimo-output:focus-visible,
 
 .result-detail-stack {
   display: grid;
+  grid-auto-rows: max-content;
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
   margin-top: 8px;
 }
@@ -379,7 +388,27 @@ marimo-output {
   }
 }
 
+@media (max-height: 680px), (max-width: 430px) {
+  #panel-explore {
+    overflow: auto;
+    grid-template-rows: auto auto;
+    align-content: start;
+  }
+  .method-panel, .method-card, .method-body {
+    height: auto;
+  }
+  .method-body, .method-body--tf {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto;
+  }
+  .projection-frame--form { max-height: 420px; }
+  .projection-frame--result { min-height: 300px; max-height: 65dvh; }
+}
+
 @media (max-width: 430px) {
+  .top-tabs { height: auto; }
+  #panel-explore { grid-template-rows: auto auto; }
+  .method-header { min-height: 42px; }
   body {
     font-size: 14px;
   }

@@ -51,7 +51,7 @@ def studio_files(mo):
         if _location is None:
             raise ValueError("노트북을 저장한 뒤 셀을 다시 실행하세요.")
         studio_bundle_status = _restore_studio_bundle(_location, _payload, "{digest}")
-        _message = "Studio 보기 파일을 준비했습니다. Molab의 Studio에서 explore 보기를 여세요."
+        _message = "Studio 보기 파일을 준비했습니다. Studio를 지원하는 서버에서 explore 보기를 여세요. Molab에 Studio 메뉴가 없으면 기본 노트북 화면을 사용하세요."
         _kind = "info"
     except (ValueError, OSError) as _error:
         studio_bundle_status = {{"error": str(_error)}}
