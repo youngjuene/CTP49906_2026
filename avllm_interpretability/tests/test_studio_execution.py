@@ -276,3 +276,47 @@ def test_tf_result_panel_reuses_caption_cache_by_budget_and_logs_run_config(
     assert env["runs"][-1]["extra"]["delta_mean"] == -0.5
     assert env["runs"][-1]["extra"]["n_tokens"] == 2
     assert env["runs"][-1]["extra"]["caption_text"] == "cow bell"
+
+
+@pytest.mark.parametrize("cell,result_key", [
+    ("tf_threshold_panel", "tf_result"),
+    ("guided_tf_threshold", "w9_tf_result"),
+])
+def test_threshold_retyping_displayed_value_does_not_snap_or_launch_inference(cell, result_key):
+    import torch
+    from src.classroom_display import selected_drop_share
+    result = {
+        "caption_tokens": [" low", " high"],
+        "delta": torch.tensor([-1.59, -6.8]),
+        "caption_token_kinds": ["text", "text"],
+    }
+    control = _extract_function(cell)(marimo, result)[0]
+    # The native number value is scalar and round-trips at its displayed precision.
+    assert isinstance(control.value, (float, int))
+    assert control.value == 6.73
+    control._update(6.73)
+    assert control.value == 6.73
+    tokens_cell = "tf_tokens_panel" if cell == "tf_threshold_panel" else "guided_tf_tokens"
+    result["caption_text"] = "low high"
+    for value in (0.0, 6.73, 7.14):
+        control._update(value)
+        _extract_function(tokens_cell)(**{
+            "mo": marimo, "selected_drop_share": selected_drop_share,
+            result_key: result,
+            "tf_threshold" if cell == "tf_threshold_panel" else "w9_threshold": control,
+        })
+        assert control.value == value
+
+
+def test_last_run_heading_matches_recorded_inputs_after_draft_changes(tmp_path, monkeypatch):
+    import CTP49906_avllm_molab_kr as notebook
+    calls = _install_heavy_boundary_fakes(monkeypatch)
+    env = _base_kwargs(tmp_path, controls_value=_submitted_value(prompt="submitted", max_new_tokens=16))
+    output, _ = notebook.tf_result_panel.run(**env["kwargs"])
+    run = env["runs"][0]
+    env["kwargs"]["tf_controls"].value = _submitted_value(prompt="unsubmitted draft", max_new_tokens=64)
+    assert run["run_id"] in output.text
+    assert "submitted" in output.text
+    assert "unsubmitted draft" not in output.text
+    assert "16토큰" in output.text
+    assert len(calls["tfd"]) == 1 and len(env["runs"]) == 1

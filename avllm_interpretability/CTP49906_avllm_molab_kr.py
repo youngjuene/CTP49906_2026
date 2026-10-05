@@ -107,81 +107,83 @@ def studio_files(mo):
         return {"root": str(root), "written": pending, "bundle": expected_digest}
 
     _payload = (
-        "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"
+        "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"
     )
     try:
         _location = mo.notebook_location()
         if _location is None:
             raise ValueError("노트북을 저장한 뒤 셀을 다시 실행하세요.")
-        studio_bundle_status = _restore_studio_bundle(_location, _payload, "36163ed86d3dd89c978f5af060c984d16df16153692736817e0cd9bbc0e393f3")
-        _message = "Studio 보기 파일을 준비했습니다. Molab의 Studio에서 explore 보기를 여세요."
+        studio_bundle_status = _restore_studio_bundle(_location, _payload, "21716541277a65e7f1e17ff1ce0ec577876c173b9b6c01061b8fdbfe5b56f58d")
+        _message = "Studio 보기 파일을 준비했습니다. Studio를 지원하는 서버에서 explore 보기를 여세요. Molab에 Studio 메뉴가 없으면 기본 노트북 화면을 사용하세요."
         _kind = "info"
     except (ValueError, OSError) as _error:
         studio_bundle_status = {"error": str(_error)}
@@ -648,7 +650,7 @@ def _(mo, studio_bundle_status):
         # supplied them — so the banner is where their absence would show up.
         for _dist in ("torch", "torchvision", "transformers", "accelerate", "numpy",
                       "matplotlib", "librosa", "audioread", "av", "qwen-omni-utils",
-                      "marimo", "wigglystuff", "anywidget"):
+                      "marimo", "marimo-studio", "wigglystuff", "anywidget"):
             try:
                 _report.append(f"{_dist}={importlib.metadata.version(_dist)}")
             except importlib.metadata.PackageNotFoundError:
@@ -660,7 +662,7 @@ def _(mo, studio_bundle_status):
 
     # A release identity is explicit; never destroy a student's edited clone.
     import os as _os
-    REPO_REF = _os.environ.get("CTP49906_REPO_REF", "e3c640bd5a5ccbc90b3b645888972c2459d64e69")
+    REPO_REF = _os.environ.get("CTP49906_REPO_REF", "f4a3bf5ec26c1896803c6c60c212932ae56dcfd6")
     _repo_url = "https://github.com/youngjuene/CTP49906_2026.git"
 
     def _notebook_dir_from_location(location):
@@ -956,7 +958,11 @@ def _(mo):
 
 @app.cell
 def clip_preview(VIDEO_PATH, mo):
-    mo.video(src=VIDEO_PATH.read_bytes(), width=640)
+    import base64 as _video_base64
+
+    # The small bundled clip is self-contained across Studio's projection route.
+    _video_uri = "data:video/mp4;base64," + _video_base64.b64encode(VIDEO_PATH.read_bytes()).decode("ascii")
+    mo.video(src=_video_uri, width="100%")
     return
 
 
@@ -1780,7 +1786,8 @@ def token_census(Counter, attention_token_types, mo):
 
 
 @app.cell
-def band_form(KNOCKOUT_RULES, USE_PRECOMPUTED, attention_model, mo):
+def band_form(ATTENTION_PROMPT, KNOCKOUT_RULES, MAX_NEW_TOKENS, NFRAMES, USE_PRECOMPUTED, VIDEO_PATH, attention_model, mo):
+    from html import escape as _band_escape
     _band_layers = len(attention_model.thinker.model.layers)
     _band_targets = ["video", "audio", "query_text"]
     _band_default = KNOCKOUT_RULES[0][1] if KNOCKOUT_RULES else "video"
@@ -1801,6 +1808,9 @@ def band_form(KNOCKOUT_RULES, USE_PRECOMPUTED, attention_model, mo):
 
     band_controls = mo.md(
 
+        "**설정 변경 후 실행을 눌러 적용하세요.** 결과에는 마지막 실행에 사용한 설정이 표시됩니다.\n\n"
+        f"**공통 입력** · 클립 <code>{_band_escape(VIDEO_PATH.name)}</code> · {NFRAMES}프레임 · 캡션 상한 {MAX_NEW_TOKENS}토큰\n\n"
+        f"**프롬프트** {_band_escape(ATTENTION_PROMPT)}\n\n"
         "generated → {target} · 레이어 {layers}\n\n"
         "{null_band} **캡션 변화가 작을 것으로 예상**\n\n"
         "<details>\n"
@@ -1926,6 +1936,8 @@ def band_result_panel(
         _unchanged = _band_ans.strip() == _base_ans.strip()
         _band_out = mo.vstack([
             mo.md(
+                f"**클립** `{VIDEO_PATH.name}` · **프레임 수** {NFRAMES} · **캡션 상한** {MAX_NEW_TOKENS}토큰\n\n"
+                f"**프롬프트** {ATTENTION_PROMPT}\n\n"
                 f"**녹아웃** `generated→{_bp['target']}` **[{_lo}, {_hi})** "
                 f"&nbsp;·&nbsp; 전체 {len(attention_model.thinker.model.layers)}개 중 "
                 f"{_hi - _lo}개 레이어 차단"
@@ -1950,7 +1962,7 @@ def band_result_panel(
                     ),
                     bordered=True,
                 ),
-            ], widths="equal", gap=1),
+            ], widths="equal", gap=1, wrap=True),
             mo.md(
                 "**기준선**(왼쪽) vs **이 구간**(오른쪽) — "
                 '공통 구절에 마우스를 올리면 해당 부분이 강조됩니다. 강조되지 않은 부분도 두 캡션에서 직접 비교하세요.'
@@ -1965,31 +1977,30 @@ def band_result_panel(
         ])
         # Record it. `set_runs` is a SetFunctor, not the State object, so a cell
         # that only *sets* never re-runs itself — this append cannot re-trigger
-        # the generation above. `run_record(...)` is bound as a default argument
-        # so it evaluates here, in the GPU cell, leaving `prev` as the only lazy
-        # input to the lambda.
+        # the generation above. Build the record here, then capture it in the
+        # updater so only the previous ledger is evaluated lazily.
         try:
-            set_runs(
-                lambda _prev, _r=run_record(
-                    kind="band_sweep",
-                    condition=f"generated→{_bp['target']} [{_lo},{_hi})",
-                    metric_name="caption_similarity",
-                    metric_value=round(_ratio, 4),
-                    metric_unit="ratio",
-                    # Every input that can move the number belongs in `config`:
-                    # `run_id` digests config *and* metric, so an input left out
-                    # produces a second row with a different number, an identical
-                    # `condition`, and an empty `changed` column — two runs that
-                    # look controlled and are not.
-                    config=experiment_config(
-                        VIDEO_PATH, nframes=NFRAMES, prompt=ATTENTION_PROMPT,
-                        target=_bp["target"], start=_lo, end=_hi, max_new_tokens=MAX_NEW_TOKENS,
-                    ),
-                    is_control=False,
-                    note="연결 차단 후 캡션 변화가 작을 것으로 예상한 레이어 구간" if _bp.get("null_band") else "",
-                    extra={"baseline_caption": _base_ans, "knockout_caption": _band_ans},
-                ): append_run(_prev, _r, log_path=LEDGER_LOG)
+            _record = run_record(
+                kind="band_sweep",
+                condition=f"generated→{_bp['target']} [{_lo},{_hi})",
+                metric_name="caption_similarity",
+                metric_value=round(_ratio, 4),
+                metric_unit="ratio",
+                # Every input that can move the number belongs in `config`:
+                # `run_id` digests config *and* metric, so an input left out
+                # produces a second row with a different number, an identical
+                # `condition`, and an empty `changed` column — two runs that
+                # look controlled and are not.
+                config=experiment_config(
+                    VIDEO_PATH, nframes=NFRAMES, prompt=ATTENTION_PROMPT,
+                    target=_bp["target"], start=_lo, end=_hi, max_new_tokens=MAX_NEW_TOKENS,
+                ),
+                is_control=False,
+                note="연결 차단 후 캡션 변화가 작을 것으로 예상한 레이어 구간" if _bp.get("null_band") else "",
+                extra={"baseline_caption": _base_ans, "knockout_caption": _band_ans},
             )
+            set_runs(lambda _prev, _r=_record: append_run(_prev, _r, log_path=LEDGER_LOG))
+            _band_out = mo.vstack([mo.md(f"**마지막 실행 결과 · ID** <code>{_record['run_id']}</code>"), _band_out])
         except Exception as _le:  # noqa: BLE001 — a ledger bug must never eat a run
             print("ledger append failed:", type(_le).__name__, _le)
     _band_out
@@ -2104,7 +2115,7 @@ def guided_tf_panel(
                         caption="greedy 기준선, 티처 포싱",
                         bordered=True,
                     ),
-                ], widths="equal", gap=1),
+                ], widths="equal", gap=1, wrap=True),
                 mo.md('<details>\n<summary>해석 도움말</summary>\n\n평균 Δ가 0에 가까워도 토큰별 증가와 감소가 상쇄됐을 수 있습니다. 토큰별 Δ도 함께 확인하세요. 평균은 채점한 모델 토큰 수로 나눈 값이며 특수 토큰도 포함될 수 있습니다.\n\n</details>'),
             ])
     _w9_out
@@ -2117,20 +2128,17 @@ def guided_tf_threshold(mo, w9_tf_result):
     if w9_tf_result is None:
         _out = mo.md("> 티처 포싱 결과가 아직 없어 토큰 임계값을 표시하지 않습니다.")
     else:
-        from wigglystuff import TangleSlider as _W9Tangle
-
         from src.teacher_forcing import threshold_slider_params as _w9_params
 
-        # Bounds/step/default derived from this caption's own drops, so the drag
-        # spans the range in ~300 px and starts with a meaningful set outlined.
-        w9_threshold = mo.ui.anywidget(_W9Tangle(
-            suffix="",
-            **_w9_params(w9_tf_result["caption_tokens"], w9_tf_result["delta"], token_kinds=w9_tf_result.get("caption_token_kinds")),
-        ))
+        _params = _w9_params(w9_tf_result["caption_tokens"], w9_tf_result["delta"], token_kinds=w9_tf_result.get("caption_token_kinds"))
+        w9_threshold = mo.ui.number(
+            start=0.0, stop=_params["max_value"], step=10 ** (-_params["digits"]),
+            value=_params["amount"], label="강조 임계값 (nats)",
+        )
         _out = mo.md(
             '<span style="font-size:1.15rem;font-weight:600">토큰별 Δ 로그 확률 (표시 단위에 마우스를 올리면 그 토큰들의 nats가 보입니다)</span>\n\n'
             '붉은색 계열은 음의 Δ, 푸른색 계열은 양의 Δ를 나타냅니다.\n\n'
-            f'화면의 한 표시 단위에는 여러 모델 토큰이 묶일 수 있습니다. 색은 그 토큰들의 Δ 합계로 정합니다. 합계가 −{w9_threshold} nats보다 작으면 테두리와 굵은 글씨로 강조하고, 나머지는 흐리게 표시합니다. 숫자를 좌우로 드래그하거나 클릭해 바꾸세요. 강조 표시와 선택된 단위의 집계가 바뀌며, 모델은 다시 실행하지 않습니다.'
+            f'화면의 한 표시 단위에는 여러 모델 토큰이 묶일 수 있습니다. 색은 그 토큰들의 Δ 합계로 정합니다. 합계가 −{w9_threshold} nats보다 작으면 테두리와 굵은 글씨로 강조하고, 나머지는 흐리게 표시합니다. 숫자를 직접 입력하거나 방향키로 바꾸세요. 강조 표시와 선택된 단위의 집계가 바뀌며, 모델은 다시 실행하지 않습니다.'
         )
     _out
     return (w9_threshold,)
@@ -2145,7 +2153,7 @@ def guided_tf_tokens(mo, selected_drop_share, w9_threshold, w9_tf_result):
         from src.teacher_forcing import render_delta_strip as _w9_strip
 
         _delta = [float(_x) for _x in w9_tf_result["delta"].detach().cpu().float().tolist()]
-        _th = abs(float(w9_threshold.value.get("amount", 0.0)))
+        _th = abs(float(w9_threshold.value))
         _words = _w9_group(w9_tf_result["caption_tokens"], _delta, token_kinds=w9_tf_result.get("caption_token_kinds"))
         _hit = [_w for _w in _words if _w[1] < -_th]
         _share = selected_drop_share(w9_tf_result["caption_tokens"], _delta, _th, token_kinds=w9_tf_result.get("caption_token_kinds"))
@@ -2261,18 +2269,19 @@ def diversity_form(
     )
     _template = (
 
+        "**설정 변경 후 실행을 눌러 적용하세요.** 결과에는 마지막 실행에 사용한 설정이 표시됩니다.\n\n"
         "**클립** {clip} · **프레임** {nframes}\n\n"
 
         "**프롬프트** {prompt}\n\n"
         "**녹아웃** {ko_enable} · {ko_source} → {ko_target} · 레이어 {ko_layers}\n\n"
         "**기준선도 함께 비교** {compare}\n\n"
+        "**고급 규칙** {ko_rules_text}\n\n"
+        "녹아웃을 켠 상태에서 고급 규칙을 채우면 위의 단일 규칙보다 우선합니다. 비우면 위 설정을 사용합니다. "
+        "<code>source,target,start,end</code> 형식으로 쓰고 여러 규칙은 <code>;</code>로 구분하세요.\n\n"
         '<details style="margin:0;padding:0 8px">\n'
-        '<summary style="padding:6px 0">업로드 · 고급 규칙 · 도움말</summary>\n\n'
+        '<summary style="padding:6px 0">업로드 · 도움말</summary>\n\n'
         "<code>업로드</code>를 골랐을 때만 파일을 넣으세요. 250 MB / 120초 / 1080p 이하.\n\n"
         "{video}\n\n"
-        "<code>source,target,start,end</code> 형식의 규칙 여러 개를 <code>;</code>로 구분해 입력합니다. "
-        "채우면 위의 단일 규칙보다 우선합니다.\n\n"
-        "{ko_rules_text}\n\n"
         + _hint + "\n\n"
         "</details>"
     )
@@ -2657,7 +2666,7 @@ def diversity_result_panel(
                 + f" &nbsp;·&nbsp; **프레임 수** {_nframes} "
                 f"&nbsp;·&nbsp; **프롬프트** _{_prompt}_ &nbsp;·&nbsp; **녹아웃** {_rule_txt}"
             ),
-            mo.hstack(_stats, widths="equal", gap=1),
+            mo.hstack(_stats, widths="equal", gap=1, wrap=True),
             _fig,
             mo.md(
                 '왼쪽은 기준선과 연결 차단 후의 문자열 종류 수입니다. 오른쪽은 차단 후 값에서 기준선 값을 뺀 차이입니다.'
@@ -2683,28 +2692,28 @@ def diversity_result_panel(
                 _metric = (
                     "mean_unique_per_layer", round(sum(_primary_u) / _n_l, 3), "unique preds"
                 )
-            set_runs(
-                lambda _prev, _r=run_record(
-                    kind="diversity",
-                    condition=(
-                        " + ".join(f"{r[0]}→{r[1]} [{r[2]},{r[3]})" for r in _rules)
-                        if _rules else "기준선 (녹아웃 없음)"
-                    ),
-                    metric_name=_metric[0],
-                    metric_value=_metric[1],
-                    metric_unit=_metric[2],
-                    config=experiment_config(
-                        _video_path, nframes=_nframes, prompt=_prompt,
-                        rules=[list(r) for r in _rules], compare=_compare,
-                    ),
-                    is_control=_is_control,
-                    extra={"audio_tokens": _n_audio, "peak_layer": _peak,
-                           "baseline_unique": _bl_u, "knockout_unique": _ko_u,
-                           "baseline_dominance": _bl_d, "knockout_dominance": _ko_d,
-                           "layers": _rows,
-                           "measurement": "decoded raw-probe top-1 string diversity; not model quality"},
-                ): append_run(_prev, _r, log_path=LEDGER_LOG)
+            _record = run_record(
+                kind="diversity",
+                condition=(
+                    " + ".join(f"{r[0]}→{r[1]} [{r[2]},{r[3]})" for r in _rules)
+                    if _rules else "기준선 (녹아웃 없음)"
+                ),
+                metric_name=_metric[0],
+                metric_value=_metric[1],
+                metric_unit=_metric[2],
+                config=experiment_config(
+                    _video_path, nframes=_nframes, prompt=_prompt,
+                    rules=[list(r) for r in _rules], compare=_compare,
+                ),
+                is_control=_is_control,
+                extra={"audio_tokens": _n_audio, "peak_layer": _peak,
+                       "baseline_unique": _bl_u, "knockout_unique": _ko_u,
+                       "baseline_dominance": _bl_d, "knockout_dominance": _ko_d,
+                       "layers": _rows,
+                       "measurement": "decoded raw-probe top-1 string diversity; not model quality"},
             )
+            set_runs(lambda _prev, _r=_record: append_run(_prev, _r, log_path=LEDGER_LOG))
+            _scoreboard = mo.vstack([mo.md(f"**마지막 실행 결과 · ID** <code>{_record['run_id']}</code>"), _scoreboard])
         except Exception as _le:  # noqa: BLE001 — a ledger bug must never eat a run
             print("ledger append failed:", type(_le).__name__, _le)
     _scoreboard
@@ -2772,6 +2781,7 @@ def tf_form(
     _tf_template = (
 
         '이 실행에서 생성한 캡션을 고정하고, 선택한 직접 어텐션 연결을 차단하기 전후의 토큰 로그 확률을 비교합니다.\n\n'
+        "**설정 변경 후 실행을 눌러 적용하세요.** 결과에는 마지막 실행에 사용한 설정이 표시됩니다.\n\n"
         "**클립** {clip} · **프레임** {nframes}\n\n"
         "**프롬프트** {prompt}\n\n"
         "**answer** → {target} · 레이어 {layers}\n\n"
@@ -2988,12 +2998,13 @@ def tf_result_panel(
                         + (" _(무음 대조군)_" if _tf_is_control else "")
                         + f" &nbsp;·&nbsp; **프레임 수** {_tf_nframes} "
                         f"&nbsp;·&nbsp; **프롬프트** _{_tf_prompt}_ &nbsp;·&nbsp; **녹아웃** {_tf_rule_txt}"
+                        f" &nbsp;·&nbsp; **캡션 상한** {_tf_max_tokens}토큰"
                     ),
                     mo.callout(mo.md("**채점한 전체 캡션**\n\n" + _tf_res["caption_text"]
                                      + (f"\n\n⚠ 최대 {_tf_max_tokens}토큰에 도달했습니다. 문장이 미완성일 수 있습니다."
                                         if _tf_res["generation_truncated"] else "\n\n생성이 끝났습니다.")),
                                kind="warn" if _tf_res["generation_truncated"] else "neutral"),
-                    mo.hstack(_tf_stats, widths="equal", gap=1),
+                    mo.hstack(_tf_stats, widths="equal", gap=1, wrap=True),
                     mo.md('<details>\n<summary>해석 도움말</summary>\n\n평균 Δ가 0에 가까워도 토큰별 증가와 감소가 상쇄됐을 수 있습니다. 토큰별 Δ도 함께 확인하세요. 평균은 채점한 모델 토큰 수로 나눈 값이며 특수 토큰도 포함될 수 있습니다.\n\n</details>'),
                     mo.md(
                         '<span style="color:#4C78A8;font-weight:600">다음 →</span> 타깃을 `video`로 바꾸거나 레이어를 `[0,12)`로 좁혀 보세요. '
@@ -3001,36 +3012,36 @@ def tf_result_panel(
                     ),
                 ])
                 try:
-                    set_runs(
-                        lambda _prev, _r=run_record(
-                            kind="teacher_forcing",
-                            condition=f"answer→{_tp['target']} [{_tf_lo},{_tf_hi})",
-                            # Δ/token, not Σ: the control and the experiment score
-                            # different captions of different lengths, so the total is not
-                            # the comparable quantity — logging Σ as the headline would
-                            # rebuild the exact confusion this section exists to remove.
-                            metric_name="delta_per_token",
-                            metric_value=_tf_mean,
-                            metric_unit="nats/token",
-                            config=experiment_config(
-                                _tf_video, nframes=_tf_nframes, prompt=_tf_prompt,
-                                target=_tp["target"], start=_tf_lo, end=_tf_hi,
-                                max_new_tokens=_tf_max_tokens,
-                            ),
-                            is_control=_tf_is_control,
-                            extra={"delta_total": _tf_total, "delta_mean": _tf_mean,
-                                   "n_tokens": len(_tf_toks), "caption_text": _tf_res["caption_text"],
-                                   "caption_ids": _tf_res["caption_ids"][0].detach().cpu().tolist(),
-                                   "caption_tokens": _tf_toks, "caption_token_kinds": _tf_res["caption_token_kinds"],
-                                   "delta": _tf_delta,
-                                   "baseline_logprobs": _tf_res["baseline_logprobs"].detach().cpu().tolist(),
-                                   "knockout_logprobs": _tf_res["knockout_logprobs"].detach().cpu().tolist(),
-                                   "baseline_distribution": _tf_res["baseline_distribution"],
-                                   "knockout_distribution": _tf_res["knockout_distribution"],
-                                   "generation_truncated": _tf_res["generation_truncated"],
-                                   "generation_end_reason": _tf_res["generation_end_reason"]},
-                        ): append_run(_prev, _r, log_path=LEDGER_LOG)
+                    _record = run_record(
+                        kind="teacher_forcing",
+                        condition=f"answer→{_tp['target']} [{_tf_lo},{_tf_hi})",
+                        # Δ/token, not Σ: the control and the experiment score
+                        # different captions of different lengths, so the total is not
+                        # the comparable quantity — logging Σ as the headline would
+                        # rebuild the exact confusion this section exists to remove.
+                        metric_name="delta_per_token",
+                        metric_value=_tf_mean,
+                        metric_unit="nats/token",
+                        config=experiment_config(
+                            _tf_video, nframes=_tf_nframes, prompt=_tf_prompt,
+                            target=_tp["target"], start=_tf_lo, end=_tf_hi,
+                            max_new_tokens=_tf_max_tokens,
+                        ),
+                        is_control=_tf_is_control,
+                        extra={"delta_total": _tf_total, "delta_mean": _tf_mean,
+                               "n_tokens": len(_tf_toks), "caption_text": _tf_res["caption_text"],
+                               "caption_ids": _tf_res["caption_ids"][0].detach().cpu().tolist(),
+                               "caption_tokens": _tf_toks, "caption_token_kinds": _tf_res["caption_token_kinds"],
+                               "delta": _tf_delta,
+                               "baseline_logprobs": _tf_res["baseline_logprobs"].detach().cpu().tolist(),
+                               "knockout_logprobs": _tf_res["knockout_logprobs"].detach().cpu().tolist(),
+                               "baseline_distribution": _tf_res["baseline_distribution"],
+                               "knockout_distribution": _tf_res["knockout_distribution"],
+                               "generation_truncated": _tf_res["generation_truncated"],
+                               "generation_end_reason": _tf_res["generation_end_reason"]},
                     )
+                    set_runs(lambda _prev, _r=_record: append_run(_prev, _r, log_path=LEDGER_LOG))
+                    _tf_out = mo.vstack([mo.md(f"**마지막 실행 결과 · ID** <code>{_record['run_id']}</code>"), _tf_out])
                 except Exception as _le:  # noqa: BLE001 — a ledger bug must never eat a run
                     print("ledger append failed:", type(_le).__name__, _le)
     _tf_out
@@ -3043,18 +3054,17 @@ def tf_threshold_panel(mo, tf_result):
     if tf_result is None:
         _out = mo.md("> 실행 결과가 아직 없어 토큰 임계값을 표시하지 않습니다.")
     else:
-        from wigglystuff import TangleSlider as _TfTangle
-
         from src.teacher_forcing import threshold_slider_params as _tf_params
 
-        tf_threshold = mo.ui.anywidget(_TfTangle(
-            suffix="",
-            **_tf_params(tf_result["caption_tokens"], tf_result["delta"], token_kinds=tf_result.get("caption_token_kinds")),
-        ))
+        _params = _tf_params(tf_result["caption_tokens"], tf_result["delta"], token_kinds=tf_result.get("caption_token_kinds"))
+        tf_threshold = mo.ui.number(
+            start=0.0, stop=_params["max_value"], step=10 ** (-_params["digits"]),
+            value=_params["amount"], label="강조 임계값 (nats)",
+        )
         _out = mo.md(
             '<span style="font-size:1.15rem;font-weight:600">토큰별 Δ 로그 확률 (표시 단위에 마우스를 올리면 그 토큰들의 nats가 보입니다)</span>\n\n'
             '붉은색 계열은 음의 Δ, 푸른색 계열은 양의 Δ를 나타냅니다.\n\n'
-            f'화면의 한 표시 단위에는 여러 모델 토큰이 묶일 수 있습니다. 색은 그 토큰들의 Δ 합계로 정합니다. 합계가 −{tf_threshold} nats보다 작으면 테두리와 굵은 글씨로 강조하고, 나머지는 흐리게 표시합니다. 숫자를 좌우로 드래그하거나 클릭해 바꾸세요. 강조 표시와 선택된 단위의 집계가 바뀌며, 모델은 다시 실행하지 않습니다.'
+            f'화면의 한 표시 단위에는 여러 모델 토큰이 묶일 수 있습니다. 색은 그 토큰들의 Δ 합계로 정합니다. 합계가 −{tf_threshold} nats보다 작으면 테두리와 굵은 글씨로 강조하고, 나머지는 흐리게 표시합니다. 숫자를 직접 입력하거나 방향키로 바꾸세요. 강조 표시와 선택된 단위의 집계가 바뀌며, 모델은 다시 실행하지 않습니다.'
         )
     _out
     return (tf_threshold,)
@@ -3070,7 +3080,7 @@ def tf_tokens_panel(mo, selected_drop_share, tf_result, tf_threshold):
 
         _delta = [float(_x) for _x in tf_result["delta"].detach().cpu().float().tolist()]
         _toks = tf_result["caption_tokens"]
-        _th = abs(float(tf_threshold.value.get("amount", 0.0)))
+        _th = abs(float(tf_threshold.value))
         _words = _tf_group(_toks, _delta, token_kinds=tf_result.get("caption_token_kinds"))
         _hit = [_w for _w in _words if _w[1] < -_th]
         _share = selected_drop_share(tf_result["caption_tokens"], _delta, _th, token_kinds=tf_result.get("caption_token_kinds"))
@@ -3200,10 +3210,11 @@ def worksheet_panel(get_runs, mo, run_provenance, worksheet_md):
                         label=f"⬇ 읽는 워크시트 ({len(_runs)}건)"),
             mo.download(lambda _snapshot=_json: _snapshot.encode("utf-8"), filename="lab_evidence.json", mimetype="application/json",
                         label=f"⬇ 전체 설정·캡션·토큰 결과 JSON ({len(_runs)}건)"),
-        ]),
+        ], wrap=True),
         mo.accordion({"Markdown 보기 · 다운로드가 안 되면 복사": _md_preview,
                       "JSON 보기 · 다운로드가 안 되면 복사": _json_preview}),
-        mo.md("파일을 열어 실행 ID·클립·프롬프트·캡션이 있는지 확인하세요. JSON은 원본 영상 파일을 포함하지 않습니다."),
+        mo.md("파일을 열어 실행 ID·클립·프롬프트·캡션이 있는지 확인하세요. JSON은 원본 영상 파일을 포함하지 않습니다. "
+              "기록은 현재 세션 파일에 저장됩니다. Mirror 새로고침이나 새 세션에서 복원된다고 가정하지 말고, 종료 전에 두 파일을 보관하세요."),
     ], gap=0.5)
     return
 

@@ -125,17 +125,38 @@ def test_idle_verdict_handler_has_visible_output_without_writing(tmp_path):
     assert "판정 기록" in output.text
 
 
-def test_worksheet_export_uses_safe_lazy_markdown_and_json_downloads() -> None:
-    source = _function_source("worksheet_panel")
+def test_worksheet_download_callbacks_capture_exact_utf8_evidence(monkeypatch):
+    import asyncio
+    import base64
+    import json
+    import CTP49906_avllm_molab_kr as notebook
+    from src.run_ledger import build_worksheet_md, run_record
+    from marimo._plugins.stateless.download import EmptyArgs
 
-    assert "build_evidence_json" in source
-    assert "run_provenance" in source
-    assert source.count("mo.download(") == 2
-    assert "lambda _snapshot=_md" in source
-    assert "lambda _snapshot=_json" in source
-    assert 'filename="lab_log.md"' in source
-    assert 'filename="lab_evidence.json"' in source
-    assert 'mimetype="text/markdown"' in source
-    assert 'mimetype="application/json"' in source
-    assert "_escape(_md)" in source
-    assert "_escape(_json)" in source
+    run = run_record(kind="teacher_forcing", condition="answer→audio [0,36)",
+        metric_name="delta_per_token", metric_value=-0.5, metric_unit="nats/token",
+        config={"prompt": "<script>한글</script>", "clip": "02321.mp4"})
+    runs = [run]
+    provenance = {"repo_revision": "qa-example"}
+    downloads = []
+    original_download = marimo.download
+    def capture_download(*args, **kwargs):
+        widget = original_download(*args, **kwargs)
+        downloads.append(widget)
+        return widget
+    monkeypatch.setattr(marimo, "download", capture_download)
+    output, _ = notebook.worksheet_panel.run(
+        get_runs=lambda: runs, mo=marimo, run_provenance=provenance,
+        worksheet_md=build_worksheet_md,
+    )
+    # Exercise the real lazy callback used by the native download control.
+    payloads = {}
+    for widget in downloads:
+        response = asyncio.run(widget._load(EmptyArgs()))
+        payloads[response.filename] = base64.b64decode(response.data.split(",", 1)[1]).decode("utf-8")
+    assert set(payloads) == {"lab_log.md", "lab_evidence.json"}
+    assert payloads["lab_log.md"] == build_worksheet_md(runs)
+    evidence = json.loads(payloads["lab_evidence.json"])
+    assert evidence["runs"] == [dict(run, matched_control_ids=[])]
+    assert evidence["provenance"] == provenance
+    assert "<script>한글</script>" not in output.text

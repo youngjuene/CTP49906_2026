@@ -111,3 +111,52 @@ It does not constitute an authenticated Molab session test or live GPU benchmark
 
 These merge checks used local CPU replay. Authenticated Molab and live GPU
 execution remain separate qualification steps.
+
+
+## Classroom interface verification, 2026-10-06
+
+Helper revision: `f4a3bf5ec26c1896803c6c60c212932ae56dcfd6`.
+Python 3.12, marimo 0.25.0, marimo-studio 0.2.3. The earlier dated
+checks above describe their own source/runtime; they are not fresh release evidence.
+
+- CPU suite: 339 passed. Includes real notebook execution-boundary checks,
+  last-result ID/config consistency, threshold value round-trip, host theme
+  resolution and exact UTF-8 download callback payloads.
+- Official marimo check and Studio static validation/build passed (24 projections).
+- Chrome computer-use tested the actual split Studio and standalone view.
+  At 1280×800, the split view was 617px wide and the result frame was 300px
+  high including borders. At 390px, page width equalled viewport width;
+  42px tabs fit the 55px header.
+- An isolated display fixture replayed the saved 17 GPU runs from October 4.
+  Its forms could not start inference. TF run b49a9ede kept its recorded
+  -0.454 nats/token and -9.08 nats total. Threshold 1.52 selected 2/17 units
+  (-8.40 nats, 87% of negative mass); 0 selected 9/17 (-9.68, 100%);
+  7.14 selected none. Re-entering 1.52 preserved it and ArrowUp gave 1.53.
+- Expanded TF details followed the full result height with an 8px gap.
+  Long token strips wrapped without horizontal overflow.
+- A separate exact-source CPU replay used a copy of the 17-run ledger.
+  Draft values survived navigation. Invalid-ID feedback was fully visible
+  (112px frame, 100px cell, no clipped content); a valid annotation updated
+  the ledger and reported a saved session file. The original evidence was untouched.
+- Probe foreground became #1f2328 on the light Studio surface, and Home
+  changed the visible layer summary. Both theme precedence directions are unit tested.
+- The bundled 10-second MP4 loaded with readyState 4, played and sought in
+  Chrome after conversion to an inline video URI.
+
+### Remaining release gates
+
+The authenticated Molab Mirror tab reported `kernel not found`. Its view
+menu offered Preview, Code, WebAssembly and Server, without Studio. No fresh
+Molab Studio/GPU pass is claimed. A hosting server must activate Studio;
+installing/importing a package or restoring view files alone does not do that.
+
+Native download callbacks return distinct, complete Markdown/JSON payloads.
+Chrome download-completion events did not arrive in this check, so actual
+file download/reopen remains unverified. The JSON copy preview did open with
+all 17 runs. Native downloads are retained; no alternate custom download
+protocol or browser security setting was introduced.
+
+Mirror refresh previously started an empty ledger. Saving/forking a notebook
+and reconnecting to a new sandbox still needs a durability check. The interface
+states the current-session scope and asks students to export before leaving.
+These gates prevent calling this an end-to-end Molab classroom release.
