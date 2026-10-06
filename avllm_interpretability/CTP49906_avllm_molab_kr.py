@@ -691,9 +691,51 @@ def _(mo, studio_bundle_status):
         repo_dir = notebook_dir / "CTP49906_2026"
         project_dir = repo_dir / "avllm_interpretability"
         if repo_dir.exists() and not (repo_dir / ".git").is_dir():
-            raise RuntimeError(
-                f"{repo_dir}가 이미 있지만 git checkout이 아닙니다. 안전하게 덮어쓰지 않습니다."
-            )
+            # Molab may restore ordinary files into a new sandbox without .git.
+            # Compare against an isolated checkout before changing anything in
+            # the restored directory. Keep all results and student additions.
+            if (repo_dir.is_symlink() or (repo_dir / ".git").exists()
+                    or (repo_dir / ".git").is_symlink() or not _has_project_files(project_dir)):
+                raise RuntimeError(
+                    f"{repo_dir}가 이미 있지만 git checkout이 아닙니다. 안전하게 덮어쓰지 않습니다."
+                )
+            import filecmp
+            import shutil
+            import tempfile
+
+            with tempfile.TemporaryDirectory(prefix=".ctp-recover-", dir=notebook_dir) as _tmp:
+                _clean = Path(_tmp) / "checkout"
+                runner(["git", "clone", "--depth", "1", "--no-checkout", repo_url, str(_clean)], check=True)
+                runner(["git", "-C", str(_clean), "fetch", "--depth", "1", "origin", repo_ref], check=True)
+                runner(["git", "-C", str(_clean), "checkout", "--detach", repo_ref], check=True)
+                _tracked = _run_text(["git", "-C", str(_clean), "ls-files", "-z"], runner).split("\0")
+                _missing = []
+                for _relative in filter(None, _tracked):
+                    _source, _target = _clean / _relative, repo_dir / _relative
+                    _parents = list(_target.relative_to(repo_dir).parents)[:-1]
+                    _unsafe_parent = any(
+                        (repo_dir / _part).is_symlink()
+                        or ((repo_dir / _part).exists() and not (repo_dir / _part).is_dir())
+                        for _part in _parents
+                    )
+                    if _source.is_symlink() or _target.is_symlink() or _unsafe_parent:
+                        raise RuntimeError(f"복원된 경로를 안전하게 확인할 수 없습니다: {_relative}")
+                    if _target.exists():
+                        if not _target.is_file() or not filecmp.cmp(_source, _target, shallow=False):
+                            raise RuntimeError(
+                                f"복원된 파일이 고정 버전과 다릅니다: {_relative}. 변경한 파일을 보존하며 복구를 중단합니다."
+                            )
+                    else:
+                        _missing.append((_source, _target))
+                # Validation is complete. Restore missing tracked files only;
+                # exclusive creation also refuses an intervening student edit.
+                for _source, _target in _missing:
+                    _target.parent.mkdir(parents=True, exist_ok=True)
+                    with _source.open("rb") as _input, _target.open("xb") as _output:
+                        shutil.copyfileobj(_input, _output)
+                    shutil.copystat(_source, _target)
+                (_clean / ".git").rename(repo_dir / ".git")
+            return project_dir, {"mode": "checkout-restored", "repo_dir": repo_dir, "ref": repo_ref}
 
         if repo_dir.exists():
             _head = _run_text(["git", "-C", str(repo_dir), "rev-parse", "HEAD"], runner)

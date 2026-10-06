@@ -1,11 +1,12 @@
 """Startup helper contracts for the Korean Studio notebook.
 
-The tests extract only nested helper functions from the setup cell. They never
-execute package installation, media shims, git, or marimo.
+The tests extract only nested helper functions from the setup cell. Recovery
+tests use small local Git repositories; no package installation or network.
 """
 
 import ast
 import os
+import shutil
 import subprocess
 import textwrap
 from pathlib import Path
@@ -151,6 +152,75 @@ def test_unowned_existing_bootstrap_directory_is_refused(tmp_path: Path) -> None
     with pytest.raises(RuntimeError, match="git checkout이 아닙니다"):
         resolve(tmp_path, runner=runner)
     assert runner.calls == []
+
+
+@pytest.fixture
+def restored_checkout(tmp_path):
+    upstream = tmp_path / "upstream"
+    upstream.mkdir()
+    subprocess.run(["git", "init", "-q", str(upstream)], check=True)
+    project = upstream / "avllm_interpretability"
+    (project / "src").mkdir(parents=True)
+    (project / "assets").mkdir()
+    (project / "src" / "helper.py").write_text("VALUE = 1\n")
+    (project / "assets" / "clip.mp4").write_bytes(b"public fixture")
+    (upstream / ".gitignore").write_text("results/\n")
+    subprocess.run(["git", "-C", str(upstream), "add", "."], check=True)
+    subprocess.run(["git", "-C", str(upstream), "-c", "user.name=QA", "-c",
+                    "user.email=qa@example.invalid", "commit", "-qm", "fixture"], check=True)
+    revision = subprocess.check_output(["git", "-C", str(upstream), "rev-parse", "HEAD"], text=True).strip()
+    notebook_dir = tmp_path / "notebook"
+    restored = notebook_dir / "CTP49906_2026"
+    shutil.copytree(upstream, restored, ignore=shutil.ignore_patterns(".git", ".gitignore"))
+    results = restored / "avllm_interpretability" / "results"
+    results.mkdir()
+    (results / "lab_evidence.json").write_text('{"runs":[{"run_id":"saved"}]}')
+    return notebook_dir, restored, upstream, revision
+
+
+def test_restored_checkout_recovers_git_without_losing_results(restored_checkout):
+    notebook_dir, restored, upstream, revision = restored_checkout
+    project, status = _helpers()["_resolve_project_dir"](
+        notebook_dir, repo_ref=revision, repo_url=str(upstream))
+    assert project == restored / "avllm_interpretability"
+    assert status["mode"] == "checkout-restored"
+    assert (project / "results" / "lab_evidence.json").read_text() == '{"runs":[{"run_id":"saved"}]}'
+    assert (restored / ".gitignore").read_text() == "results/\n"
+    assert subprocess.check_output(["git", "-C", str(restored), "rev-parse", "HEAD"], text=True).strip() == revision
+    assert subprocess.check_output(["git", "-C", str(restored), "diff", "HEAD"], text=True) == ""
+
+
+def test_restored_checkout_refuses_changed_source_without_mutation(restored_checkout):
+    notebook_dir, restored, upstream, revision = restored_checkout
+    changed = restored / "avllm_interpretability" / "src" / "helper.py"
+    changed.write_text("VALUE = 'student edit'\n")
+    with pytest.raises(RuntimeError):
+        _helpers()["_resolve_project_dir"](notebook_dir, repo_ref=revision, repo_url=str(upstream))
+    assert changed.read_text() == "VALUE = 'student edit'\n"
+    assert not (restored / ".git").exists()
+    assert not (restored / ".gitignore").exists()
+
+
+def test_restored_checkout_refuses_symlinked_source_directory(restored_checkout):
+    notebook_dir, restored, upstream, revision = restored_checkout
+    source = restored / "avllm_interpretability" / "src"
+    outside = notebook_dir / "student-source"
+    source.rename(outside)
+    source.symlink_to(outside, target_is_directory=True)
+    with pytest.raises(RuntimeError):
+        _helpers()["_resolve_project_dir"](notebook_dir, repo_ref=revision, repo_url=str(upstream))
+    assert source.is_symlink()
+    assert (outside / "helper.py").read_text() == "VALUE = 1\n"
+    assert not (restored / ".git").exists()
+
+
+def test_restored_checkout_preserves_dangling_git_link(restored_checkout):
+    notebook_dir, restored, upstream, revision = restored_checkout
+    git_link = restored / ".git"
+    git_link.symlink_to(notebook_dir / "missing-student-git")
+    with pytest.raises(RuntimeError):
+        _helpers()["_resolve_project_dir"](notebook_dir, repo_ref=revision, repo_url=str(upstream))
+    assert git_link.is_symlink()
 
 
 def test_replay_env_override_is_developer_opt_in_only() -> None:

@@ -148,20 +148,61 @@ checks above describe their own source/runtime; they are not fresh release evide
 - The bundled 10-second MP4 loaded with readyState 4, played and sought in
   Chrome after conversion to an inline video URI.
 
-### Remaining release gates
+### Follow-up: authenticated Molab GPU, 2026-10-06
 
-The authenticated Molab Mirror tab reported `kernel not found`. Its view
-menu offered Preview, Code, WebAssembly and Server, without Studio. No fresh
-Molab Studio/GPU pass is claimed. A hosting server must activate Studio;
+An immutable Mirror of `a09713f` was forked into an owned notebook. Run all
+completed on an RTX Pro 6000 Blackwell (95 GiB reported), torch 2.11.0+cu130,
+marimo 0.25.1, helper revision `409db99`. All 15 planned interactive conditions
+completed. A keyboard-focus correction produced one additional recorded run;
+the 16 records were retained. English-original audio knockout measured
+-0.453897 nats/token, while its matched silent control measured +0.003223.
+These are observed values for this runtime, not acceptance targets.
+
+The same TF inputs reproduced the same ID without adding a ledger row.
+Threshold 0 selected 9/17 displayed units; the maximum selected 0/17. Clearing
+either threshold showed the input prompt, and restoring 1.52 kept that exact
+interactive value. Invalid prompts, missing uploads, empty layer ranges and
+malformed/inert advanced rules were refused; valid inputs recovered. An empty
+claim was refused and a complete QA claim/verdict/rival was saved.
+
+The official copy previews preserved the full JSON and Markdown. Reopened
+local copies passed 444 content/coverage checks, including matching Markdown
+and JSON, all 15 conditions, arithmetic, token alignment and annotation. They
+are **preview copies**, not proof of a native browser download. Download-click
+and `downloadMedia` completion checks timed out; this gate remains open.
+
+Opening the owned notebook in another tab kept the same sandbox and all 16
+records. A compute change created a different sandbox and exposed a startup
+failure: Molab restored the project files without `.git`. Setup now compares
+those files against an isolated checkout of the pinned revision, restores
+missing tracked files and Git metadata, and preserves additional files. It
+refuses differing files and symlinked paths. The live failed sandbox then
+reported `checkout-restored`. Its ledger started with 0 records, so this is
+startup recovery, **not durable experiment storage**. Keep both exports before
+changing compute or ending a session.
+
+The final recovery copy was run again on a fresh RTX Pro 6000 sandbox. Setup
+reported `checkout-restored`; the GPU banner confirmed the device and all four
+guided completion signals returned without cell exceptions. The final local
+suite passed 345 tests. During compute changes, the RTX selection label could
+remain visible while `torch.cuda.is_available()` was false. Explicitly changing
+the selection from None to RTX before saving allocated a new GPU sandbox; use
+the runtime GPU banner as evidence, rather than the selection label alone.
+
+### Remaining release gates (updated 2026-10-06)
+
+The owned Molab GPU notebook reported `marimo-studio=MISSING`; its Present as
+menu offered app view, Vertical, Grid and Slides. Fresh native GPU QA passed,
+but no Molab Studio/GPU pass is claimed. A hosting server must activate Studio;
 installing/importing a package or restoring view files alone does not do that.
 
 Native download callbacks return distinct, complete Markdown/JSON payloads.
 Chrome download-completion events did not arrive in this check, so actual
-file download/reopen remains unverified. The JSON copy preview did open with
-all 17 runs. Native downloads are retained; no alternate custom download
+file download/reopen remains unverified. The fresh JSON/Markdown copy previews
+contained all 16 runs and passed content validation. Native downloads are retained; no alternate custom download
 protocol or browser security setting was introduced.
 
-Mirror refresh previously started an empty ledger. Saving/forking a notebook
-and reconnecting to a new sandbox still needs a durability check. The interface
-states the current-session scope and asks students to export before leaving.
+Both Mirror refresh and the owned notebook's new sandbox started an empty
+ledger. The interface states the current-session scope and asks students to
+export before leaving; an owned/forked notebook does not guarantee saved runs.
 These gates prevent calling this an end-to-end Molab classroom release.
