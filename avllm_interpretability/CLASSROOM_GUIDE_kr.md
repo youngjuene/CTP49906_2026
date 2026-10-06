@@ -4,6 +4,15 @@
 
 ## 수업 전에
 
+**2026-10-06 Studio 배포 상태:** 학생 각자의 Fork와 GPU로 기본 노트북 실험을
+진행한 기록은 있지만, 같은 개인 Molab의 **Studio HTML 입력 → 새 GPU 계산 →
+HTML 결과 갱신**은 아직 검증되지 않았습니다. 이 상태를 Studio 수업 배포 완료로
+취급하지 않습니다. 학생마다 터널을 설치하게 하는 방식도 배포 절차에 포함하지 않습니다.
+호스트는 호환되는 Studio/marimo를 서버 시작 전에 활성화하고, 보기 파일·인증·
+HTTP/WebSocket 경로를 제공해야 합니다. 운영자용 `scripts/launch_studio.py`는
+파일 준비와 별도 서버 실행을 돕지만 기존 Molab 관리 서버를 바꾸지는 않습니다.
+최신 근거와 남은 조건은 [Studio 검증 기록](docs/studio-verification.md)에 있습니다.
+
 배포 경로는 [한국어 노트북(main)](https://github.com/youngjuene/CTP49906_2026/blob/main/avllm_interpretability/CTP49906_avllm_molab_kr.py)입니다. 2026-09-14 GPU QA와 같은 소스로 수업하려면 [검증한 불변 버전](https://github.com/youngjuene/CTP49906_2026/blob/61d540d01d6ed9ca46e98933ad961238dbfbeba8/avllm_interpretability/CTP49906_avllm_molab_kr.py)을 Mirror → Fork하세요. 이전 Fork를 사용하는 학생은 결과를 먼저 보관하고 이 버전으로 새 사본을 만듭니다.
 
 이번 버전은 RTX Pro 6000에서 Run all과 인터랙티브 실험 7건, 잘못된 입력 후 회복, 브라우저 재연결과 커널 재시작 후 기록 복구를 확인했습니다. [전체 QA 기록](QA_IMPROVEMENTS.md)에 근거가 있습니다. 학생 장치의 다운로드 파일 수신, 서버 종료/재생성, 학급 동시 GPU 할당, 최대 입력의 메모리 사용은 아직 확인하지 못했습니다.

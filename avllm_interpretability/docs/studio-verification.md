@@ -1,7 +1,8 @@
 # Korean Molab Studio verification
 
-The supported product flow is a Korean notebook with an HTML Studio view beside
-it. Native controls submit to the same Python kernel; display tabs never submit
+The intended product flow is a Korean notebook with an HTML Studio view beside
+it. The local Studio implementation is verified; hosted personal Molab/GPU
+integration remains an open release gate. Native controls submit to the same Python kernel; display tabs never submit
 an experiment. The main notebook carries a generated, integrity-checked bundle
 of the view so a single-file upload does not depend on unpublished view files.
 
@@ -24,9 +25,18 @@ updates owned, unedited files and refuses to replace local edits.
 
 ## Runtime checks
 
-Use a fresh Molab session with the uploaded `.py`, attach a GPU for live work,
-and run setup. Confirm the Studio toolbar/view opens beside the notebook and
-all three modes are reachable. For GPU-free checking, set `USE_PRECOMPUTED`
+Prepare the view files before starting a compatible hosting server. A notebook
+cell restoring files after the first request is insufficient for initial view
+discovery. In a provisioned environment, use `python scripts/launch_studio.py`;
+use `--prepare-only` for a host's pre-start hook. The launcher retains the
+current interpreter/torch via `--no-sandbox`, requires marimo 0.25.0 and Studio
+0.2.3, validates/builds the view, and starts an authenticated loopback server.
+It does not configure Molab's managed server or its public proxy.
+
+For personal Molab qualification, attach a GPU to an owned notebook and confirm
+that the host exposes the actual Studio view with all three modes. Do not infer
+support from successful package imports. For GPU-free checking, pass `--replay`
+to the launcher, or set `USE_PRECOMPUTED`
 to `True` in the configuration cell; the developer-only environment variable
 `CTP49906_REPLAY=1` provides the same setting for automated verification.
 
@@ -206,3 +216,82 @@ Both Mirror refresh and the owned notebook's new sandbox started an empty
 ledger. The interface states the current-session scope and asks students to
 export before leaving; an owned/forked notebook does not guarantee saved runs.
 These gates prevent calling this an end-to-end Molab classroom release.
+
+## Upstream source audit and startup repair, 2026-10-06
+
+Audited the official repository at
+[`851a98b9fe61e18103d691a45ba8c8c6d2e8d325`](https://github.com/marimo-team/marimo-studio/tree/851a98b9fe61e18103d691a45ba8c8c6d2e8d325),
+including middleware, extension entry points, compatibility metadata, authoring
+APIs, view projections and hosting documentation. Runtime verification used
+the installed Studio 0.2.3 release, not the unreleased main checkout.
+
+### Findings and changes
+
+1. **The HTML implementation follows Studio's state model.** It mounts 24
+   named complete-cell hosts once inside `#app-shell`. Native marimo forms own
+   input submission and Python dependencies own results. View JavaScript only
+   changes visibility/navigation; it does not implement a second RPC channel.
+2. **Single-file first launch had a preparation-order gap.** The view was
+   restored by an ordinary notebook cell. Upstream
+   [middleware](https://github.com/marimo-team/marimo-studio/blob/851a98b9fe61e18103d691a45ba8c8c6d2e8d325/packages/marimo-studio/src/marimo_studio/_server/middleware.py)
+   sends a viewless run-mode notebook to the native app before that cell runs.
+   `scripts/launch_studio.py` now reads only literal bundle data through AST,
+   restores files, validates and builds, then launches the server. It preserves
+   edited view files and never executes the notebook to extract the bundle.
+3. **Package installation is not server activation.** Upstream
+   [package metadata](https://github.com/marimo-team/marimo-studio/blob/851a98b9fe61e18103d691a45ba8c8c6d2e8d325/packages/marimo-studio/pyproject.toml)
+   pins marimo 0.25.0 and registers ASGI middleware and a kernel lifespan hook.
+   The launcher fails on incompatible versions, retains authentication, and
+   reuses the provisioned GPU stack. It does not run pip or replace torch.
+   The notebook's PEP 723 torch pins and legacy `requirements.txt` describe
+   different installation paths; they must not replace Molab's working GPU
+   stack merely to run a view. This launcher deliberately uses `--no-sandbox`.
+4. **A missing toolbar alone does not establish missing Studio.** The official
+   [configuration](https://github.com/marimo-team/marimo-studio/blob/851a98b9fe61e18103d691a45ba8c8c6d2e8d325/docs/reference/configuration.md)
+   supports a native editor at `/` with Studio at `/studio/`. The host must
+   route and authenticate those paths. The earlier menu-only inference is
+   corrected in the Korean guide, README and generated notebook notice.
+5. **The hosting guide does not establish hosted Molab support.** The official
+   [marimohub guide](https://github.com/marimo-team/marimo-studio/blob/851a98b9fe61e18103d691a45ba8c8c6d2e8d325/docs/guide/marimohub.md)
+   describes a configured marimohub deployment. Its persistent `studio/`
+   location is appropriate here, but its server setup cannot be assumed for
+   a student's existing molab.marimo.io session.
+
+### Fresh verification of this repair
+
+- Python 3.12 CPU suite: **351 passed**, including six launcher regressions.
+  A lone `.py` changes from official `needs-view` status to a discovered
+  `explore` view without importing or executing that notebook.
+- Embedded bundle check, strict marimo check, official Studio static validation,
+  production build and dependency doctor passed. Static validation found
+  62 cells and 24 projections, with no issues.
+- Official saved-workspace API runtime validation passed with no issues in
+  CPU replay. CLI runtime validation initially tried an isolated uv environment;
+  the successful check used the provisioned interpreter through the public API.
+- Chrome opened a fresh local fixture that initially had no Studio directory.
+  After the launcher prepared it, the first authenticated browser connection
+  opened the split Studio view, reached `ready`, and mounted all 24 hosts.
+  An input draft survived all three top-level tabs; replay inference was disabled.
+  Submitting a nonexistent run ID changed the Python-produced feedback to the
+  expected rejection. This verifies a native form/result round trip, not GPU work.
+- A second fresh fixture passed the same initial discovery in `run` mode:
+  authentication first, then the HTML view with 24 hosts and `ready` status.
+  The launcher explicitly passes `--token` in both modes because marimo's
+  `run` command otherwise defaults to unauthenticated access.
+- Observed browser console errors came from installed Chrome extensions
+  (share modal and MetaMask); no application-origin error appeared in that sample.
+
+### Hosted Molab evidence remains separate
+
+After installing Studio in the owned GPU session, its terminal reported Studio
+0.2.3/marimo 0.25.0 while the managed editor still reported marimo 0.25.1.
+A separate authenticated Studio process answered inside the sandbox, but a
+usable route from the owned Molab page was not established. The official app
+link opened a native app in a different sandbox. The direct documented
+`/studio/` route attempt was blocked by the browser client, so it is **not**
+evidence of a server 404 or proof that Studio is absent. No bypass was used.
+
+The personal Molab gate is still: actual Studio HTML input → fresh GPU compute
+in that student's session → changed HTML result, followed by download/reopen.
+The current repair makes the startup hook reviewable and tested; it does not
+complete or replace that hosted integration test.
