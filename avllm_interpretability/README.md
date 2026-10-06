@@ -16,7 +16,7 @@
 Code for experiments conducted in the paper, with Qwen 2.5 Omni as the representative model.
 
 For the updated **Creative AI: Creation & Practice** classroom activity, use the
-[Korean notebook](CTP49906_avllm_molab_kr.py), [setup guide](README_kr.md),
+[Korean Molab HTML notebook](CTP49906_avllm_molab_html_kr.py), [setup guide](README_kr.md),
 [instructor guide](CLASSROOM_GUIDE_kr.md), and [student worksheet](WORKSHEET_kr.md).
 The [September 14 QA record](QA_IMPROVEMENTS.md) documents 293 CPU tests and seven
 Molab GPU experiments, including restart recovery, alongside the remaining checks.

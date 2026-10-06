@@ -48,12 +48,30 @@ python src/attention_knockout_experiment.py \
 교사는 [수업 진행 안내](CLASSROOM_GUIDE_kr.md), 학생은 [한국어 워크시트](WORKSHEET_kr.md)를
 먼저 확인하세요. 영어판은 [`CTP49906_avllm_molab.py`](CTP49906_avllm_molab.py)입니다.
 
-**2026-09-14 수업 보완판:** [배포 노트북(main)](https://github.com/youngjuene/CTP49906_2026/blob/main/avllm_interpretability/CTP49906_avllm_molab_kr.py)을 Mirror할 수 있습니다.
-이번 GPU QA와 정확히 같은 코드를 배포하려면 [검증한 불변 버전](https://github.com/youngjuene/CTP49906_2026/blob/61d540d01d6ed9ca46e98933ad961238dbfbeba8/avllm_interpretability/CTP49906_avllm_molab_kr.py)을 사용하세요.
+**개인 Molab 배포:** [내장 HTML 노트북(main)](https://github.com/youngjuene/CTP49906_2026/blob/main/avllm_interpretability/CTP49906_avllm_molab_html_kr.py)을 Mirror하세요. 사용법은 바로 아래에 있습니다.
+**2026-09-14 이전 검증 기록:** 당시 GPU QA와 같은 코드는 [불변 버전](https://github.com/youngjuene/CTP49906_2026/blob/61d540d01d6ed9ca46e98933ad961238dbfbeba8/avllm_interpretability/CTP49906_avllm_molab_kr.py)에 보관되어 있습니다.
 [37개 QA 항목의 보완·검증 기록](QA_IMPROVEMENTS.md)에 실제 GPU 실험 7건과 남은 운영 확인을 정리했습니다.
 기존 Fork에는 새 소스가 자동 반영되지 않으므로 결과를 먼저 보관하고 배포한 버전으로 새 사본을 만드세요.
 
 ### 한국어판 노트북
+
+#### 개인 Molab에서 사용하는 내장 HTML 화면
+
+학생 각자의 Molab GPU로 탐색할 때는
+[`CTP49906_avllm_molab_html_kr.py`](CTP49906_avllm_molab_html_kr.py)를 사용합니다.
+**Mirror from GitHub → 자신의 사본 만들기 → GPU 선택 → Run all** 순서로 시작합니다.
+기본 영상 `assets/02321.mp4`는 셋업이 가져오므로 별도로 업로드할 필요가 없습니다.
+
+상단 이동 링크로 실험을 찾고, HTML 카드에서 입력을 바꾼 뒤 실행 버튼을 누릅니다.
+입력을 편집하는 동안에는 이전에 제출한 설정과 결과가 유지됩니다. 새 결과의 설정과
+실행 ID를 함께 확인하세요. 레이어 범위만 바꿔도 캡션은 같을 수 있습니다.
+티처 포싱의 강조 임계값은 이미 계산한 토큰별 Δ의 표시만 바꿉니다.
+
+이 파일은 marimo의 `mo.Html`, 네이티브 입력 폼, 반응형 셀을 사용합니다.
+학생이 별도 서버나 터널을 설정할 필요가 없습니다. 기존 Studio 보기 소스는 보존하며,
+내장 HTML 화면의 계산 코드는 기존 한국어 노트북에서 자동 생성합니다.
+수정 후 `python scripts/build_molab_html.py`를 실행하고 `--check`로 동기화를 확인합니다.
+검증 범위와 수업 절차는 [내장 HTML QA 기록](MOLAB_HTML_QA.md)을 확인하세요.
 
 #### Studio HTML 실험실과 개인 Molab의 지원 조건
 

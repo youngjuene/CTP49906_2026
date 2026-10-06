@@ -4,6 +4,13 @@
 
 ## 수업 전에
 
+**개인 Molab 수업 경로:**
+[`CTP49906_avllm_molab_html_kr.py`](CTP49906_avllm_molab_html_kr.py)의 내장 HTML 화면을
+자신의 사본과 GPU에서 사용합니다. Mirror → 사본 만들기 → GPU 선택 → Run all 후,
+상단 실험 이동 링크와 카드 안의 실행 버튼을 사용합니다. 별도 터널이나 서버 설정은
+없습니다. 기존 Studio 소스와 같은 계산을 사용하는 생성본이며, 검증 범위는
+[내장 HTML QA 기록](MOLAB_HTML_QA.md)에 정리합니다.
+
 **2026-10-06 Studio 배포 상태:** 학생 각자의 Fork와 GPU로 기본 노트북 실험을
 진행한 기록은 있지만, 같은 개인 Molab의 **Studio HTML 입력 → 새 GPU 계산 →
 HTML 결과 갱신**은 아직 검증되지 않았습니다. 이 상태를 Studio 수업 배포 완료로
@@ -13,9 +20,9 @@ HTTP/WebSocket 경로를 제공해야 합니다. 운영자용 `scripts/launch_st
 파일 준비와 별도 서버 실행을 돕지만 기존 Molab 관리 서버를 바꾸지는 않습니다.
 최신 근거와 남은 조건은 [Studio 검증 기록](docs/studio-verification.md)에 있습니다.
 
-배포 경로는 [한국어 노트북(main)](https://github.com/youngjuene/CTP49906_2026/blob/main/avllm_interpretability/CTP49906_avllm_molab_kr.py)입니다. 2026-09-14 GPU QA와 같은 소스로 수업하려면 [검증한 불변 버전](https://github.com/youngjuene/CTP49906_2026/blob/61d540d01d6ed9ca46e98933ad961238dbfbeba8/avllm_interpretability/CTP49906_avllm_molab_kr.py)을 Mirror → Fork하세요. 이전 Fork를 사용하는 학생은 결과를 먼저 보관하고 이 버전으로 새 사본을 만듭니다.
+현재 개인 Molab 배포 경로는 [내장 HTML 노트북(main)](https://github.com/youngjuene/CTP49906_2026/blob/main/avllm_interpretability/CTP49906_avllm_molab_html_kr.py)입니다. 이전 Fork의 결과는 먼저 보관하고 새 사본을 만듭니다.
 
-이번 버전은 RTX Pro 6000에서 Run all과 인터랙티브 실험 7건, 잘못된 입력 후 회복, 브라우저 재연결과 커널 재시작 후 기록 복구를 확인했습니다. [전체 QA 기록](QA_IMPROVEMENTS.md)에 근거가 있습니다. 학생 장치의 다운로드 파일 수신, 서버 종료/재생성, 학급 동시 GPU 할당, 최대 입력의 메모리 사용은 아직 확인하지 못했습니다.
+**이전 검증 기록:** [2026-09-14 불변 버전](https://github.com/youngjuene/CTP49906_2026/blob/61d540d01d6ed9ca46e98933ad961238dbfbeba8/avllm_interpretability/CTP49906_avllm_molab_kr.py)에서는 RTX Pro 6000의 Run all과 인터랙티브 실험 7건, 잘못된 입력 후 회복, 브라우저 재연결과 커널 재시작 후 기록 복구를 확인했습니다. [당시 QA 기록](QA_IMPROVEMENTS.md)에 근거가 있습니다. 당시 확인하지 못한 범위는 학생 장치의 다운로드 파일 수신, 서버 종료/재생성, 학급 동시 GPU 할당, 최대 입력의 메모리 사용입니다. 내장 HTML 실행판의 결과는 별도 QA 기록에서 확인합니다.
 
 교사는 **검증한 노트북 파일과 그 파일이 지정하는 헬퍼 커밋**, 모델과 프로세서의 **같은 모델 리비전**, 패키지 버전을 한 조합으로 고정하고 기록합니다. 결과 묶음의 헬퍼 커밋·노트북 파일 SHA-256·패키지 버전을 확인합니다. 수정 버전의 짧은 원본·무음 쌍을 실제 사용할 GPU에서 다시 실행한 뒤 그 조합을 배포합니다. 준비된 코드가 있다는 것과 GPU에서 검증을 마쳤다는 것은 별도 상태입니다. 이전 QA의 RTX Pro 6000 실행 시간이나 RTX3090 소스 주석을 다른 학생 세션의 성능 보장으로 사용하지 않습니다.
 
