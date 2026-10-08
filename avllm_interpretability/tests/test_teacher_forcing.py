@@ -31,6 +31,20 @@ from src.teacher_forcing import (  # noqa: E402
 NEG = torch.finfo(torch.float32).min
 
 
+def test_korean_delta_tooltips_preserve_token_scores_styles_and_escaping():
+    import re
+
+    tokens = ["", "가", " </script>"]
+    options = dict(token_kinds=["byte_continuation", "text", "text"],
+                   highlight_below=1, vmax=8)
+    english = render_delta_strip(tokens, [-5, 1, 2], **options)
+    korean = render_delta_strip(tokens, [-5, 1, 2], lang="ko", **options)
+    assert "byte continuation" in english and "문자 이어짐" in korean
+    assert "Δ=-4.00 nats" in korean and "Δ=+2.00 nats" in korean
+    assert "&lt;/script&gt;" in korean and "</script>" not in korean
+    assert re.findall(r'style="([^"]+)"', korean) == re.findall(r'style="([^"]+)"', english)
+
+
 def test_answer_is_a_distinct_type():
     assert TOKEN_TYPE_MAP.get("answer") == 5
     assert TOKEN_TYPE_MAP["answer"] != TOKEN_TYPE_MAP["generated"]

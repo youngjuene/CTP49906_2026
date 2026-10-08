@@ -36,6 +36,29 @@ def _record(**kw):
     return run_record(**base)
 
 
+def test_korean_worksheet_localizes_guidance_but_preserves_exported_evidence():
+    import copy
+    import re
+
+    runs = append_run([], _record(prediction='소리 | <b>확인</b> \\ "```"'))
+    runs = apply_verdict(runs, runs[0]["run_id"], "untested", "추가 비교 필요")
+    before = copy.deepcopy(runs)
+    english = build_worksheet_md(runs)
+    korean = build_worksheet_md(runs, lang="ko")
+    assert "설정이 일치하는 대조군 없음" in korean
+    assert "판단 유보(미검증·근거 부족)" in korean
+    assert "판단 유보(미검증·근거 부족)" in render_ledger_html(runs, lang="ko")
+    assert "No control" in english and "Run ledger" in english
+    # Localization must not translate token strings, verdict enums, or JSON keys.
+    def evidence(text):
+        fence, payload = re.search(r"(`{3,})json\n(.*?)\n\1", text, re.S).groups()
+        return json.loads(payload)
+    assert evidence(korean) == evidence(english)
+    assert evidence(korean)["verdict"] == "untested"
+    assert runs == before
+    assert "실행 기록이 없습니다" in build_worksheet_md([], lang="ko")
+
+
 def test_append_does_not_mutate_and_is_idempotent():
     prev = []
     rec = _record()

@@ -202,6 +202,20 @@ def test_ui_text_states_the_rule_and_the_caveat():
     assert "entropy" in PACK["caveat"]
 
 
+def test_korean_pack_changes_only_presentation_and_keeps_probe_evidence():
+    korean = build_probe_grid_pack(CSV_PATH, lang="ko")
+    assert korean["lang"] == "ko"
+    assert PACK["lang"] == "en"
+    assert "공백·기호류" in korean["junk_definition"]
+    assert "U+FFFD" in korean["junk_definition"]
+    assert "RMSNorm" in korean["caveat"] and "엔트로피" in korean["caveat"]
+    presentation = {"lang", "junk_definition", "caveat"}
+    assert {k: v for k, v in korean.items() if k not in presentation} == {
+        k: v for k, v in PACK.items() if k not in presentation
+    }
+    assert probe_grid_layer_summary(korean) == probe_grid_layer_summary(PACK)
+
+
 def test_esm_imports_nothing_remote():
     source = JS_PATH.read_text(encoding="utf-8")
     assert "http://" not in source

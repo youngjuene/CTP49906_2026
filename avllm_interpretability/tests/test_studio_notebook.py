@@ -60,7 +60,7 @@ def test_studio_projection_cells_have_stable_names() -> None:
     }
     names = {node.name for node in _tree().body if isinstance(node, ast.FunctionDef)}
     assert expected <= names
-    assert "그림 넷" in _function_source("method_guide")
+    assert "네 가지 그림으로 실험 이해하기" in _function_source("method_guide")
 
 
 def test_studio_status_is_replay_or_live_only_and_model_free() -> None:
@@ -109,13 +109,13 @@ def test_native_forms_keep_field_sets_validators_and_submit_gates() -> None:
                 "compare",
             },
             "validator": "_ko_validate",
-            "submit": "▶ Logit-lens 다양성 실행",
+            "submit": "▶ 로짓 렌즈 다양성 계산",
         },
         "tf_form": {
             "returns": "tf_controls",
             "fields": {"clip", "video", "nframes", "prompt", "max_new_tokens", "target", "layers"},
             "validator": "_tf_validate",
-            "submit": "▶ 티처 포싱 Δ 로그 확률 실행",
+            "submit": "▶ 캡션의 로그 확률 변화 계산",
         },
         "verdict_panel": {
             "returns": "verdict_form",

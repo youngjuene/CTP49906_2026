@@ -74,17 +74,17 @@ DIVERSITY_TEMPLATE = '''(
         '<p>설정 변경 후 실행을 눌러 적용하세요. 결과에는 마지막 실행에 사용한 설정이 표시됩니다.</p>'
         '<div class="ctp-html-fields">'
         '<div class="ctp-html-field"><span class="ctp-html-field-label">클립</span>{clip}</div>'
-        '<div class="ctp-html-field"><span class="ctp-html-field-label">프레임</span>{nframes}</div>'
+        '<div class="ctp-html-field"><span class="ctp-html-field-label">프레임 수</span>{nframes}</div>'
         '</div>'
         '<div class="ctp-html-field"><span class="ctp-html-field-label">프롬프트</span>{prompt}</div>'
         '<div class="ctp-html-fields">'
-        '<div class="ctp-html-field"><span class="ctp-html-field-label">녹아웃</span>{ko_enable}</div>'
+        '<div class="ctp-html-field"><span class="ctp-html-field-label">연결 차단</span>{ko_enable}</div>'
         '<div class="ctp-html-field"><span class="ctp-html-field-label">source → target</span>{ko_source} → {ko_target}</div>'
         '<div class="ctp-html-field"><span class="ctp-html-field-label">레이어</span>{ko_layers}</div>'
         '<div class="ctp-html-field"><span class="ctp-html-field-label">기준선도 함께 비교</span>{compare}</div>'
         '</div>'
         '<div class="ctp-html-field"><span class="ctp-html-field-label">고급 규칙</span>{ko_rules_text}</div>'
-        '<p>녹아웃을 켠 상태에서 고급 규칙을 채우면 위의 단일 규칙보다 우선합니다. 비우면 위 설정을 사용합니다. '
+        '<p>연결 차단을 켠 상태에서 고급 규칙을 채우면 위의 단일 규칙보다 우선합니다. 비우면 위 설정을 사용합니다. '
         '<code>source,target,start,end</code> 형식으로 쓰고 여러 규칙은 <code>;</code>로 구분하세요.</p>'
         '<details><summary>업로드 · 도움말</summary>'
         '<p><code>업로드</code>를 골랐을 때만 파일을 넣으세요. 250 MiB / 120초 / 1080p 이하.</p>'
@@ -103,10 +103,10 @@ BAND_TEMPLATE = '''(
         '</div>'
         '<div class="ctp-html-field"><span class="ctp-html-field-label">실행 전 예상</span>{null_band} 캡션 변화가 작을 것으로 예상</div>'
         '<details><summary>구간 도움말</summary>'
-        '<p>이 실행은 선택한 thinker 레이어 구간에서 generated 토큰이 선택한 타깃에 어텐션하는 경로를 금지합니다. '
+        '<p>이 실행은 선택한 thinker 레이어 구간에서 generated 토큰이 선택한 타깃을 직접 참조하는 어텐션 연결을 차단합니다. '
         '체크박스에는 실행 전에 예상한 결과를 기록합니다. 체크 여부는 차단 규칙을 바꾸거나 이 실행을 대조군으로 지정하지 않습니다. 실행 후 실제 결과와 비교하세요.</p>'
         f'<p>끝 번호는 포함하지 않습니다. 이 thinker는 레이어가 <strong>{_band_layers}</strong>개입니다. '
-        '클립·프롬프트·프레임 수는 파라미터 셀 값을 그대로 씁니다.</p></details>'
+        '클립·프롬프트·프레임 수는 공통 설정 셀 값을 그대로 씁니다.</p></details>'
         '<p><a href="#ctp-top">목차로 이동</a></p></section>'
     )'''
 
@@ -116,7 +116,7 @@ TF_TEMPLATE = '''(
         '<p>설정 변경 후 실행을 눌러 적용하세요. 결과에는 마지막 실행에 사용한 설정이 표시됩니다.</p>'
         '<div class="ctp-html-fields">'
         '<div class="ctp-html-field"><span class="ctp-html-field-label">클립</span>{clip}</div>'
-        '<div class="ctp-html-field"><span class="ctp-html-field-label">프레임</span>{nframes}</div>'
+        '<div class="ctp-html-field"><span class="ctp-html-field-label">프레임 수</span>{nframes}</div>'
         '</div>'
         '<div class="ctp-html-field"><span class="ctp-html-field-label">프롬프트</span>{prompt}</div>'
         '<div class="ctp-html-fields">'
@@ -272,11 +272,11 @@ def generate(source: str) -> str:
 
     setup = _only((node for node in ast.walk(cells["molab_setup_note"]) if _mo_call(node, "md")), "setup markdown")
     setup_text = ast.literal_eval(setup.args[0])
-    old = "4. 발표/App view에서는 코드 없이 읽을 수 있습니다. 코드 편집은 고급 탐색 단계에서 합니다."
+    old = "4. 앱 보기(App view)에서는 코드 없이 읽을 수 있습니다. 코드 편집은 고급 탐색 단계에서 합니다."
     if setup_text.count(old) != 1:
         raise ValueError("Canonical setup navigation text changed; review native delivery copy")
     setup_text = textwrap.dedent(setup_text).replace(
-        old, "4. 현재 노트북의 발표/App view에서 코드 없이 탐색할 수 있습니다. 목차로 이동해 입력을 바꾸고 실행 버튼을 누르세요. 코드 편집은 고급 탐색 단계에서 합니다."
+        old, "4. 현재 노트북의 앱 보기(App view)에서 코드 없이 탐색할 수 있습니다. 목차로 이동해 입력을 바꾸고 실행 버튼을 누르세요. 코드 편집은 고급 탐색 단계에서 합니다."
     )
     edits.append((setup.args[0], _markdown_literal(setup_text)))
 

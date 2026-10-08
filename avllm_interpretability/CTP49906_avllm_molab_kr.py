@@ -198,8 +198,9 @@ def lab_intro(mo):
     mo.md(r"""
     # AVLLM 해석 가능성 — molab 실습 (한국어판)
 
-    **Qwen2.5-Omni-3B**로 영상 한 편에 대해 두 가지 해석 가능성(interpretability)
-    실험을 수행합니다.
+    **Qwen2.5-Omni-3B**가 영상과 소리를 처리하는 방식을 두 가지 방법으로 살펴봅니다.
+    모델이 영상의 내용이나 소리를 설명한 문장을 이 노트북에서는 **캡션**이라고 부릅니다.
+    **프롬프트**는 모델에 입력하는 질문이나 지시문입니다.
 
     **오늘의 목표:** 같은 클립에서 설정 하나를 바꾸고, 달라진 결과와 다른 가능한 설명을
     함께 남깁니다. 숫자가 변했다는 관찰과 모델의 능력에 대한 결론을 구분해 봅시다.
@@ -214,17 +215,27 @@ def lab_intro(mo):
     가이드 예제는 교수자와 함께 읽고, 각 실험은 실행 버튼을 눌러 진행합니다. Studio에서는 ‘실험실’의 ‘다양성’, ‘경로 차단’, ‘캡션 확률 변화’와 ‘실습 기록’ 탭을 사용하세요.
     처음에는 제공된 클립과 4·8프레임을 사용하세요. 자유 탐색은 기본 쌍을 기록한 뒤 시작합니다.
 
-    1. **Logit Lens** — thinker 레이어들을 가로질러, **오디오 토큰 위치**에서 모델의
-       중간 표현을 어휘로 투사한 **보정되지 않은 raw probe**를 읽습니다. 모델의 생각이나 확신을 그대로 보여 주는 것은 아닙니다.
-    2. **Attention Knockout(어텐션 녹아웃)** — 선택한 source→target 어텐션 경로를
-       막고 생성한 답변을, 막지 않은 **기준선(baseline)** 답변과 비교합니다.
+    1. **로짓 렌즈(Logit Lens)** — thinker의 각 레이어에서 **오디오 토큰 위치**의
+       중간 표현에 출력층을 적용해, 점수가 가장 높은 토큰을 살펴봅니다.
+       이런 진단 방법을 **프로브**라고 합니다. 이 실습의 프로브는 최종 RMSNorm을 생략하므로,
+       표시된 문자열을 모델의 실제 생성 결과나 확신 정도로 해석하지 마세요.
+    2. **어텐션 연결 차단(Attention Knockout)** — 선택한 레이어에서 source→target의
+       직접 어텐션 연결을 차단합니다. 차단하지 않은 **기준선(baseline)**과 캡션을 비교합니다.
+       티처 포싱에서는 한 실행에서 생성한 캡션을 고정해 다시 입력하고,
+       연결 차단 전후에 각 다음 토큰의 조건부 확률이 얼마나 달라지는지 계산합니다.
+       이 과정에서 모델을 다시 학습하지는 않습니다.
+
+    **기준선**은 연결을 차단하지 않은 실행이고, **무음 대조군**은 소리만 무음으로 바꾼 클립입니다.
+    무음 클립에서도 기준선과 연결 차단 결과를 비교합니다.
+    **경쟁 설명**은 같은 관측 결과를 설명할 수 있는 다른 가능성입니다.
 
     Qwen2.5-Omni는 **thinker**(보고 듣고 글을 쓰는 부분)와 **talker**(그 글을 음성으로
     바꾸는 부분)로 나뉩니다. 이 실습은 talker를 비활성화하고 thinker만 사용하므로, 아래에서는 ‘thinker 레이어’라고 부릅니다.
 
-    이 노트북은 `CTP49906_avllm_molab.py`의 **한국어판**입니다. 노브 셀의
-    `LOGIT_PROMPT`와 `ATTENTION_PROMPT`가 한국어이므로 `query_text` 위치에 한국어
-    토큰이 놓이고 캡션도 한국어로 나옵니다. 그 밖의 것 — 클립, 모델, 규칙, 레이어 구간 — 은 원본과 동일합니다. 그래야 두 노트북을 나란히 놓고 비교할 수 있습니다.
+    이 노트북은 `CTP49906_avllm_molab.py`의 **한국어판**입니다. 공통 설정 셀의
+    `LOGIT_PROMPT`와 `ATTENTION_PROMPT`는 한국어 질문입니다. 프롬프트 언어를 바꾸면
+    질문 토큰과 생성 캡션이 달라질 수 있습니다. 언어에 따른 차이를 비교할 때는
+    같은 클립·모델·차단 규칙·레이어 구간을 사용하세요.
     """)
     return
 
@@ -240,13 +251,13 @@ def molab_setup_note(mo):
        CPU만 보이면 실행 전에 GPU 배정을 확인하세요.
     3. **Run all**을 누르고 설치·모델 로드·시범 실행이 끝날 때까지 기다립니다.
        첫 실행과 캐시 사용 실행의 시간은 다릅니다. 기다리는 동안 제출을 반복하지 마세요.
-    4. 발표/App view에서는 코드 없이 읽을 수 있습니다. 코드 편집은 고급 탐색 단계에서 합니다.
+    4. 앱 보기(App view)에서는 코드 없이 읽을 수 있습니다. 코드 편집은 고급 탐색 단계에서 합니다.
 
     **진행이 멈췄다면:** 실행 중인 셀과 오류 문장을 먼저 확인하세요. GPU가 없으면 제공된
-    replay로 시범 결과를 토론할 수 있지만 새 실험은 실행되지 않습니다. 메모리 오류 뒤에는
+    재생 모드로 저장된 예제 결과를 살펴볼 수 있지만 새 실험은 실행되지 않습니다. 메모리 오류 뒤에는
     먼저 결과를 내보내고 커널을 재시작한 다음 기본 클립·4프레임으로 돌아오세요.
 
-    **저장은 직접 확인하세요.** 실행 기록은 세션 안의 파일에도 쓰지만 저장 실패와 세션 종료에
+    **저장은 직접 확인하세요.** 실행 기록은 현재 실행 환경의 파일에도 저장되지만 저장 실패와 세션 종료에
     대비해 Markdown과 JSON을 내려받습니다. 자신의 영상은 원격 GPU 서버로 업로드됩니다.
     수업에서는 제공된 샘플이나 공유에 동의받은 짧은 클립을 사용하세요.
     """)
@@ -256,9 +267,9 @@ def molab_setup_note(mo):
 @app.cell(hide_code=True)
 def method_guide(mo):
     mo.md(r"""
-    ## 🧭 시작하기 전에 — 그림 넷
+    ## 🧭 시작하기 전에 — 네 가지 그림으로 실험 이해하기
 
-    이 노트북의 두 실험은 전부 **토큰**과 **어텐션 화살표** 위에서 벌어집니다. 아래 네 가지를 살펴본 뒤 실험을 시작합니다.
+    두 실험에서는 **토큰의 중간 표현**과 **토큰 사이의 어텐션 연결**을 살펴봅니다. 아래 네 가지를 읽고 실험을 시작하세요.
 
     ### 1. 영상도 소리도 질문도, 전부 한 줄의 토큰이 됩니다
 
@@ -288,13 +299,13 @@ def method_guide(mo):
       </g>
     </svg>
 
-    모델은 영상·오디오를 인코더로 변환한 표현을 **토큰 위치**의 배열로 처리합니다. 토큰마다
-    **타입**(`video` · `audio` · `query_text`)이 있고, 이 실습의 모든 개입은 타입 단위로
-    이뤄집니다. 영상과 소리는 **한 덩어리씩 번갈아** 놓입니다 — 영상 전부 다음에 소리 전부가
-    오는 것이 아닙니다. 정지 이미지가 없으므로 `image`는 0개입니다. (비율은 기본 설정 기준.
-    실제 개수는 아래 셀이 출력합니다.)
+    영상과 소리는 인코더를 거쳐 벡터로 변환되고, 입력의 `video`·`audio` 토큰 위치에 배치됩니다.
+    질문·지시문과 채팅 구조 등은 `query_text`로 구분합니다. 이 실습에서는 이러한 **토큰 종류**에 따라
+    차단 규칙을 설정합니다. 영상과 소리는 일정한 구간으로 나뉘어 번갈아 배치됩니다.
+    정지 이미지 입력이 없으므로 `image`는 0개입니다. 그림의 비율은 기본 설정 기준이며,
+    실제 개수는 아래의 입력 토큰 표에서 확인할 수 있습니다.
 
-    ### 2. 어텐션은 화살표입니다. 녹아웃은 그 화살표를 자릅니다
+    ### 2. 어텐션은 화살표입니다. 연결 차단은 그 화살표를 자릅니다
 
     <svg viewBox="0 0 720 250" style="width:100%;max-width:940px;height:auto" >
       <title>어텐션 화살표 하나를 자르는 그림</title>
@@ -313,10 +324,10 @@ def method_guide(mo):
       <g stroke="#E45756" stroke-width="4" stroke-linecap="round">
         <path d="M261 55 L289 77"/><path d="M289 55 L261 77"/>
       </g>
-      <text x="275" y="34" font-size="13" fill="#E45756" text-anchor="middle" font-weight="600">녹아웃</text>
-      <text x="540" y="176" font-size="12" fill="currentColor" text-anchor="middle">source = 보는 쪽</text>
+      <text x="275" y="34" font-size="13" fill="#E45756" text-anchor="middle" font-weight="600">연결 차단</text>
+      <text x="540" y="176" font-size="12" fill="currentColor" text-anchor="middle">source = 참조하는 쪽</text>
       <path d="M12 162 L12 168 L398 168 L398 162" fill="none" stroke="currentColor" stroke-opacity="0.45"/>
-      <text x="205" y="184" font-size="12" fill="currentColor" text-anchor="middle">target = 보이는 쪽</text>
+      <text x="205" y="184" font-size="12" fill="currentColor" text-anchor="middle">target = 참조되는 쪽</text>
       <text x="10"  y="205" font-size="12" fill="currentColor">레이어 [0, 12) — 0번부터 11번까지. 12번은 포함하지 않습니다.</text>
       <g><rect x="10.0" y="212" width="17" height="20" fill="#E45756" fill-opacity="0.55" stroke="#E45756"/><rect x="29.2" y="212" width="17" height="20" fill="#E45756" fill-opacity="0.55" stroke="#E45756"/><rect x="48.4" y="212" width="17" height="20" fill="#E45756" fill-opacity="0.55" stroke="#E45756"/><rect x="67.6" y="212" width="17" height="20" fill="#E45756" fill-opacity="0.55" stroke="#E45756"/><rect x="86.8" y="212" width="17" height="20" fill="#E45756" fill-opacity="0.55" stroke="#E45756"/><rect x="106.0" y="212" width="17" height="20" fill="#E45756" fill-opacity="0.55" stroke="#E45756"/><rect x="125.2" y="212" width="17" height="20" fill="#E45756" fill-opacity="0.55" stroke="#E45756"/><rect x="144.4" y="212" width="17" height="20" fill="#E45756" fill-opacity="0.55" stroke="#E45756"/><rect x="163.6" y="212" width="17" height="20" fill="#E45756" fill-opacity="0.55" stroke="#E45756"/><rect x="182.8" y="212" width="17" height="20" fill="#E45756" fill-opacity="0.55" stroke="#E45756"/><rect x="202.0" y="212" width="17" height="20" fill="#E45756" fill-opacity="0.55" stroke="#E45756"/><rect x="221.2" y="212" width="17" height="20" fill="#E45756" fill-opacity="0.55" stroke="#E45756"/><rect x="240.4" y="212" width="17" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45"/><rect x="259.6" y="212" width="17" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45"/><rect x="278.8" y="212" width="17" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45"/><rect x="298.0" y="212" width="17" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45"/><rect x="317.2" y="212" width="17" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45"/><rect x="336.4" y="212" width="17" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45"/><rect x="355.6" y="212" width="17" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45"/><rect x="374.8" y="212" width="17" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45"/><rect x="394.0" y="212" width="17" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45"/><rect x="413.2" y="212" width="17" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45"/><rect x="432.4" y="212" width="17" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45"/><rect x="451.6" y="212" width="17" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45"/><rect x="470.8" y="212" width="17" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45"/><rect x="490.0" y="212" width="17" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45"/><rect x="509.2" y="212" width="17" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45"/><rect x="528.4" y="212" width="17" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45"/><rect x="547.6" y="212" width="17" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45"/><rect x="566.8" y="212" width="17" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45"/><rect x="586.0" y="212" width="17" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45"/><rect x="605.2" y="212" width="17" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45"/><rect x="624.4" y="212" width="17" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45"/><rect x="643.6" y="212" width="17" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45"/><rect x="662.8" y="212" width="17" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45"/><rect x="682.0" y="212" width="17" height="20" fill="none" stroke="currentColor" stroke-opacity="0.45"/></g>
       <text x="10"  y="245" font-size="11" fill="currentColor">0</text>
@@ -324,9 +335,11 @@ def method_guide(mo):
       <text x="688" y="245" font-size="11" fill="currentColor">35</text>
     </svg>
 
-    토큰은 답을 만들 때 **자기보다 앞에 있는** 토큰들을 봅니다. 그 "봄"이 어텐션입니다.
-    규칙 `(source, target, start, end)`는 *어느 레이어 구간에서 어떤 화살표를 자를지*를
-    적은 것입니다. `generated → video` = 생성 중인 토큰이 영상 토큰을 못 보게 막기.
+    어텐션은 토큰이 다른 토큰의 정보를 참조하는 방식입니다. 이 실습에서 **source**는
+    참조하는 쪽(쿼리), **target**은 참조되는 쪽(키)입니다.
+    규칙 `(source, target, start, end)`는 어느 레이어 구간에서 어떤 직접 연결을 차단할지 지정합니다.
+    `generated → video`는 생성 토큰이 영상 토큰을 직접 참조하는 연결을 차단한다는 뜻입니다.
+    다른 레이어나 토큰을 거치는 간접 경로는 남을 수 있습니다.
 
     ### 3. "한 번 읽기"와 "한 토큰씩 쓰기"는 다릅니다
 
@@ -356,16 +369,16 @@ def method_guide(mo):
         <path d="M296 102 L301 102"/><path d="M349 102 L354 102"/>
       </g>
       <g font-size="11.5" fill="currentColor">
-        <text x="10"  y="100">생성 토큰이 아직 없음</text><text x="10"  y="116">→ generated 규칙은 자를 것이 없음</text>
+        <text x="10"  y="100">생성 토큰이 아직 없음</text><text x="10"  y="116">→ generated 규칙 적용 불가</text>
         <text x="250" y="136">→ generated 규칙이 작동</text>
         <text x="490" y="100">캡션을 answer로 되돌려 넣음</text><text x="490" y="116">→ answer 규칙이 작동</text>
       </g>
     </svg>
 
     이 차이 때문에, 같은 규칙이 어떤 섹션에서는 작동하고 어떤 섹션에서는 아무 일도
-    하지 않습니다. 없는 토큰은 막을 수 없기 때문입니다.
+    하지 않습니다. 해당 종류의 토큰이 없으면 차단할 연결도 없기 때문입니다.
 
-    ### 4. 결과 숫자 두 개
+    ### 4. 두 가지 측정값 읽기
 
     <svg viewBox="0 0 720 178" style="width:100%;max-width:940px;height:auto" >
       <title>두 측정값을 읽는 법</title>
@@ -378,9 +391,9 @@ def method_guide(mo):
         <rect x="170" y="64" width="20" height="40"/><rect x="196" y="86" width="20" height="18"/>
       </g>
       <path d="M10 104 L300 104" stroke="currentColor" stroke-width="1.2"/>
-      <text x="10" y="122" font-size="11.5" fill="currentColor">서술적 통계입니다.</text>
+      <text x="10" y="122" font-size="11.5" fill="currentColor">출력 문자열의 종류를 셉니다.</text>
       <text x="10" y="138" font-size="11.5" fill="currentColor">크다고 좋은 것도, 작다고 나쁜 것도 아닙니다.</text>
-      <text x="390" y="16" font-size="12.5" fill="currentColor" font-weight="600">토큰당 평균 Δ 로그 확률</text>
+      <text x="390" y="16" font-size="12.5" fill="currentColor" font-weight="600">토큰당 평균 로그 확률 변화량</text>
       <path d="M400 74 L700 74" stroke="currentColor" stroke-width="1.2"/>
       <path d="M550 62 L550 86" stroke="currentColor" stroke-width="1.2"/>
       <text x="550" y="54" font-size="11.5" fill="currentColor" text-anchor="middle">0</text>
@@ -390,10 +403,16 @@ def method_guide(mo):
       <path d="M566 124 L694 124" stroke="currentColor" stroke-width="1.4" marker-end="url(#a44k)"/>
       <text x="400" y="144" font-size="11.5" fill="currentColor">← 평균 로그 확률 감소</text>
       <text x="700" y="144" font-size="11.5" fill="currentColor" text-anchor="end">평균 로그 확률 증가 →</text>
-      <text x="390" y="164" font-size="11.5" fill="currentColor" font-style="italic">여러분의 클립은 0에서 얼마나 멀어지나?</text>
+      <text x="390" y="161" font-size="11.5" fill="currentColor" font-style="italic"><tspan x="390">연결 차단 후 평균 로그 확률은</tspan><tspan x="390" dy="15">어떻게 달라지나요?</tspan></text>
     </svg>
 
-    **다양성**은 "무슨 일이 있었나"를 적은 것이지 "좋아졌나"가 아닙니다. Δ는 연결 차단 후 값에서 기준선 값을 뺀 값입니다. 음수는 감소, 양수는 증가를 뜻하며 단위는 nats입니다. 평균 Δ가 작아도 토큰별 증가와 감소가 상쇄됐을 수 있으므로 토큰별 Δ도 함께 확인하세요. 같은 설정의 **원본·무음 쌍**과 캡션을 함께 보세요. 무음의 효과가 꼭 0인 것은
+    **다양성**은 "무슨 일이 있었나"를 적은 것이지 "좋아졌나"가 아닙니다. Δ는 연결 차단 후 값에서
+    기준선 값을 뺀 값이며, 음수는 감소, 양수는 증가를 뜻합니다. **다양성 Δ**는 레이어별 서로 다른
+    출력 문자열 수의 차이입니다. **티처 포싱의 토큰별 Δ와 총 Δ**는 **nats**, **토큰당 평균 Δ**는
+    **nats/token**으로 표시합니다. 서로 다른 지표의 크기를 직접 비교하지 않습니다.
+
+    티처 포싱의 평균 Δ가 작아도 토큰별 증가와 감소가 상쇄됐을 수 있으므로 토큰별 Δ도 함께
+    확인하세요. 같은 설정의 **원본·무음 쌍**과 캡션을 함께 보세요. 무음의 효과가 꼭 0인 것은
     아닙니다. 확률 변화의 크기는 정답 여부나 듣기 능력의 점수가 아닙니다.
     """)
     return
@@ -738,17 +757,22 @@ def _(mo, studio_bundle_status):
             return project_dir, {"mode": "checkout-restored", "repo_dir": repo_dir, "ref": repo_ref}
 
         if repo_dir.exists():
+            # Check even when HEAD already matches the pin. Untracked exports
+            # and uploads must not prevent a normal classroom restart.
+            _status = _run_text(
+                ["git", "-C", str(repo_dir), "status", "--porcelain", "--untracked-files=no"], runner
+            )
+            if _status:
+                raise RuntimeError(
+                    f"{repo_dir}에 커밋되지 않은 변경이 있어 실행하지 않습니다. "
+                    f"수정 파일을 보관한 뒤 새 노트북 사본에서 다시 시작하세요:\n{_status}"
+                )
             _head = _run_text(["git", "-C", str(repo_dir), "rev-parse", "HEAD"], runner)
             if _head == repo_ref:
                 if not project_dir.is_dir():
                     raise RuntimeError(f"코드 디렉터리를 찾을 수 없습니다: {project_dir}")
                 return project_dir, {"mode": "checkout-current", "repo_dir": repo_dir, "ref": repo_ref}
 
-            _status = _run_text(["git", "-C", str(repo_dir), "status", "--porcelain"], runner)
-            if _status:
-                raise RuntimeError(
-                    f"{repo_dir}에 커밋되지 않은 변경이 있어 {repo_ref}로 전환하지 않습니다:\n{_status}"
-                )
             runner(["git", "-C", str(repo_dir), "fetch", "--depth", "1", "origin", repo_ref], check=True)
             runner(["git", "-C", str(repo_dir), "checkout", "--detach", repo_ref], check=True)
             if not project_dir.is_dir():
@@ -799,26 +823,35 @@ def _(MODEL_PATH, MODEL_REVISION, PROJECT_DIR):
     import platform as _platform
     import subprocess as _sp
 
+    # HEAD identifies a commit, not the bytes in an edited local checkout.
+    # Include every Python/JS/CSS helper, including untracked source additions;
+    # results and bytecode caches do not change the experiment identity.
+    _helper_files = sorted(
+        path for path in (PROJECT_DIR / "src").rglob("*")
+        if path.is_file() and path.suffix in {".py", ".js", ".css"}
+    )
+    if not _helper_files:
+        raise RuntimeError("소스 버전을 확인할 헬퍼 파일이 없습니다.")
+    _tree_hash = _hash.sha256()
+    for _path in _helper_files:
+        _tree_hash.update(_path.relative_to(PROJECT_DIR).as_posix().encode("utf-8") + b"\0")
+        _tree_hash.update(_hash.sha256(_path.read_bytes()).digest())
+    _helper_sha256 = _tree_hash.hexdigest()
+    _repo_dirty = None  # Unknown without Git; never imply a clean checkout.
     try:
         _repo_revision = _sp.check_output(
             ["git", "-C", str(PROJECT_DIR), "rev-parse", "HEAD"],
             text=True, stderr=_sp.DEVNULL,
         ).strip()
+        _repo_dirty = bool(_sp.check_output(
+            ["git", "-C", str(PROJECT_DIR), "status", "--porcelain", "--untracked-files=no"],
+            text=True, stderr=_sp.DEVNULL,
+        ).strip())
         _repo_source = "git"
     except (_sp.CalledProcessError, FileNotFoundError):
         # A mirrored/uploaded source tree may have no .git directory. Record
         # its actual helper bytes rather than claiming the configured Git pin.
-        _helper_files = sorted(
-            path for path in (PROJECT_DIR / "src").rglob("*")
-            if path.is_file() and path.suffix in {".py", ".js", ".css"}
-        )
-        if not _helper_files:
-            raise RuntimeError("소스 버전을 확인할 헬퍼 파일이 없습니다.") from None
-        _tree_hash = _hash.sha256()
-        for _path in _helper_files:
-            _tree_hash.update(_path.relative_to(PROJECT_DIR).as_posix().encode("utf-8") + b"\0")
-            _tree_hash.update(_hash.sha256(_path.read_bytes()).digest())
-        _repo_revision = "local-sha256:" + _tree_hash.hexdigest()
+        _repo_revision = "local-sha256:" + _helper_sha256
         _repo_source = "local-snapshot"
         print("소스 식별: Git 메타데이터가 없어 로컬 헬퍼 SHA-256을 기록합니다.")
     try:
@@ -829,6 +862,7 @@ def _(MODEL_PATH, MODEL_REVISION, PROJECT_DIR):
         "classroom_version": "2026-09-14", "model_id": MODEL_PATH,
         "model_revision": MODEL_REVISION, "repo_revision": _repo_revision, "notebook_sha256": _notebook_sha256,
         "repo_source": _repo_source,
+        "helper_sha256": _helper_sha256, "repo_dirty": _repo_dirty,
         "python": _platform.python_version(),
         "packages": {name: _versions.version(name) for name in
                      ("torch", "torchvision", "transformers", "qwen-omni-utils", "marimo",
@@ -841,6 +875,7 @@ def _(MODEL_PATH, MODEL_REVISION, PROJECT_DIR):
             "clip_sha256": _hash.sha256(clip_path.read_bytes()).hexdigest(),
             "model_id": MODEL_PATH, "model_revision": MODEL_REVISION,
             "repo_revision": _repo_revision, "notebook_sha256": _notebook_sha256,
+            "helper_sha256": _helper_sha256, "repo_dirty": _repo_dirty,
             "runtime_packages": dict(run_provenance["packages"]),
             "python": run_provenance["python"], **settings,
         }
@@ -898,7 +933,7 @@ def _(USE_PRECOMPUTED):
     else:
         assert torch.cuda.is_available(), (
             "GPU가 보이지 않습니다. 화면 위쪽의 Configure compute에서 GPU를 선택하고 Save and restart를 누르세요. "
-            "(또는 위 셀에서 USE_PRECOMPUTED=True로 두면 커밋된 산물로 가이드 예제를 재생합니다.)"
+            "(또는 위 셀에서 USE_PRECOMPUTED=True로 두면 저장된 예제 결과를 표시합니다.)"
         )
         DEVICE = torch.device("cuda:0")
         _free, _total = torch.cuda.mem_get_info(0)
@@ -909,10 +944,10 @@ def _(USE_PRECOMPUTED):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## 파라미터 — 먼저 아래 실험 폼을 사용하세요
+    ## 설정값 — 먼저 아래 입력 양식을 사용하세요
 
-    **처음에는 코드 셀을 편집할 필요가 없습니다.** 아래 🎛️·🎯 폼에서 값 하나를 바꾸고
-    ▶를 누르세요. 폼 값을 움직이는 것만으로 GPU 실험이 실행되지는 않습니다.
+    **처음에는 코드 셀을 편집할 필요가 없습니다.** 아래 🎛️·🎯 입력 양식에서 값 하나를 바꾸고
+    ▶를 누르세요. 입력값을 바꾸는 것만으로 GPU 실험이 실행되지는 않습니다.
 
     | 바꿀 것 | 예상되는 변화 | 비교할 때 고정할 것 |
     |---|---|---|
@@ -922,11 +957,11 @@ def _(mo):
     | 레이어 `[0,12)`→`[12,24)` | 이 개입에 민감한 구간 비교 | `end`는 포함하지 않음; 다른 설정은 유지 |
     | 🎯 캡션 상한 32→64 | 더 긴 캡션을 생성할 수 있음 | 실제 길이·문장을 함께 기록 |
 
-    **고급:** 아래 코드의 공통 설정값을 바꾸면 여러 시범 셀과 폼이 다시 실행/초기화될 수 있습니다.
+    **고급:** 아래 코드의 공통 설정값을 바꾸면 여러 시범 셀이 다시 실행되고 입력 양식이 초기화될 수 있습니다.
     모델은 재사용하지만 추가 연산과 메모리는 필요합니다. 먼저 결과를 내보내세요.
     프레임은 2–16의 짝수, 시범 어텐션 캡처는 최대 2개 레이어로 제한합니다.
     입력 토큰 수와 디코딩 크기도 검사하므로 짧고 작은 클립부터 시도하세요.
-    `ATTENTION_CAPTURE_LAYERS=(0,2)`는 히트맵 저장 범위이며 **녹아웃 레이어 범위와 다릅니다.**
+    `ATTENTION_CAPTURE_LAYERS=(0,2)`는 히트맵 저장 범위이며 **연결 차단 레이어 범위와 다릅니다.**
     """)
     return
 
@@ -1268,7 +1303,10 @@ def _(Path, RESULTS_DIR, SILENT_VIDEO_PATH, VIDEO_PATH, preflight_clip):
 
 @app.cell
 def _(get_runs, mo):
-    from src.run_ledger import build_worksheet_md as worksheet_md
+    from functools import partial as _partial
+    from src.run_ledger import build_worksheet_md as _build_worksheet
+
+    worksheet_md = _partial(_build_worksheet, lang="ko")
     from src.run_ledger import render_ledger_html as _render_ledger
     def ledger_view(highlight=()):
         return mo.Html(_render_ledger(get_runs(), highlight_ids=highlight, lang="ko"))
@@ -1279,13 +1317,13 @@ def _(get_runs, mo):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## Logit Lens (로짓 렌즈)
+    ## 로짓 렌즈(Logit Lens)
 
-    멀티모달 순전파(forward pass) 1회를 돌립니다. CSV 분석은 `audio` 토큰 위치에
+    멀티모달 입력을 순전파(forward pass) 1회로 처리합니다. CSV 분석은 `audio` 토큰 위치에
     집중합니다.
 
     아래 캡션이 문장 중간에서 끊겨 보인다면 정상입니다. `MAX_NEW_TOKENS = 32`에서
-    생성을 멈추기 때문입니다 — 고장이 아니라 길이 제한입니다.
+    생성을 멈추기 때문입니다 — 설정한 길이 제한에 도달한 결과입니다.
     """)
     return
 
@@ -1330,10 +1368,10 @@ def _(
         _logit_out = mo.vstack([
             mo.callout(
                 mo.md(
-                    "**캐시에서 재생됨** — 미리 계산된 결과이며 GPU를 쓰지 않았습니다. 이 산물은 "
+                    "**저장된 예제 결과** — 이번 실행에서는 GPU로 새로 계산하지 않았습니다. 이 결과는 "
                     f"클립 `{_pre['meta'].get('clip')}`, "
                     f"`nframes={_pre['meta'].get('nframes')}`, 프롬프트 "
-                    f"_{_pre['meta'].get('logit_prompt')}_로 생성됐습니다. 위의 노브를 "
+                    f"_{_pre['meta'].get('logit_prompt')}_로 생성됐습니다. 위의 설정값을 "
                     "편집해도 이 값들은 바뀌지 않습니다."
                 ),
                 kind="neutral",
@@ -1390,12 +1428,12 @@ def _(
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## 레이어별 Logit-lens 다양성
+    ## 레이어별 로짓 렌즈 다양성
 
     각 레이어의 오디오 위치에서 최고 점수 토큰을 골라 문자열로 바꿉니다. 왼쪽은 서로 다른 문자열의 수, 오른쪽은 가장 자주 나온 문자열의 비율입니다.
 
-    둘 다 **무슨 일이 있었는지**를 적은 서술적 통계입니다. 값이 크다고 표현이 좋아진
-    것도, 작다고 나빠진 것도 아닙니다.
+    두 값은 출력 문자열의 종류 수와 가장 자주 나온 문자열의 비율을 요약합니다.
+    값이 크거나 작다는 사실만으로 표현의 품질을 판단할 수는 없습니다.
     """)
     return
 
@@ -1409,7 +1447,7 @@ def _(Counter, USE_PRECOMPUTED, csv, logit_csv_written, mo, np, plt):
         logit_csv_written is None or not logit_csv_written.is_file(),
         mo.callout(
             mo.md(
-                "**Logit-lens CSV가 없습니다** — 위 실행이 오디오 토큰 행을 하나도 쓰지 "
+                "**로짓 렌즈 CSV가 없습니다** — 위 실행이 오디오 토큰 행을 하나도 쓰지 "
                 "못했습니다. 가장 흔한 원인은 오디오 트랙이 없는 클립입니다. 프로브는 "
                 "`audio` 위치에서만 측정됩니다."
             ),
@@ -1427,14 +1465,14 @@ def _(Counter, USE_PRECOMPUTED, csv, logit_csv_written, mo, np, plt):
     _x = np.arange(len(_layer_names))
     _fig, _axes = plt.subplots(1, 2, figsize=(14, 4), constrained_layout=True)
     _axes[0].bar(_x, _unique, color="#4C78A8")
-    _axes[0].set(title="레이어별 Logit-lens 다양성", xlabel="Thinker 레이어", ylabel="서로 다른 출력 문자열 수")
+    _axes[0].set(title="레이어별 로짓 렌즈 다양성", xlabel="Thinker 레이어", ylabel="서로 다른 출력 문자열 수")
     _axes[1].plot(_x, _dominant, marker="o", color="#F58518")
     _axes[1].set(title="최빈 출력 문자열 비율", xlabel="Thinker 레이어", ylabel="비율", ylim=(0, 1))
     for _ax in _axes:
         _ax.grid(axis="y", alpha=0.25)
     if USE_PRECOMPUTED:
         _div_out = mo.vstack([
-            mo.callout(mo.md("**캐시에서 재생됨** — 미리 계산된 결과이며 GPU를 쓰지 않았습니다."), kind="neutral"),
+            mo.callout(mo.md("**저장된 예제 결과** — 이번 실행에서는 GPU로 새로 계산하지 않았습니다."), kind="neutral"),
             _fig,
         ])
     else:
@@ -1446,21 +1484,19 @@ def _(Counter, USE_PRECOMPUTED, csv, logit_csv_written, mo, np, plt):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## 🎞️ 인터랙티브: 프로브 표면, 36개 레이어를 한눈에
+    ## 🎞️ 레이어별 프로브 결과 — 36개 레이어 한눈에 보기
 
     프로브 그리드에서 각 레이어와 오디오 위치의 출력을 확인할 수 있습니다. **y = thinker 레이어,
     x = 오디오 위치**이고, 색은 프로브가 어떤 종류의 토큰으로 디코딩되는지를
-    나타냅니다 — **기타 문자열(content)**, **잡토큰(junk)**(구두점·공백·기호), 또는
-    **디코딩 불가(undecodable)**. 얇은 테두리는 그 위치의 마지막 레이어 토큰과 이미
-    같아진 칸을 표시합니다.
+    나타냅니다 — **그 밖의 문자열**, **공백·기호류**(구두점·공백·기호), 또는
+    **대체 문자(�) 포함**. 얇은 테두리는 같은 오디오 위치에서 마지막 레이어와 출력이 같은 칸을 표시합니다.
 
-    디코딩된 토큰에 한자나 다른 언어 조각이 섞일 수 있습니다. 보정되지 않은 raw probe의
-    어휘 투사 결과이므로 다국어 추론이나 모델의 생각을 증명하지 않습니다. 실제 비율은
+    디코딩된 토큰에 한자나 다른 언어 조각이 섞일 수 있습니다. 최종 RMSNorm을 생략하고 출력층을 적용한 진단 결과이므로 다국어 추론이나 모델의 생각을 증명하지 않습니다. 실제 비율은
     아래 집계로 확인하세요. 문자가 깨진 경우와 읽을 수 있는 다른 문자도 구분합니다.
 
     그리드를 드래그하면 선택한 레이어의 출력 문자열이 아래에 표시됩니다. 열을 클릭하면 그 위치를 고정하고 레이어별 출력을 비교할 수 있습니다.
 
-    각 레이어의 오디오 위치에서 중간 표현에 lm_head를 적용해 가장 높은 점수의 토큰을 표시합니다. 모델이 실제로 생성한 토큰을 뜻하지는 않습니다. 마지막 레이어의 출력과 ‘잡토큰(junk)’의 비율·분류 기준을 함께 확인하세요.
+    각 레이어의 오디오 위치에서 중간 표현에 lm_head를 적용해 가장 높은 점수의 토큰을 표시합니다. 모델이 실제로 생성한 토큰을 뜻하지는 않습니다. 마지막 레이어의 출력과 ‘공백·기호류’의 비율·분류 기준을 함께 확인하세요.
 
     위에서 쓴 CSV를 다시 그리는 것뿐입니다. GPU가 필요 없고 `USE_PRECOMPUTED` 재생
     모드에서도 동작합니다.
@@ -1475,14 +1511,14 @@ def probe_grid_panel(logit_csv_written, mo):
     from src.probe_grid import probe_grid_layer_summary as _layer_summary
 
     _pack = (
-        _build_pack(logit_csv_written)
+        _build_pack(logit_csv_written, lang="ko")
         if logit_csv_written is not None and logit_csv_written.is_file()
         else None
     )
     mo.stop(
         _pack is None,
         mo.callout(
-            mo.md("Logit-lens 계산 결과에 오디오 위치 데이터가 없어 프로브 그리드를 표시할 수 없습니다."),
+            mo.md("로짓 렌즈 계산 결과에 오디오 위치 데이터가 없어 프로브 그리드를 표시할 수 없습니다."),
             kind="warn",
         ),
     )
@@ -1499,9 +1535,9 @@ def probe_grid_panel(logit_csv_written, mo):
             '<details>\n<summary>해석 도움말</summary>\n\n'
             '오디오 위치의 레이어 출력에 최종 RMSNorm을 적용하지 않고 lm_head를 적용한 결과입니다. '
             '각 위치의 최고 점수 토큰을 문자열로 표시하며, 모델의 실제 생성 결과나 오디오 인식 정답률을 뜻하지 않습니다.\n\n'
-            '기타 문자열(content)은 의미 있는 출력이라는 판정이 아닙니다. '
-            '잡토큰(junk)은 빈 문자열 또는 모든 문자가 Unicode 구두점·구분자·제어 문자·기호인 문자열입니다. '
-            '�(U+FFFD)가 포함된 문자열은 디코딩 불가로 분류합니다.\n\n</details>'
+            '그 밖의 문자열은 의미 있는 출력이라는 판정이 아닙니다. '
+            '공백·기호류는 빈 문자열 또는 모든 문자가 Unicode 구두점·구분자·제어 문자·기호인 문자열입니다. '
+            '�(U+FFFD)가 포함된 문자열은 ‘대체 문자(�) 포함’으로 분류합니다.\n\n</details>'
         ),
     ], gap=0.4)
     return (probe_summary,)
@@ -1516,8 +1552,8 @@ def probe_summary_panel(mo, probe_summary):
         {
             "레이어": _r["name"].replace("Layer_", ""),
             "서로 다른 출력 문자열 수": _r["unique"],
-            "잡토큰(junk)": _r["junk"],
-            "디코딩 불가": _r["undecodable"],
+            "공백·기호류": _r["junk"],
+            "대체 문자(�) 포함": _r["undecodable"],
             "마지막 레이어와 출력이 같은 위치 수": _r["matches_final"],
             "최빈 출력 문자열": repr(_r["modal_token"]),
         }
@@ -1525,8 +1561,8 @@ def probe_summary_panel(mo, probe_summary):
     ]
     mo.vstack([
         mo.md(
-            f"<span style=\"font-size:1.15rem;font-weight:600\">잡토큰이 가장 많은 레이어는 {_worst['name']}이며, "
-            f"잡토큰 칸은 {_worst['junk']}개, 서로 다른 출력 문자열은 {_worst['unique']}개입니다.</span>"
+            f"<span style=\"font-size:1.15rem;font-weight:600\">공백·기호류가 가장 많은 레이어는 {_worst['name']}이며, "
+            f"공백·기호류 칸은 {_worst['junk']}개, 서로 다른 출력 문자열은 {_worst['unique']}개입니다.</span>"
         ),
         mo.ui.table(_rows, selection=None, pagination=True, page_size=12),
         mo.md('문자 분류는 의미의 유무를 판정하지 않습니다. 마지막 레이어와 출력이 같아도 이후 모든 레이어에서 유지된다는 뜻은 아닙니다. 마지막 레이어 자체는 비교 기준이므로 모든 위치가 일치합니다.'),
@@ -1537,10 +1573,10 @@ def probe_summary_panel(mo, probe_summary):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## Attention Knockout (어텐션 녹아웃)
+    ## 어텐션 연결 차단(Attention Knockout)
 
     `KNOCKOUT_RULES`는 `(source_type, target_type, start_layer, end_layer)` 튜플입니다.
-    기본값은 레이어 0–35에서 생성 토큰이 비디오 토큰에 어텐션하는 것을 막습니다.
+    기본값은 레이어 0–35에서 생성 토큰이 비디오 토큰을 직접 참조하는 어텐션 연결을 차단합니다.
     """)
     return
 
@@ -1591,7 +1627,7 @@ def guided_captions(
         attention_inputs = None
         attention_baseline_ids = None
         _ko_rules = _pre["knockout_rules"]
-        _ko_banner = mo.callout(mo.md("**캐시에서 재생됨** — 미리 계산된 결과이며 GPU를 쓰지 않았습니다."), kind="neutral")
+        _ko_banner = mo.callout(mo.md("**저장된 예제 결과** — 이번 실행에서는 GPU로 새로 계산하지 않았습니다."), kind="neutral")
     else:
         from src.precompute import summarize_attention as _summarize_attention
 
@@ -1637,7 +1673,7 @@ def guided_captions(
             attention_model, KNOCKOUT_RULES, attention_token_types, len(attention_token_types),
             track_attention=True, capture_layer_range=ATTENTION_CAPTURE_LAYERS,
         ) as _cap:
-            with mo.status.spinner(title="녹아웃 생성 중…"):
+            with mo.status.spinner(title="연결 차단 생성 중…"):
                 with torch.no_grad():
                     # Same as the baseline: the per-module capture hooks do the
                     # work, so the model-level flag is redundant here and costs
@@ -1670,8 +1706,8 @@ def guided_captions(
 
     _ko_cmp = mo.vstack([
         mo.md(
-            f"**기준선**(왼쪽) vs **녹아웃** `{_ko_rules}`(오른쪽) — "
-            '공통 구절에 마우스를 올리면 해당 부분이 강조됩니다. 강조되지 않은 부분도 두 캡션에서 직접 비교하세요. 레이어 구간을 바꾸려면 ‘선택 탐색’을 사용하세요. Studio에서는 ‘실험실 → 경로 차단’을 엽니다.'
+            f"**기준선**(왼쪽) vs **연결 차단** `{_ko_rules}`(오른쪽) — "
+            '공통 구절에 마우스를 올리면 해당 부분이 강조됩니다. 강조되지 않은 부분도 두 캡션에서 직접 비교하세요. 레이어 구간을 바꾸려면 ‘경로 차단’ 입력 양식을 사용하세요.'
         ),
         mo.ui.anywidget(_TextCompare(
             text_a=baseline_text, text_b=knockout_text, min_match_words=2
@@ -1692,15 +1728,15 @@ def guided_captions(
 @app.cell(hide_code=True)
 def _(ATTENTION_CAPTURE_LAYERS, mo):
     mo.md(f"""
-    ## 키 모달리티별 캡처된 어텐션 — 기준선 **과** 녹아웃
+    ## 참조 대상별 어텐션 가중치 — 기준선과 연결 차단 비교
 
-    각 칸은 생성 단계별로 헤드를 평균 내고, 해당 모달리티의 키로 향하는 어텐션 가중치를 합산한 뒤, 캡처한 후속 생성 단계들에 걸쳐 평균낸 값입니다. 여러 쿼리를 함께 처리하는 프롬프트 단계는 제외합니다. 기준선과 차단 실행은 캡션과 생성 길이가 달라질 수 있으므로, Δ는 서로 다른 생성 문맥에서 얻은 평균의 차이일 수 있습니다. 이 값만으로 모달리티의 인과적 중요도를 판단할 수는 없습니다.
+    각 칸은 생성 단계별로 헤드를 평균 내고, 해당 모달리티의 토큰(키)을 참조하는 어텐션 가중치를 합산한 뒤, 기록한 후속 생성 단계에 걸쳐 평균을 낸 값입니다. 입력 프롬프트를 한꺼번에 처리하는 단계는 제외합니다. 기준선과 차단 실행은 캡션과 생성 길이가 달라질 수 있으므로, Δ는 서로 다른 생성 문맥에서 얻은 평균의 차이일 수 있습니다. 이 값만으로 모달리티의 인과적 중요도를 판단할 수는 없습니다.
 
     기준선과 차단 패널은 같은 색 범위를 쓰며, 어두울수록 값이 작고 각 행의 합은 약 1입니다. Δ 패널은 차단 후 평균에서 기준선 평균을 뺀 값으로, 붉은색은 증가, 푸른색은 감소를 뜻합니다. 차단 규칙이 적용된 레이어에서 해당 열의 값을 확인하세요.
 
     레이어 `{ATTENTION_CAPTURE_LAYERS[0]}`–`{ATTENTION_CAPTURE_LAYERS[1] - 1}`만
-    표시됩니다. 파라미터 셀의 `ATTENTION_CAPTURE_LAYERS` 값입니다. 이 창을 넓히는
-    것은 정당한 실험이지만 실제 비용이 듭니다 — 위의 노브 표를 보세요.
+    표시됩니다. 공통 설정 셀의 `ATTENTION_CAPTURE_LAYERS` 값입니다. 기록하는 레이어 범위를 넓히면
+    메모리 사용량이 늘어납니다. 이 노트북에서는 최대 2개 레이어를 기록할 수 있습니다.
     """)
     return
 
@@ -1711,7 +1747,7 @@ def attention_mass_panel(attention_summary, baseline_attention_summary, mo, np, 
     # tensors, or loaded from the committed matrices in USE_PRECOMPUTED mode. Same
     # shape either way, so this plot is unchanged between the two.
     if attention_summary is None:
-        _out = mo.md("> 이 빌드는 어텐션 텐서를 반환하지 않았습니다. 위의 텍스트 비교가 결과입니다.")
+        _out = mo.md("> 표시할 어텐션 기록이 없습니다. 위의 기준선·차단 캡션을 비교하세요.")
     else:
         _layers, _mods, _ko_mat = attention_summary
         _ko_mat = np.asarray(_ko_mat, dtype=float)
@@ -1722,7 +1758,7 @@ def attention_mass_panel(attention_summary, baseline_attention_summary, mo, np, 
         # different numbers. The Δ panel keeps its own symmetric diverging scale,
         # because it is a different quantity with a meaningful zero.
         _mass_hi = max(1e-9, float(_ko_mat.max()))
-        _panels = [("녹아웃 실행", _ko_mat, "magma", 0.0, _mass_hi)]
+        _panels = [("연결 차단 실행", _ko_mat, "magma", 0.0, _mass_hi)]
         if baseline_attention_summary is not None:
             _bl_mat = np.asarray(baseline_attention_summary[2], dtype=float)
             if _bl_mat.shape == _ko_mat.shape:
@@ -1730,9 +1766,9 @@ def attention_mass_panel(attention_summary, baseline_attention_summary, mo, np, 
                 _lim = max(1e-9, float(np.abs(_delta).max()))
                 _mass_hi = max(1e-9, float(max(_bl_mat.max(), _ko_mat.max())))
                 _panels = [
-                    ("기준선 (녹아웃 없음)", _bl_mat, "magma", 0.0, _mass_hi),
-                    ("녹아웃 실행", _ko_mat, "magma", 0.0, _mass_hi),
-                    ("Δ = 녹아웃 − 기준선", _delta, "RdBu_r", -_lim, _lim),
+                    ("기준선 (연결 차단 없음)", _bl_mat, "magma", 0.0, _mass_hi),
+                    ("연결 차단 실행", _ko_mat, "magma", 0.0, _mass_hi),
+                    ("Δ = 연결 차단 − 기준선", _delta, "RdBu_r", -_lim, _lim),
                 ]
 
         _fig, _axes = plt.subplots(
@@ -1745,7 +1781,7 @@ def attention_mass_panel(attention_summary, baseline_attention_summary, mo, np, 
             _diverging = _vmin < 0
             _im = _ax.imshow(_mat, aspect="auto", cmap=_cmap, vmin=_vmin, vmax=_vmax)
             _ax.set(
-                title=_title, xlabel="키 모달리티", ylabel="Thinker 레이어",
+                title=_title, xlabel="참조 대상(키)의 모달리티", ylabel="Thinker 레이어",
                 xticks=np.arange(len(_mods)), xticklabels=_mods,
                 yticks=np.arange(len(_layers)), yticklabels=_layers,
             )
@@ -1765,10 +1801,10 @@ def attention_mass_panel(attention_summary, baseline_attention_summary, mo, np, 
                         _label = f"{_v:.2f}"
                     _ax.text(_ci, _ri, _label, ha="center", va="center",
                              color=_color, fontsize=9)
-            _fig.colorbar(_im, ax=_ax, label="어텐션 질량")
+            _fig.colorbar(_im, ax=_ax, label="평균 어텐션 가중치 합의 변화량" if _diverging else "어텐션 가중치 합(평균)")
         _out = mo.vstack([
             _fig,
-            mo.md('<details>\n<summary>해석 도움말</summary>\n\n각 칸은 생성 단계별로 헤드를 평균 내고, 해당 모달리티의 키로 향하는 어텐션 가중치를 합산한 뒤, 캡처한 후속 생성 단계들에 걸쳐 평균낸 값입니다. 여러 쿼리를 함께 처리하는 프롬프트 단계는 제외합니다. 기준선과 차단 실행은 캡션과 생성 길이가 달라질 수 있으므로, Δ는 서로 다른 생성 문맥에서 얻은 평균의 차이일 수 있습니다. 이 값만으로 모달리티의 인과적 중요도를 판단할 수는 없습니다.\n\n기준선과 차단 패널은 같은 색 범위를 쓰며, 어두울수록 값이 작고 각 행의 합은 약 1입니다. Δ 패널은 차단 후 평균에서 기준선 평균을 뺀 값으로, 붉은색은 증가, 푸른색은 감소를 뜻합니다. 차단 규칙이 적용된 레이어에서 해당 열의 값을 확인하세요.\n\n</details>'),
+            mo.md('<details>\n<summary>해석 도움말</summary>\n\n각 칸은 생성 단계별로 헤드를 평균 내고, 해당 모달리티의 토큰(키)을 참조하는 어텐션 가중치를 합산한 뒤, 기록한 후속 생성 단계에 걸쳐 평균을 낸 값입니다. 입력 프롬프트를 한꺼번에 처리하는 단계는 제외합니다. 기준선과 차단 실행은 캡션과 생성 길이가 달라질 수 있으므로, Δ는 서로 다른 생성 문맥에서 얻은 평균의 차이일 수 있습니다. 이 값만으로 모달리티의 인과적 중요도를 판단할 수는 없습니다.\n\n기준선과 차단 패널은 같은 색 범위를 쓰며, 어두울수록 값이 작고 각 행의 합은 약 1입니다. Δ 패널은 차단 후 평균에서 기준선 평균을 뺀 값으로, 붉은색은 증가, 푸른색은 감소를 뜻합니다. 차단 규칙이 적용된 레이어에서 해당 열의 값을 확인하세요.\n\n</details>'),
         ])
     _out
     return
@@ -1777,23 +1813,23 @@ def attention_mass_panel(attention_summary, baseline_attention_summary, mo, np, 
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## 🎚️ 선택 탐색: 어느 레이어 구간의 개입에 더 민감한가?
+    ## 🎚️ 경로 차단: 어느 레이어 구간의 개입에 더 민감한가?
 
-    위의 비교는 **단 하나의** 녹아웃입니다 — 모달리티 하나, 고정된 레이어 구간 하나
-    (36개 레이어 전부). 전 구간을 막은 결과만으로 경로의 중요성이나 위치를 확정할 수 없습니다. 이 섹션은 그 구간을 훑습니다. 타깃 모달리티와
-    레이어 구간을 고르고 다시 생성해서, 캡션이 기준선에서 얼마나 멀어지는지 보세요.
+    위의 비교는 **단 하나의** 연결 차단입니다 — 모달리티 하나, 고정된 레이어 구간 하나
+    (36개 레이어 전부). 전 구간을 막은 결과만으로 경로의 중요성이나 위치를 확정할 수 없습니다. 이제 레이어 구간을 나누어 비교합니다. 타깃 모달리티와
+    레이어 구간을 고르고 다시 생성해서, 기준선에 비해 캡션이 얼마나 달라지는지 확인하세요.
 
     같은 타깃에 대해 `[0, 12)` · `[12, 24)` · `[24, 36)`을 비교해 보세요.
 
-    **널(null) 결과를 읽는 법.** 캡션이 그대로인 구간은 *이 측정에서는 효과가 없음*을
+    **캡션이 바뀌지 않았을 때의 해석.** 캡션이 그대로인 구간은 *이 측정에서는 효과가 없음*을
     보여 줄 뿐입니다. 중복(redundancy), 이 규칙이 자르지 못한 간접 경로, 또는 변화를
     보기에 너무 거친 지표 — 어느 쪽과도 모순되지 않습니다. 경로가 **없다는 증거는
-    아닙니다**. 문자열 유사도는 캡션의 차이를 보여 주지만 토큰 확률의 변화는 보여 주지 않습니다. 아래의 티처 포싱 Δ가 같은 질문의 연속적
-    버전이며, *작은* 효과를 보여 줄 수 있는 쪽입니다.
+    아닙니다**. 문자열 유사도는 캡션의 차이를 보여 주지만 토큰 확률의 변화는 보여 주지 않습니다. 아래의 티처 포싱에서는 캡션을 고정해 토큰별 로그 확률의 변화를 계산합니다.
+    캡션이 그대로여도 확률은 달라질 수 있습니다.
 
-    ▶를 누를 때마다 이미 인코딩된 클립에 대해 greedy 생성 1회가 돌아갑니다. 입력과 런타임에 따라 시간이 달라집니다.
+    ▶를 누를 때마다 이미 인코딩된 클립에 대해 캡션을 한 번 생성합니다. 매 단계에서 확률이 가장 높은 토큰을 선택하는 greedy 방식입니다. 입력과 런타임에 따라 시간이 달라집니다.
     기준선은 재사용하며 다시 생성하지 않습니다. 두 캡션 모두 **답변만** 표시됩니다 —
-    공통 프롬프트를 잘라 내야 차이가 지시문이 아니라 모델의 말에 대한 것이 됩니다.
+    공통 프롬프트를 제외하고 모델이 생성한 답변만 비교합니다.
     서로 다른 설정·결과는 아래 **실습 기록(ledger)**에 남습니다. 동일 재실행은 한 행으로 합쳐집니다. 직전 구간을 기록에서
     비교할 수 있습니다.
     """)
@@ -1811,12 +1847,12 @@ def token_census(Counter, attention_token_types, mo):
         {
             "모달리티": _m,
             "이 입력에 있는 토큰 수": _census.get(_m, 0),
-            "여기서 타깃으로 쓸 수 있는가": "예" if _census.get(_m, 0) else "아니오 — 하나도 없음",
+            "참조 대상으로 선택 가능": "예" if _census.get(_m, 0) else "아니오 — 해당 토큰 없음",
         }
         for _m in ("video", "audio", "query_text", "image")
     ]
     mo.vstack([
-        mo.md("<span style=\"font-size:1.15rem;font-weight:600\">이 인코딩된 입력에 실제로 들어 있는 것</span>"),
+        mo.md("<span style=\"font-size:1.15rem;font-weight:600\">모델 입력의 토큰 구성</span>"),
         mo.ui.table(_rows, selection=None, pagination=False),
         mo.md(
             "`generated`는 표에 없습니다. 그 위치는 모델이 디코딩하기 전에는 존재하지 "
@@ -1844,7 +1880,7 @@ def band_form(ATTENTION_PROMPT, KNOCKOUT_RULES, MAX_NEW_TOKENS, NFRAMES, USE_PRE
         if int(_hi) <= int(_lo):
             return (
                 f"[{int(_lo)}, {int(_hi)})는 0개 레이어를 마스킹합니다 — 끝 번호는 포함하지 않습니다. "
-                "이대로면 기준선을 돌려 놓고 '효과 없음'이라고 보고하게 됩니다."
+                "차단할 레이어가 없으므로 시작 번호보다 큰 끝 번호를 선택하세요."
             )
         return None
 
@@ -1857,11 +1893,11 @@ def band_form(ATTENTION_PROMPT, KNOCKOUT_RULES, MAX_NEW_TOKENS, NFRAMES, USE_PRE
         "{null_band} **캡션 변화가 작을 것으로 예상**\n\n"
         "<details>\n"
         "<summary>구간 도움말</summary>\n\n"
-        "이 실행은 선택한 thinker 레이어 구간에서 generated 토큰이 선택한 타깃에 "
-        "어텐션하는 경로를 금지합니다. "
+        "이 실행은 선택한 thinker 레이어 구간에서 generated 토큰이 선택한 타깃을 "
+        "직접 참조하는 어텐션 연결을 차단합니다. "
         '체크박스에는 실행 전에 예상한 결과를 기록합니다. 체크 여부는 차단 규칙을 바꾸거나 이 실행을 대조군으로 지정하지 않습니다. 실행 후 실제 결과와 비교하세요.\n\n'
         f"끝 번호는 포함하지 않습니다. 이 thinker는 레이어가 <strong>{_band_layers}</strong>개입니다. "
-        "클립·프롬프트·프레임 수는 파라미터 셀 값을 그대로 씁니다.\n\n"
+        "클립·프롬프트·프레임 수는 공통 설정 셀 값을 그대로 씁니다.\n\n"
         "</details>"
 
     ).batch(
@@ -1932,7 +1968,7 @@ def band_result_panel(
         USE_PRECOMPUTED or attention_inputs is None,
         mo.callout(
             mo.md(
-                "**이 스윕은 라이브 모델이 필요합니다** — 구간마다 캡션을 다시 생성하므로 "
+                "**구간별 비교에는 모델 실행이 필요합니다** — 구간마다 캡션을 다시 생성하므로 "
                 "`USE_PRECOMPUTED=True`인 동안에는 건너뜁니다."
             ),
             kind="warn",
@@ -1953,7 +1989,7 @@ def band_result_panel(
     _band_out = None
     try:
         with mo.status.spinner(
-            title=f"녹아웃 생성 · generated→{_bp['target']} [{_lo},{_hi})…"
+            title=f"연결 차단 생성 · generated→{_bp['target']} [{_lo},{_hi})…"
         ):
             with block_attention(
                 attention_model, _band_rules, attention_token_types,
@@ -1980,7 +2016,7 @@ def band_result_panel(
             mo.md(
                 f"**클립** `{VIDEO_PATH.name}` · **프레임 수** {NFRAMES} · **캡션 상한** {MAX_NEW_TOKENS}토큰\n\n"
                 f"**프롬프트** {ATTENTION_PROMPT}\n\n"
-                f"**녹아웃** `generated→{_bp['target']}` **[{_lo}, {_hi})** "
+                f"**연결 차단** `generated→{_bp['target']}` **[{_lo}, {_hi})** "
                 f"&nbsp;·&nbsp; 전체 {len(attention_model.thinker.model.layers)}개 중 "
                 f"{_hi - _lo}개 레이어 차단"
             ),
@@ -1988,7 +2024,7 @@ def band_result_panel(
                 mo.stat(
                     value=f"{_ratio:.0%}",
                     label="기준선 대비 캡션 유사도",
-                    caption="어절 문자열의 겹침 · 100%로 반올림돼도 내부 확률이 같다는 뜻은 아님",
+                    caption="공백으로 나눈 문자열 조각의 유사도 · 100%로 반올림돼도 내부 확률이 같다는 뜻은 아님",
                     # No `direction=`: an unchanged caption used to get the green
                     # up-arrow and a moved one the red down-arrow, so a three-band
                     # sweep read as two failures and one success rather than as a
@@ -2058,7 +2094,7 @@ def _(ledger_view):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## 티처 포싱 Δ 로그 확률 (고정 파라미터)
+    ## 티처 포싱 Δ 로그 확률 (고정 설정)
 
     **쉽게 말해:** 모델이 방금 생성한 캡션을 고정하고, 각 다음 토큰에 부여하는 조건부
     확률을 연결 차단 전후로 비교합니다. 정답 여부나 보정된 확신을 측정하지는 않습니다.
@@ -2069,8 +2105,8 @@ def _(mo):
     레이어 — source만 `answer`가 됩니다. 이제 캡션은 생성물이 아니라 *입력*이기
     때문입니다).
 
-    캡션 토큰마다 **Δ = 녹아웃 − 기준선**입니다. 붉은색 계열은 음의 Δ, 푸른색 계열은 양의 Δ를 나타냅니다.
-    아래 🎯 플레이그라운드 섹션에서는 같은 측정을 여러분의 클립·프롬프트·레이어
+    캡션 토큰마다 **Δ = 연결 차단 − 기준선**입니다. 붉은색 계열은 음의 Δ, 푸른색 계열은 양의 Δ를 나타냅니다.
+    아래 🎯 직접 실험 섹션에서는 같은 측정을 여러분의 클립·프롬프트·레이어
     구간으로 직접 돌려 볼 수 있습니다.
     """)
     return
@@ -2130,23 +2166,23 @@ def guided_tf_panel(
             _w9_total = w9_tf_result["delta_total"]
             _w9_rule_txt = " + ".join(f"`answer→{_r[1]}` [{_r[2]},{_r[3]})" for _r in _w9_rules)
             _w9_out = mo.vstack([
-                mo.md(f"**녹아웃** {_w9_rule_txt} &nbsp;·&nbsp; 기준선 캡션을 `answer`로 티처 포싱"),
+                mo.md(f"**연결 차단** {_w9_rule_txt} &nbsp;·&nbsp; 기준선 캡션을 `answer`로 티처 포싱"),
                 mo.callout(mo.md("**채점한 전체 캡션**\n\n" + w9_tf_result["caption_text"]
                                  + ("\n\n⚠ 생성 상한에 도달한 캡션입니다." if w9_tf_result["generation_truncated"] else "")),
                            kind="warn" if w9_tf_result["generation_truncated"] else "neutral"),
                 mo.hstack([
                     mo.stat(
                         value=f"{_w9_total:+.2f}",
-                        label="Δ 로그 우도 합계 (nats)",
-                        caption="녹아웃 − 기준선 · 음수 = 해당 캡션의 확률 감소",
+                        label="로그 확률 변화량 합계 (Δ, nats)",
+                        caption="연결 차단 − 기준선 · 음수 = 해당 캡션의 확률 감소",
                         direction="decrease" if _w9_total < 0 else "increase",
                         bordered=True,
                     ),
                     mo.stat(
                         value=f"{w9_tf_result['delta_mean']:+.3f}",
-                        label="토큰당 평균 Δ 로그 확률 (nats/token)",
+                        label="토큰당 평균 로그 확률 변화량 (Δ, nats/token)",
                         caption=(
-                            "길이로 나눈 값 · 같은 설정의 쌍과 전체 캡션을 함께 비교하세요"
+                            "Δ 합계를 채점한 모델 토큰 수로 나눈 값 · 같은 설정의 쌍과 전체 캡션을 함께 비교하세요"
                         ),
                         direction="decrease" if w9_tf_result["delta_mean"] < 0 else "increase",
                         bordered=True,
@@ -2154,7 +2190,7 @@ def guided_tf_panel(
                     mo.stat(
                         value=str(len(_w9_delta)),
                         label="채점한 캡션 토큰 수",
-                        caption="greedy 기준선, 티처 포싱",
+                        caption="기준선 캡션을 고정해 계산",
                         bordered=True,
                     ),
                 ], widths="equal", gap=1, wrap=True),
@@ -2178,9 +2214,9 @@ def guided_tf_threshold(mo, w9_tf_result):
             value=_params["amount"], label="강조 임계값 (nats)",
         )
         _out = mo.md(
-            '<span style="font-size:1.15rem;font-weight:600">토큰별 Δ 로그 확률 (표시 단위에 마우스를 올리면 그 토큰들의 nats가 보입니다)</span>\n\n'
+            '<span style="font-size:1.15rem;font-weight:600">토큰별 Δ 로그 확률 (표시 묶음에 마우스를 올리면 묶음의 Δ 합계와 구성 토큰별 Δ가 nats 단위로 보입니다)</span>\n\n'
             '붉은색 계열은 음의 Δ, 푸른색 계열은 양의 Δ를 나타냅니다.\n\n'
-            f'화면의 한 표시 단위에는 여러 모델 토큰이 묶일 수 있습니다. 색은 그 토큰들의 Δ 합계로 정합니다. 합계가 −{w9_threshold} nats보다 작으면 테두리와 굵은 글씨로 강조하고, 나머지는 흐리게 표시합니다. 숫자를 직접 입력하거나 방향키로 바꾸세요. 강조 표시와 선택된 단위의 집계가 바뀌며, 모델은 다시 실행하지 않습니다.'
+            f'표시 묶음은 읽기 쉽도록 하나 이상의 모델 토큰을 묶어 표시한 단위입니다. 색은 그 토큰들의 Δ 합계로 정합니다. 합계가 −{w9_threshold} nats보다 작으면 테두리와 굵은 글씨로 강조하고, 나머지는 흐리게 표시합니다. 숫자를 직접 입력하거나 방향키로 바꾸세요. 강조 표시와 선택된 묶음의 집계가 바뀌며, 모델은 다시 실행하지 않습니다.'
         )
     _out
     return (w9_threshold,)
@@ -2204,15 +2240,15 @@ def guided_tf_tokens(mo, selected_drop_share, w9_threshold, w9_tf_result):
         _out = mo.vstack([
             mo.Html(
                 "<div style='line-height:2.1;font-family:monospace;font-size:15px'>"
-                + _w9_strip(w9_tf_result["caption_tokens"], _delta, highlight_below=_th, vmax=8.0, token_kinds=w9_tf_result.get("caption_token_kinds"))
+                + _w9_strip(w9_tf_result["caption_tokens"], _delta, highlight_below=_th, vmax=8.0, token_kinds=w9_tf_result.get("caption_token_kinds"), lang="ko")
                 + "</div>"
             ),
             mo.md(
-                f"**{len(_hit)}/{len(_words)}** 표시 단위가 −{_th:.2f} nats보다 크게 떨어졌습니다 — 합쳐서 "
-                f"Δ = {sum(_w[1] for _w in _hit):+.2f} nats입니다. 감소한 표시 단위의 총 감소량 중 "
-                f"선택된 단위가 **{_share:.0f}%**를 차지합니다. 색 범위는 모든 실행에서 ±8 nats입니다."
+                f"전체 {len(_words)}개 표시 묶음 중 **{len(_hit)}개**에서 로그 확률이 {_th:.2f} nats를 초과해 감소했습니다(Δ < −{_th:.2f}). 선택된 묶음의 "
+                f"Δ 합계는 {sum(_w[1] for _w in _hit):+.2f} nats입니다. 감소한 표시 묶음의 총 감소량 중 "
+                f"선택된 묶음가 **{_share:.0f}%**를 차지합니다. 색 범위는 모든 실행에서 ±8 nats입니다."
             ),
-            mo.md('<details>\n<summary>해석 도움말</summary>\n\n선택 비율은 Δ 합계가 음수인 표시 단위들의 총 감소량 중, 임계값을 넘어 강조된 단위가 차지하는 비율입니다. ⟨special⟩은 문장 종료 등 특수 토큰이며 별도로 채점합니다. 그 값을 이웃 단어의 의미로 해석하지 마세요.\n\n</details>'),
+            mo.md('<details>\n<summary>해석 도움말</summary>\n\n선택 비율은 Δ 합계가 음수인 표시 묶음들의 총 감소량 중, 임계값을 넘어 강조된 묶음가 차지하는 비율입니다. ⟨special⟩은 문장 종료 등 특수 토큰이며 별도로 채점합니다. 그 값을 이웃 단어의 의미로 해석하지 마세요.\n\n</details>'),
         ])
     _out
 
@@ -2239,12 +2275,12 @@ def _(
 ):
     _csv_ok = bool(logit_csv_written and logit_csv_written.is_file() and logit_csv_written.stat().st_size)
     _attention_ok = bool(attention_summary and baseline_attention_summary)
-    _tf_status = "replay에서는 생략" if USE_PRECOMPUTED else ("완료" if w9_tf_result is not None else "실패 또는 미실행")
+    _tf_status = "재생 모드에서는 생략" if USE_PRECOMPUTED else ("완료" if w9_tf_result is not None else "실패 또는 미실행")
     mo.md(
 
         "### 시범 실행 상태\n\n"
-        f"- Logit-lens CSV: {'완료' if _csv_ok else '기록되지 않음'}\n"
-        f"- 기준선/녹아웃 캡션: {'표시됨' if knockout_text else '확인 필요'}\n"
+        f"- 로짓 렌즈 CSV: {'완료' if _csv_ok else '기록되지 않음'}\n"
+        f"- 기준선/연결 차단 캡션: {'표시됨' if knockout_text else '확인 필요'}\n"
         f"- 어텐션 비교: {'캡처 결과 있음' if _attention_ok else '캡처 결과 없음'}\n"
         f"- 고정 티처 포싱: {_tf_status}\n\n"
         "**이제 직접 실험할 차례입니다.** 🎯에서 한국어 무음/원본 쌍부터 시작하세요. "
@@ -2258,23 +2294,21 @@ def _(
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## 🎛️ 인터랙티브: Logit-lens 다양성 결과표
+    ## 🎛️ 인터랙티브: 로짓 렌즈 다양성 결과표
 
     클립·프레임 수·프롬프트·차단 규칙을 바꾸며 결과를 비교합니다.
 
-    제출을 누르기 전에는 아무것도 실행되지 않으며(컨트롤이 폼으로 감싸여 있습니다),
-    녹아웃 실험에서 쓰던 모델을 재사용합니다. 모델을 다시 로드하지는 않지만 새 입력과
+    입력값을 바꾼 뒤 실행 버튼을 눌러야 계산을 시작합니다.
+    연결 차단 실험에서 쓰던 모델을 재사용합니다. 모델을 다시 로드하지는 않지만 새 입력과
     순전파에는 추가 시간·메모리가 필요합니다.
 
-    **무엇이 무엇을 움직이는가.** 점수는 **오디오** 토큰 위치에서 측정되고, 그 개수는
-    클립의 *재생 시간*으로 고정됩니다. 따라서 `프레임 수`는 **비디오** 토큰 수를 바꿀
-    뿐 "분석한 오디오 토큰 위치 수" 값은 전혀 움직이지 않습니다 — 그 숫자가 변하기를
-    기대하며 값을 훑었다면, 고장 난 것이 아닙니다. 아래에 두 개수를 모두 표시하므로
-    자신이 무엇을 움직였는지 확인할 수 있습니다.
+    **프레임 수를 바꾸면 무엇이 달라질까요?** 점수는 **오디오 토큰 위치**에서 측정합니다.
+    같은 클립에서 비디오 프레임 수만 바꾸면 비디오 토큰 수가 달라지고 오디오 토큰 수는 유지됩니다.
+    아래에 두 개수를 함께 표시하므로 어떤 입력이 달라졌는지 확인하세요.
 
-    이것은 프롬프트에 대한 순전파 1회이므로, **`generated`와 `answer`는 규칙의 어느
-    쪽에 놓이든 여기서는 작동하지 않습니다** — 모델이 디코딩하기 전까지 그런 위치는
-    존재하지 않습니다(맨 위 🧭 그림 ③). 아무것에도 걸리지 않는 규칙은 실행되지 않고
+    이 실험은 입력 프롬프트만 한 번 처리하므로, **`generated`와 `answer`는 규칙의 어느
+    쪽에 놓이든 여기서는 작동하지 않습니다** — 입력 프롬프트에는 그런 위치가
+    존재하지 않습니다(맨 위 🧭 그림 ③). 차단할 연결이 없는 규칙은 실행되지 않고
     거부됩니다. `audio`, `video`, `query_text`를 쓰세요. 드롭다운으로 규칙 하나를 만들거나,
     고급 필드에 여러 개를 입력하면 됩니다.
     """)
@@ -2307,7 +2341,7 @@ def diversity_form(
         f"source/target ∈ <code>audio · video · query_text</code> — 다만 "
         f"<code>generated</code>는 규칙의 <em>어느 쪽</em>에 놓이든 여기서는 <strong>작동하지 않고</strong>(순전파 "
         f"중에는 생성 위치가 존재하지 않습니다), <code>image</code>는 영상 클립에서 0 토큰입니다. "
-        f"아무것에도 걸리지 않는 규칙은 실행되지 않고 거부됩니다. 끝 번호는 포함하지 않습니다. "
+        f"차단할 연결이 없는 규칙은 실행되지 않고 거부됩니다. 끝 번호는 포함하지 않습니다. "
         f"이 thinker는 레이어가 <strong>{_n_layers}</strong>개이므로 "
         f"<code>[0, {_n_layers})</code>가 전체를 뜻합니다."
     )
@@ -2317,10 +2351,10 @@ def diversity_form(
         "**클립** {clip} · **프레임** {nframes}\n\n"
 
         "**프롬프트** {prompt}\n\n"
-        "**녹아웃** {ko_enable} · {ko_source} → {ko_target} · 레이어 {ko_layers}\n\n"
+        "**연결 차단** {ko_enable} · {ko_source} → {ko_target} · 레이어 {ko_layers}\n\n"
         "**기준선도 함께 비교** {compare}\n\n"
         "**고급 규칙** {ko_rules_text}\n\n"
-        "녹아웃을 켠 상태에서 고급 규칙을 채우면 위의 단일 규칙보다 우선합니다. 비우면 위 설정을 사용합니다. "
+        "연결 차단을 켠 상태에서 고급 규칙을 채우면 위의 단일 규칙보다 우선합니다. 비우면 위 설정을 사용합니다. "
         "<code>source,target,start,end</code> 형식으로 쓰고 여러 규칙은 <code>;</code>로 구분하세요.\n\n"
         '<details style="margin:0;padding:0 8px">\n'
         '<summary style="padding:6px 0">업로드 · 도움말</summary>\n\n'
@@ -2392,7 +2426,7 @@ def diversity_form(
         ),
         compare=mo.ui.checkbox(value=True),
     ).form(
-        submit_button_label="▶ Logit-lens 다양성 실행",
+        submit_button_label="▶ 로짓 렌즈 다양성 계산",
         submit_button_disabled=USE_PRECOMPUTED,
         submit_button_tooltip=(
             "재생 모드에서는 저장된 가이드 결과만 볼 수 있습니다."
@@ -2447,7 +2481,7 @@ def diversity_result_panel(
             mo.md(
                 "저장된 예제는 **가이드**에서 볼 수 있습니다. 새 실행에는 라이브 모델이 필요합니다."
                 if USE_PRECOMPUTED else
-                "파라미터를 설정하고 **▶ Logit-lens 다양성 실행**을 누르세요."
+                "설정값을 고른 뒤 **▶ 로짓 렌즈 다양성 계산**을 누르세요."
             ),
             kind="info",
         ),
@@ -2459,7 +2493,7 @@ def diversity_result_panel(
         USE_PRECOMPUTED,
         mo.callout(
             mo.md(
-                "**이 플레이그라운드는 라이브 모델이 필요합니다** — 제출할 때마다 새 순전파를 "
+                "**새 다양성 계산에는 모델 실행이 필요합니다** — 제출할 때마다 새 순전파를 "
                 "돌리므로 `USE_PRECOMPUTED=True`인 동안에는 건너뜁니다."
             ),
             kind="warn",
@@ -2517,7 +2551,7 @@ def diversity_result_panel(
         _rules = [(_p["ko_source"], _p["ko_target"], int(_lo), int(_hi))]
     mo.stop(
         _rules_err is not None,
-        mo.callout(mo.md(f"**잘못된 녹아웃 규칙** — {_rules_err}"), kind="danger"),
+        mo.callout(mo.md(f"**잘못된 연결 차단 규칙** — {_rules_err}"), kind="danger"),
     )
     _compare = bool(_p["compare"])
 
@@ -2590,7 +2624,7 @@ def diversity_result_panel(
     _scoreboard = None
     try:
         with mo.status.spinner(
-            title=f"Logit-lens 순전파 · {_nframes} 프레임 · {_video_path.name}…"
+            title=f"로짓 렌즈 순전파 · {_nframes} 프레임 · {_video_path.name}…"
         ):
             _inp, _types = _prep(_video_path, _nframes, _prompt)  # encode the clip once
             if _rules:
@@ -2653,13 +2687,13 @@ def diversity_result_panel(
             mo.stat(
                 value=str(_n_audio),
                 label="분석한 오디오 토큰 위치 수",
-                caption="클립 재생 시간으로 고정 — 프레임 수는 이 값을 움직이지 않습니다",
+                caption="같은 클립에서 비디오 프레임 수만 바꾸면 유지됩니다",
                 bordered=True,
             ),
             mo.stat(
                 value=str(Counter(_types).get("video", 0)),
                 label="인코딩된 비디오 토큰",
-                caption=f"프레임 수={_nframes}가 움직이는 것은 이 값입니다",
+                caption=f"선택한 {_nframes}프레임에 따른 비디오 토큰 수입니다",
                 bordered=True,
             ),
         ]
@@ -2669,7 +2703,7 @@ def diversity_result_panel(
             _stats.append(
                 mo.stat(
                     value=f"{_mean_delta:+.1f}",
-                    label="녹아웃에 의한 평균 Δ",
+                    label="연결 차단에 의한 평균 Δ",
                     caption=f"{_n_l}개 중 {_less}개 레이어에서 다양성 감소",
                     direction="decrease" if _mean_delta < 0 else "increase",
                     bordered=True,
@@ -2679,7 +2713,7 @@ def diversity_result_panel(
         _x = np.arange(_n_l)
         _fig, _axes = plt.subplots(1, 2, figsize=(14, 4), constrained_layout=True)
         if _both:
-            _axes[0].bar(_x, _ko_u, color="#4C78A8", label="녹아웃")
+            _axes[0].bar(_x, _ko_u, color="#4C78A8", label="연결 차단")
             _axes[0].plot(_x, _bl_u, color="#F58518", marker="o", ms=3, lw=1.5, label="기준선")
             _axes[0].legend()
             _axes[0].set(title="레이어별 서로 다른 출력 문자열 수",
@@ -2687,11 +2721,11 @@ def diversity_result_panel(
             _delta = [_ko_u[k] - _bl_u[k] for k in range(_n_l)]
             _axes[1].bar(_x, _delta, color=["#E45756" if d < 0 else "#54A24B" for d in _delta])
             _axes[1].axhline(0, color="black", lw=0.8)
-            _axes[1].set(title="Δ 다양성 (녹아웃 − 기준선)",
+            _axes[1].set(title="Δ 다양성 (연결 차단 − 기준선)",
                          xlabel="Thinker 레이어", ylabel="Δ 서로 다른 출력 문자열 수")
         else:
             _axes[0].bar(_x, _primary_u, color="#4C78A8")
-            _axes[0].set(title="레이어별 Logit-lens 다양성",
+            _axes[0].set(title="레이어별 로짓 렌즈 다양성",
                          xlabel="Thinker 레이어", ylabel="서로 다른 출력 문자열 수")
             _axes[1].plot(_x, _primary_d, marker="o", color="#F58518")
             _axes[1].set(title="최빈 출력 문자열 비율",
@@ -2708,7 +2742,7 @@ def diversity_result_panel(
                 f"**클립** `{_video_path.name}`"
                 + (" _(무음 대조군)_" if _is_control else "")
                 + f" &nbsp;·&nbsp; **프레임 수** {_nframes} "
-                f"&nbsp;·&nbsp; **프롬프트** _{_prompt}_ &nbsp;·&nbsp; **녹아웃** {_rule_txt}"
+                f"&nbsp;·&nbsp; **프롬프트** _{_prompt}_ &nbsp;·&nbsp; **연결 차단** {_rule_txt}"
             ),
             mo.hstack(_stats, widths="equal", gap=1, wrap=True),
             _fig,
@@ -2716,7 +2750,7 @@ def diversity_result_panel(
                 '왼쪽은 기준선과 연결 차단 후의 문자열 종류 수입니다. 오른쪽은 차단 후 값에서 기준선 값을 뺀 차이입니다.'
                 if _both else '왼쪽은 레이어별 서로 다른 출력 문자열 수, 오른쪽은 최빈 출력 문자열 비율입니다.'
             ),
-            mo.md("<span style=\"font-size:1.15rem;font-weight:600\">서로 다른 출력 문자열 수로 정렬한 레이어 (클수록 출력 문자열의 종류가 더 많음)</span>"),
+            mo.md("<span style=\"font-size:1.15rem;font-weight:600\">출력 문자열 종류 수가 많은 레이어 순</span>"),
             _table,
             mo.md(
                 "<span style=\"color:#4C78A8;font-weight:600\">다음 →</span> source를 `video`로 바꾸거나, 같은 규칙을 **무음 대조군**에 "
@@ -2740,7 +2774,7 @@ def diversity_result_panel(
                 kind="diversity",
                 condition=(
                     " + ".join(f"{r[0]}→{r[1]} [{r[2]},{r[3]})" for r in _rules)
-                    if _rules else "기준선 (녹아웃 없음)"
+                    if _rules else "기준선 (연결 차단 없음)"
                 ),
                 metric_name=_metric[0],
                 metric_value=_metric[1],
@@ -2776,8 +2810,8 @@ def _(mo):
     ## 🎯 인터랙티브: 티처 포싱 Δ 로그 확률
 
     **질문:** 같은 캡션을 채점할 때, 선택한 직접 어텐션 연결을 차단하면 토큰 확률이
-    얼마나 달라질까요? 먼저 모델이 만든 캡션을 고정하고, 기준선과 녹아웃에서 그 캡션을
-    다시 입력해 점수를 매깁니다. **Δ = 녹아웃 − 기준선**, 단위는 nats입니다.
+    얼마나 달라질까요? 먼저 모델이 만든 캡션을 고정하고, 기준선과 연결 차단에서 그 캡션을
+    다시 입력해 점수를 매깁니다. **Δ = 연결 차단 − 기준선**, 단위는 nats입니다.
     음수는 그 캡션에 부여한 확률이 줄었다는 뜻이며 정답 여부나 모델의 확신 점수는 아닙니다.
 
     ### 탐색 1 · 원본과 무음을 같은 설정으로 비교하기
@@ -2801,9 +2835,9 @@ def _(mo):
 
     `answer`는 채점할 캡션 토큰입니다. 첫 토큰은 마지막 프롬프트 위치에서 예측하므로
     answer-only 규칙의 직접 차단 범위 밖에 있습니다. `query_text`에는 질문뿐 아니라
-    채팅 구조·특수 토큰도 포함됩니다. 표시 단위(어절·특수 토큰)의 색은 여러 토큰의 Δ를 합친 값입니다.
+    채팅 구조·특수 토큰도 포함됩니다. 표시 묶음(어절·특수 토큰)의 색은 여러 토큰의 Δ를 합친 값입니다.
     `⟨special⟩`은 문장 종료 같은 특수 토큰으로, 이 점수를 이웃 단어의 의미로 해석하지 마세요.
-    제출 전에는 실행되지 않습니다.
+    실행 버튼을 누르기 전에는 계산을 시작하지 않습니다.
     """)
     return
 
@@ -2871,7 +2905,7 @@ def tf_form(
         target=mo.ui.dropdown(_tf_targets, value="audio"),
         layers=mo.ui.range_slider(0, _n_layers, step=1, value=[0, _n_layers], show_value=True, full_width=True),
     ).form(
-        submit_button_label="▶ 티처 포싱 Δ 로그 확률 실행",
+        submit_button_label="▶ 캡션의 로그 확률 변화 계산",
         submit_button_disabled=USE_PRECOMPUTED,
         submit_button_tooltip=(
             "재생 모드에서는 저장된 가이드 결과만 볼 수 있습니다."
@@ -2913,7 +2947,7 @@ def tf_result_panel(
             mo.md(
                 "티처 포싱의 새 측정에는 라이브 모델이 필요합니다. 저장된 다른 예제는 **가이드**에서 볼 수 있습니다."
                 if USE_PRECOMPUTED else
-                "파라미터를 설정하고 **▶ 티처 포싱 Δ 로그 확률 실행**을 누르세요."
+                "설정값을 고른 뒤 **▶ 캡션의 로그 확률 변화 계산**을 누르세요."
             ),
             kind="info",
         )
@@ -3005,15 +3039,15 @@ def tf_result_panel(
                 _tf_stats = [
                     mo.stat(
                         value=f"{_tf_mean:+.3f}",
-                        label="토큰당 평균 Δ 로그 확률 (nats/token)",
-                        caption="길이로 나눈 값 · 같은 설정의 쌍과 캡션 내용도 함께 비교",
+                        label="토큰당 평균 로그 확률 변화량 (Δ, nats/token)",
+                        caption="Δ 합계를 채점한 모델 토큰 수로 나눈 값 · 같은 설정의 쌍과 캡션 내용도 함께 비교",
                         direction="decrease" if _tf_mean < 0 else "increase",
                         bordered=True,
                     ),
                     mo.stat(
                         value=f"{_tf_total:+.2f}",
-                        label="Δ 로그 우도 합계 (nats)",
-                        caption="녹아웃 − 기준선 · 음수 = 해당 캡션의 확률 감소",
+                        label="로그 확률 변화량 합계 (Δ, nats)",
+                        caption="연결 차단 − 기준선 · 음수 = 해당 캡션의 확률 감소",
                         direction="decrease" if _tf_total < 0 else "increase",
                         bordered=True,
                     ),
@@ -3032,7 +3066,7 @@ def tf_result_panel(
                     mo.stat(
                         value=str(len(_tf_toks)),
                         label="채점한 캡션 토큰 수",
-                        caption="티처 포싱, greedy",
+                        caption="greedy 방식으로 생성한 캡션을 고정해 계산",
                         bordered=True,
                     ),
                 ]
@@ -3041,7 +3075,7 @@ def tf_result_panel(
                         f"**클립** `{_tf_video.name}`"
                         + (" _(무음 대조군)_" if _tf_is_control else "")
                         + f" &nbsp;·&nbsp; **프레임 수** {_tf_nframes} "
-                        f"&nbsp;·&nbsp; **프롬프트** _{_tf_prompt}_ &nbsp;·&nbsp; **녹아웃** {_tf_rule_txt}"
+                        f"&nbsp;·&nbsp; **프롬프트** _{_tf_prompt}_ &nbsp;·&nbsp; **연결 차단** {_tf_rule_txt}"
                         f" &nbsp;·&nbsp; **캡션 상한** {_tf_max_tokens}토큰"
                     ),
                     mo.callout(mo.md("**채점한 전체 캡션**\n\n" + _tf_res["caption_text"]
@@ -3106,9 +3140,9 @@ def tf_threshold_panel(mo, tf_result):
             value=_params["amount"], label="강조 임계값 (nats)",
         )
         _out = mo.md(
-            '<span style="font-size:1.15rem;font-weight:600">토큰별 Δ 로그 확률 (표시 단위에 마우스를 올리면 그 토큰들의 nats가 보입니다)</span>\n\n'
+            '<span style="font-size:1.15rem;font-weight:600">토큰별 Δ 로그 확률 (표시 묶음에 마우스를 올리면 묶음의 Δ 합계와 구성 토큰별 Δ가 nats 단위로 보입니다)</span>\n\n'
             '붉은색 계열은 음의 Δ, 푸른색 계열은 양의 Δ를 나타냅니다.\n\n'
-            f'화면의 한 표시 단위에는 여러 모델 토큰이 묶일 수 있습니다. 색은 그 토큰들의 Δ 합계로 정합니다. 합계가 −{tf_threshold} nats보다 작으면 테두리와 굵은 글씨로 강조하고, 나머지는 흐리게 표시합니다. 숫자를 직접 입력하거나 방향키로 바꾸세요. 강조 표시와 선택된 단위의 집계가 바뀌며, 모델은 다시 실행하지 않습니다.'
+            f'표시 묶음은 읽기 쉽도록 하나 이상의 모델 토큰을 묶어 표시한 단위입니다. 색은 그 토큰들의 Δ 합계로 정합니다. 합계가 −{tf_threshold} nats보다 작으면 테두리와 굵은 글씨로 강조하고, 나머지는 흐리게 표시합니다. 숫자를 직접 입력하거나 방향키로 바꾸세요. 강조 표시와 선택된 묶음의 집계가 바뀌며, 모델은 다시 실행하지 않습니다.'
         )
     _out
     return (tf_threshold,)
@@ -3132,21 +3166,21 @@ def tf_tokens_panel(mo, selected_drop_share, tf_result, tf_threshold):
         _share = selected_drop_share(tf_result["caption_tokens"], _delta, _th, token_kinds=tf_result.get("caption_token_kinds"))
         _rows = [
             {"위치": _i, "토큰": _t or ("특수 토큰" if tf_result["caption_token_kinds"][_i] == "special" else "문자 이어짐"),
-             "토큰 종류": tf_result["caption_token_kinds"][_i], "Δ 로그 확률 (nats)": round(_d, 3)}
+             "토큰 종류": {"text": "텍스트 조각", "byte_continuation": "문자 이어짐", "special": "특수 토큰"}[tf_result["caption_token_kinds"][_i]], "Δ 로그 확률 (nats)": round(_d, 3)}
             for _i, (_t, _d) in enumerate(zip(_toks, _delta))
         ]
         _out = mo.vstack([
             mo.Html(
                 "<div style='line-height:2.1;font-family:monospace;font-size:15px'>"
-                + _tf_strip(_toks, _delta, highlight_below=_th, vmax=8.0, token_kinds=tf_result.get("caption_token_kinds"))
+                + _tf_strip(_toks, _delta, highlight_below=_th, vmax=8.0, token_kinds=tf_result.get("caption_token_kinds"), lang="ko")
                 + "</div>"
             ),
             mo.md(
-                f"**{len(_hit)}/{len(_words)}** 표시 단위가 −{_th:.2f} nats보다 크게 떨어졌습니다 — 합쳐서 "
-                f"Δ = {sum(_w[1] for _w in _hit):+.2f} nats입니다. 감소한 표시 단위의 총 감소량 중 "
-                f"선택된 단위가 **{_share:.0f}%**를 차지합니다. 색 범위는 모든 실행에서 ±8 nats입니다."
+                f"전체 {len(_words)}개 표시 묶음 중 **{len(_hit)}개**에서 로그 확률이 {_th:.2f} nats를 초과해 감소했습니다(Δ < −{_th:.2f}). 선택된 묶음의 "
+                f"Δ 합계는 {sum(_w[1] for _w in _hit):+.2f} nats입니다. 감소한 표시 묶음의 총 감소량 중 "
+                f"선택된 묶음가 **{_share:.0f}%**를 차지합니다. 색 범위는 모든 실행에서 ±8 nats입니다."
             ),
-            mo.md('<details>\n<summary>해석 도움말</summary>\n\n선택 비율은 Δ 합계가 음수인 표시 단위들의 총 감소량 중, 임계값을 넘어 강조된 단위가 차지하는 비율입니다. ⟨special⟩은 문장 종료 등 특수 토큰이며 별도로 채점합니다. 그 값을 이웃 단어의 의미로 해석하지 마세요.\n\n</details>'),
+            mo.md('<details>\n<summary>해석 도움말</summary>\n\n선택 비율은 Δ 합계가 음수인 표시 묶음들의 총 감소량 중, 임계값을 넘어 강조된 묶음가 차지하는 비율입니다. ⟨special⟩은 문장 종료 등 특수 토큰이며 별도로 채점합니다. 그 값을 이웃 단어의 의미로 해석하지 마세요.\n\n</details>'),
             mo.ui.table(_rows, selection=None, pagination=True, page_size=16),
         ])
     _out
@@ -3165,9 +3199,11 @@ def _(mo):
     업로드와 ‘캡션 변화가 작을 것으로 예상’ 기록은 자동으로 검증된 대조군이 되지 않습니다.
 
     **기록할 세 문장:** 무엇을 하나 바꾸었나? 무엇을 관측했나? 같은 결과의 다른 설명은 무엇인가?
-    판정은 그 문장에 대해 내립니다. 가설이 없거나 근거가 부족하면 **미검증**을 선택하세요.
+    관측 결과가 자신의 주장을 지지하는지, 반박하는지, 아직 판단하기 어려운지 기록하세요.
+    검증할 주장이 없거나 근거가 부족하면 **판단 유보(미검증·근거 부족)**를 선택하세요.
+    이는 판단을 아직 기록하지 않은 **미판정**과 다릅니다.
 
-    **Markdown은 읽는 제출물, JSON은 전체 결과와 설정을 보존하는 파일**입니다. 두 파일을 함께
+    **Markdown은 실험 기록 요약, JSON은 전체 결과와 설정을 보존하는 파일**입니다. 두 파일을 함께
     내려받으세요. 기록표의 저장 상태가 실패/메모리 전용이면 세션 안에서 보이더라도 디스크에
     저장됐다고 가정하지 마세요. 세션 종료 전에 내보내고 실제 파일을 열어 확인하세요.
     """)
@@ -3181,18 +3217,18 @@ def verdict_panel(mo):
     # The dropdown shows Korean but submits the English values `run_ledger.VERDICTS`
     # validates — the ledger vocabulary is shared with the English notebook.
     verdict_form = mo.md(
-        "**실행에 판정 내리기** — 위 기록에서 `id`를 복사해 오세요.\n\n"
+        "**이 결과를 근거로 주장 검토하기** — 위 기록에서 실행 ID를 복사해 입력하세요.\n\n"
         "실행 {run_id}에서 남길 **내 주장 또는 관측**: {claim}\n\n"
         "이 주장에 대한 판정 {verdict}. 지지됨/반박됨에는 주장을 적어야 합니다.\n\n"
-        "같은 관측을 설명할 수 있는 다른 가능한 설명(경쟁 설명): {rival}"
+        "같은 관측 결과를 설명할 수 있는 다른 가능성(경쟁 설명): {rival}"
     ).batch(
         run_id=mo.ui.text(placeholder="예: 3f9a1c02"),
-        claim=mo.ui.text_area(placeholder="예: 이 설정의 직접 audio 연결 차단에서 캡션 확률 감소가 관측됐다", full_width=True),
+        claim=mo.ui.text_area(placeholder="예: 오디오 토큰으로 향하는 직접 어텐션 연결을 차단하자, 고정한 캡션의 로그 확률이 낮아졌다.", full_width=True),
         verdict=mo.ui.dropdown(
             {"지지됨 (supported)": "supported",
              "반박됨 (refuted)": "refuted",
-             "미검증 (untested)": "untested"},
-            value="미검증 (untested)",
+             "판단 유보(미검증·근거 부족)": "untested"},
+            value="판단 유보(미검증·근거 부족)",
         ),
         rival=mo.ui.text(placeholder="관측 결과를 설명할 다른 가능성과 이를 확인할 추가 비교를 적으세요.", full_width=True),
     ).form(submit_button_label="판정 기록", bordered=True)
@@ -3204,7 +3240,7 @@ def verdict_panel(mo):
 def verdict_submit_handler(LEDGER_LOG, mo, set_runs, verdict_form):
     from src.run_ledger import apply_verdict_checked as _checked
     _v = verdict_form.value
-    mo.stop(_v is None, mo.md("실행 id와 판정을 선택한 뒤 **판정 기록**을 누르세요."))
+    mo.stop(_v is None, mo.md("실행 ID를 입력하고 판단 결과를 선택한 뒤 **판정 기록**을 누르세요."))
     _feedback = []
     def _save_verdict(_prev):
         _updated, _status = _checked(_prev, (_v.get("run_id") or "").strip(),
@@ -3253,9 +3289,9 @@ def worksheet_panel(get_runs, mo, run_provenance, worksheet_md):
         mo.md("### 제출할 결과 묶음 — 두 파일을 함께 보관하세요"),
         mo.hstack([
             mo.download(lambda _snapshot=_md: _snapshot.encode("utf-8"), filename="lab_log.md", mimetype="text/markdown",
-                        label=f"⬇ 읽는 워크시트 ({len(_runs)}건)"),
+                        label=f"⬇ 실험 기록 요약(Markdown) ({len(_runs)}건)"),
             mo.download(lambda _snapshot=_json: _snapshot.encode("utf-8"), filename="lab_evidence.json", mimetype="application/json",
-                        label=f"⬇ 전체 설정·캡션·토큰 결과 JSON ({len(_runs)}건)"),
+                        label=f"⬇ 전체 실험 결과(JSON) ({len(_runs)}건)"),
         ], wrap=True),
         mo.accordion({"Markdown 보기 · 다운로드가 안 되면 복사": _md_preview,
                       "JSON 보기 · 다운로드가 안 되면 복사": _json_preview}),

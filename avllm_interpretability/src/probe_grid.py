@@ -76,6 +76,22 @@ PROBE_CAVEAT = (
     "did. Junk-vs-content is scale-invariant."
 )
 
+JUNK_DEFINITION_KO = (
+    "공백·기호류는 빈 문자열이거나, 모든 문자가 Unicode 구두점·구분자·제어/서식 문자·기호"
+    "(P*, Z*, C*, S*)에 해당하는 문자열입니다. 대체 문자 �(U+FFFD)가 포함된 문자열은 "
+    "별도로 분류합니다. 그 밖의 문자열에는 글자(한자 포함), 숫자, 이들이 섞인 문자열이 포함됩니다. "
+    "이 분류는 의미의 유무를 판정하지 않습니다. %나 화살표에도 의미가 있을 수 있고, "
+    "글자가 포함되어 있어도 의미를 해석하기 어려울 수 있습니다."
+)
+
+PROBE_CAVEAT_KO = (
+    "이 프로브는 thinker의 최종 RMSNorm을 생략하고 각 레이어의 출력에 lm_head를 직접 적용합니다. "
+    "오디오 위치의 결과는 모델이 실제로 생성한 토큰이나 보정된 다음 토큰 확률을 뜻하지 않습니다. "
+    "레이어가 깊어지면서 표현 벡터의 크기가 커지면 정규화하지 않은 점수의 엔트로피는 "
+    "그 영향만으로도 작아질 수 있습니다. 따라서 이 표는 엔트로피 대신 출력 문자열의 종류를 "
+    "색으로 구분합니다. 마지막 레이어와 출력이 같아도 이후 모든 레이어에서 유지된다는 뜻은 아닙니다."
+)
+
 
 def classify_probe_token(token):
     """0 = content, 1 = junk, 2 = undecodable.
@@ -113,7 +129,7 @@ def _unpack_uint16_le(payload):
     return buf
 
 
-def build_probe_grid_pack(csv_path, *, seconds_per_position=0.04):
+def build_probe_grid_pack(csv_path, *, seconds_per_position=0.04, lang="en"):
     """Parse the logit-lens CSV into the widget's trait kwargs (or None).
 
     Column 0 is the absolute token position, column 1 the token type, columns
@@ -174,8 +190,9 @@ def build_probe_grid_pack(csv_path, *, seconds_per_position=0.04):
         "vocab_class": bytes(classify_probe_token(tok) for tok in vocab),
         "token_index": _pack_uint16_le(flat),
         "seconds_per_position": float(seconds_per_position),
-        "junk_definition": JUNK_DEFINITION,
-        "caveat": PROBE_CAVEAT,
+        "lang": lang,
+        "junk_definition": JUNK_DEFINITION_KO if lang == "ko" else JUNK_DEFINITION,
+        "caveat": PROBE_CAVEAT_KO if lang == "ko" else PROBE_CAVEAT,
     }
 
 
@@ -251,5 +268,6 @@ if anywidget is not None:
         vocab_class = traitlets.Bytes(b"").tag(sync=True)
         token_index = traitlets.Bytes(b"").tag(sync=True)
         seconds_per_position = traitlets.Float(0.04).tag(sync=True)
+        lang = traitlets.Unicode("en").tag(sync=True)
         junk_definition = traitlets.Unicode(JUNK_DEFINITION).tag(sync=True)
         caveat = traitlets.Unicode(PROBE_CAVEAT).tag(sync=True)

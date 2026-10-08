@@ -34,6 +34,13 @@ from html import escape
 # experiment family should not hit a validation error mid-lab.
 KINDS = ("band_sweep", "diversity", "teacher_forcing")
 VERDICTS = ("supported", "refuted", "untested")
+# Keep persisted verdict values compatible with earlier exports. In the Korean
+# lesson, untested also covers a recorded decision to withhold judgment because
+# the claim/evidence is insufficient; an empty value still means no verdict yet.
+VERDICT_LABELS_KO = {
+    "supported": "지지됨", "refuted": "반박됨",
+    "untested": "판단 유보(미검증·근거 부족)",
+}
 
 # Neutral, theme-agnostic surfaces. marimo ships both a light and a dark theme
 # and the ledger is rendered inside it, so every color here is either
@@ -475,7 +482,7 @@ def render_ledger_html(runs, highlight_ids=(), lang="en"):
         verdict = str(r.get("verdict") or "")
         rival = str(r.get("rival") or "")
         shown_verdict = (
-            {"supported": "지지됨", "refuted": "반박됨", "untested": "아직 검증하지 않음"}.get(verdict, verdict)
+            VERDICT_LABELS_KO.get(verdict, verdict)
             if ko else verdict
         )
         verdict_cell = (
@@ -563,13 +570,16 @@ def build_evidence_json(runs, provenance=None):
     }, ensure_ascii=False, sort_keys=True, indent=2, default=str) + "\n"
 
 
-def build_worksheet_md(runs, only_ids=None):
+def build_worksheet_md(runs, only_ids=None, *, lang="en"):
     """Readable summary plus complete per-run JSON for pasting into WORKSHEET.md.
 
     The header states which runs lack a control *before* the table, because the
     student pastes this into a graded document and the missing control is the
     thing a reader must not have to derive for themselves.
     """
+    def label(english, korean):
+        return korean if lang == "ko" else english
+
     # Resolve linked control IDs from the full history before selecting rows.
     all_runs = list(runs)
     runs = all_runs
@@ -577,7 +587,7 @@ def build_worksheet_md(runs, only_ids=None):
         keep = set(only_ids)
         runs = [r for r in runs if r.get("run_id") in keep]
     if not runs:
-        return "_No runs to report yet._"
+        return label("_No runs to report yet._", "_아직 실행 기록이 없습니다._")
 
     counts = ledger_counts(runs)
     uncontrolled = [
@@ -586,24 +596,35 @@ def build_worksheet_md(runs, only_ids=None):
         if not r.get("is_control") and not matched_control_ids(r, all_runs)
     ]
 
-    lines = [f"### Run ledger — {counts['n']} run(s)", ""]
+    lines = [label(f"### Run ledger — {counts['n']} run(s)", f"### 실험 기록 요약 — {counts['n']}건"), ""]
     if uncontrolled:
         seqs = ", ".join(f"#{_md_cell(r.get('seq', '?'))}" for r in uncontrolled)
-        lines.append(
+        lines.append(label(
             f"> **No control with matching settings:** {len(uncontrolled)} run(s) ({seqs}). "
-            "Add a control with the same recorded settings or leave the claim untested."
-        )
+            "Add a control with the same recorded settings or leave the claim untested.",
+            f"> **설정이 일치하는 대조군 없음:** {len(uncontrolled)}건 ({seqs}). "
+            "같은 설정의 대조 실행을 추가하거나 해당 주장에 대한 판단을 유보하세요."
+        ))
     else:
-        lines.append("> Each experiment has a declared control with matching recorded settings.")
-    lines.append(
+        lines.append(label("> Each experiment has a declared control with matching recorded settings.",
+                           "> 각 실험에 설정이 일치하는 대조 실행이 연결되어 있습니다."))
+    lines.append(label(
         "> Matching settings do not establish scientific validity or prove a null effect. "
-        "A local save does not guarantee that the runtime will retain files after the session ends."
-    )
+        "A local save does not guarantee that the runtime will retain files after the session ends.",
+        "> 설정이 일치해도 비교의 과학적 타당성이나 효과가 없다는 결론을 보장하지는 않습니다. "
+        "세션 파일에 저장했더라도 세션 종료 후 보존된다고 가정하지 말고 내려받은 파일을 확인하세요."
+    ))
+    if lang == "ko":
+        lines.append(
+            "> 판단 유보(미검증·근거 부족)는 아직 검증하지 않았거나 결론을 내릴 근거가 부족한 경우입니다. "
+            "기존 JSON과의 호환을 위해 untested로 저장합니다. 미판정은 판단을 아직 기록하지 않은 상태입니다."
+        )
     show_prediction = any((r.get("prediction") or "").strip() for r in runs)
     cols = (
-        ["#", "Run ID", "Kind", "Condition"]
-        + (["Prediction / claim / observation"] if show_prediction else [])
-        + ["Metric", "Control", "Matched control IDs", "Verdict", "Rival explanation"]
+        ["#", label("Run ID", "실행 ID"), label("Kind", "실험 종류"), label("Condition", "조건")]
+        + ([label("Prediction / claim / observation", "예상 / 주장 / 관측")] if show_prediction else [])
+        + [label("Metric", "측정값"), label("Control", "대조군"), label("Matched control IDs", "설정이 일치하는 대조 실행 ID"),
+           label("Verdict", "판단 결과"), label("Rival explanation", "결과를 설명할 다른 가능성")]
     )
     lines += ["", "| " + " | ".join(cols) + " |", "|" + "---|" * len(cols)]
     for r in runs:
@@ -616,12 +637,14 @@ def build_worksheet_md(runs, only_ids=None):
             _md_cell(r.get("kind", "")), _md_cell(r.get("condition", "")),
         ]
         if show_prediction:
-            cells.append(_md_cell(r.get("prediction", "")) or "_(none written)_")
+            cells.append(_md_cell(r.get("prediction", "")) or label("_(none written)_", "_(미작성)_"))
+        verdict = r.get("verdict", "")
+        shown_verdict = VERDICT_LABELS_KO.get(verdict, verdict) if lang == "ko" else verdict
         cells += [
             _md_cell(metric),
-            "declared control" if r.get("is_control") else "—",
+            label("declared control", "대조군으로 지정") if r.get("is_control") else "—",
             _md_cell(", ".join(matched_control_ids(r, all_runs))) or "—",
-            _md_cell(r.get("verdict", "")) or "unresolved",
+            _md_cell(shown_verdict) or label("unresolved", "미판정"),
             _md_cell(r.get("rival", "")) or "—",
         ]
         lines.append("| " + " | ".join(cells) + " |")
@@ -634,7 +657,8 @@ def build_worksheet_md(runs, only_ids=None):
         # must be longer, so every original byte stays inert, readable evidence.
         fence = "`" * max(3, 1 + max(map(len, re.findall(r"`+", evidence)), default=0))
         lines.extend([
-            "", f"#### Run {_md_cell(run.get('run_id', ''))} — complete evidence", "",
+            "", label(f"#### Run {_md_cell(run.get('run_id', ''))} — complete evidence",
+                       f"#### 실행 {_md_cell(run.get('run_id', ''))} — 전체 결과와 설정"), "",
             fence + "json", evidence, fence,
         ])
     return "\n".join(lines) + "\n"

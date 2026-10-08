@@ -137,6 +137,7 @@ def render_delta_strip(
     highlight_below=None,
     vmax=None,
     token_kinds=None,
+    lang="en",
 ):
     """Colored caption strip: word-level display, token-level values (F2).
 
@@ -173,7 +174,7 @@ def render_delta_strip(
 
     vals = [float(x) for x in delta]
     if not vals:
-        return "<em>(empty caption)</em>"
+        return "<em>(빈 캡션)</em>" if lang == "ko" else "<em>(empty caption)</em>"
     tokens = list(caption_tokens)
     kinds = list(token_kinds) if token_kinds is not None else None
     groups = group_tokens_into_words(tokens, vals, token_kinds=kinds)
@@ -198,8 +199,10 @@ def render_delta_strip(
 
     def _piece_label(piece):
         if not piece:
+            if lang == "ko":
+                return "문자 이어짐" if kinds is not None else "문자 이어짐 / 특수 토큰"
             return "byte continuation" if kinds is not None else "byte continuation / special token"
-        return _esc(piece.strip()) or "whitespace"
+        return _esc(piece.strip()) or ("공백" if lang == "ko" else "whitespace")
 
     spans = []
     for text, val, pieces in units:

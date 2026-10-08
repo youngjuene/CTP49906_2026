@@ -132,21 +132,21 @@ def test_replay_refuses_the_english_pack():
 def test_the_attention_panels_are_baseline_knockout_and_delta(replay, replay_figures):
     figures = replay_figures
     heatmap = next(
-        (f for f in figures if any(ax.get_title() == "녹아웃 실행" for ax in f.axes)),
+        (f for f in figures if any(ax.get_title() == "연결 차단 실행" for ax in f.axes)),
         None,
     )
     assert heatmap is not None, "no attention heatmap figure"
     titles = {ax.get_title() for ax in heatmap.axes}
-    assert {"기준선 (녹아웃 없음)", "녹아웃 실행", "Δ = 녹아웃 − 기준선"} <= titles
+    assert {"기준선 (연결 차단 없음)", "연결 차단 실행", "Δ = 연결 차단 − 기준선"} <= titles
 
 
 def test_the_two_mass_panels_share_one_color_scale(replay, replay_figures):
     figures = replay_figures
-    heatmap = next(f for f in figures if any(ax.get_title() == "녹아웃 실행" for ax in f.axes))
+    heatmap = next(f for f in figures if any(ax.get_title() == "연결 차단 실행" for ax in f.axes))
     clims = [
         ax.images[0].get_clim()
         for ax in heatmap.axes
-        if ax.get_title() in ("기준선 (녹아웃 없음)", "녹아웃 실행") and ax.images
+        if ax.get_title() in ("기준선 (연결 차단 없음)", "연결 차단 실행") and ax.images
     ]
     assert len(clims) == 2 and clims[0] == clims[1], clims
 

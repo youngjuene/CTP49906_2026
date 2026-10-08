@@ -345,5 +345,5 @@ def test_cleared_threshold_shows_prompt_and_retyping_restores_counts(cell, resul
         "mo": marimo, "selected_drop_share": selected_drop_share,
         result_key: result, control_key: control,
     })
-    assert "2/2" in output.text
+    assert "전체 2개 표시 묶음 중 <strong>2개</strong>" in output.text
     assert control.value == 1.52

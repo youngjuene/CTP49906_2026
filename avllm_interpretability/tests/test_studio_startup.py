@@ -131,7 +131,7 @@ def test_same_pinned_checkout_skips_network(tmp_path: Path) -> None:
     project_dir, status = resolve(tmp_path, runner=runner)
     assert project_dir == (repo / "avllm_interpretability").resolve()
     assert status["mode"] == "checkout-current"
-    assert runner.calls == [["git", "-C", str(repo), "rev-parse", "HEAD"]]
+    assert not any({"fetch", "clone", "checkout"}.intersection(call) for call in runner.calls)
 
 
 def test_dirty_existing_checkout_is_refused_before_fetch(tmp_path: Path) -> None:
@@ -176,6 +176,48 @@ def restored_checkout(tmp_path):
     results.mkdir()
     (results / "lab_evidence.json").write_text('{"runs":[{"run_id":"saved"}]}')
     return notebook_dir, restored, upstream, revision
+
+
+@pytest.fixture
+def pinned_checkout(restored_checkout):
+    notebook_dir, _, upstream, revision = restored_checkout
+    managed = notebook_dir / "managed"
+    repo = managed / "CTP49906_2026"
+    shutil.copytree(upstream, repo)
+    return managed, repo, revision
+
+
+@pytest.mark.parametrize("staged", [False, True])
+def test_same_pin_refuses_modified_tracked_helpers(pinned_checkout, staged):
+    notebook_dir, repo, revision = pinned_checkout
+    helper = repo / "avllm_interpretability/src/helper.py"
+    helper.write_text("VALUE = 'student edit'\n")
+    if staged:
+        subprocess.run(["git", "-C", str(repo), "add", str(helper)], check=True)
+    with pytest.raises(RuntimeError, match="커밋되지 않은 변경"):
+        _helpers()["_resolve_project_dir"](notebook_dir, repo_ref=revision)
+    assert helper.read_text() == "VALUE = 'student edit'\n"
+    assert subprocess.check_output(
+        ["git", "-C", str(repo), "rev-parse", "HEAD"], text=True,
+    ).strip() == revision
+
+
+def test_same_pin_allows_untracked_classroom_exports(pinned_checkout):
+    notebook_dir, repo, revision = pinned_checkout
+    project = repo / "avllm_interpretability"
+    evidence = project / "lab_evidence.json"
+    evidence.write_text('{"runs": [{"run_id": "saved"}]}')
+
+    def offline_runner(command, **kwargs):
+        assert not {"fetch", "clone", "checkout"}.intersection(command)
+        return subprocess.run(command, **kwargs)
+
+    resolved, status = _helpers()["_resolve_project_dir"](
+        notebook_dir, repo_ref=revision, runner=offline_runner,
+    )
+    assert resolved == project
+    assert status["mode"] == "checkout-current"
+    assert evidence.read_text() == '{"runs": [{"run_id": "saved"}]}'
 
 
 def test_restored_checkout_recovers_git_without_losing_results(restored_checkout):
@@ -229,9 +271,7 @@ def test_replay_env_override_is_developer_opt_in_only() -> None:
     assert "CTP49906_REPLAY=1" not in source
 
 
-def test_provenance_identifies_local_snapshot_without_git(tmp_path, monkeypatch):
-    import importlib.metadata
-
+def _provenance_reader():
     source = NOTEBOOK.read_text(encoding="utf-8")
     cell = next(
         node for node in ast.parse(source).body if isinstance(node, ast.FunctionDef)
@@ -244,6 +284,13 @@ def test_provenance_identifies_local_snapshot_without_git(tmp_path, monkeypatch)
     code = compile(ast.fix_missing_locations(ast.Module(body=[cell], type_ignores=[])),
                    str(NOTEBOOK), "exec")
     exec(code, namespace)  # noqa: S102 -- trusted provenance cell
+    return namespace["read_provenance"]
+
+
+def test_provenance_identifies_local_snapshot_without_git(tmp_path, monkeypatch):
+    import importlib.metadata
+
+    read_provenance = _provenance_reader()
 
     def no_git(*args, **kwargs):
         raise subprocess.CalledProcessError(128, args[0])
@@ -255,12 +302,71 @@ def test_provenance_identifies_local_snapshot_without_git(tmp_path, monkeypatch)
     helper.write_text("VALUE = 1\n")
     clip = tmp_path / "clip.mp4"
     clip.write_bytes(b"test clip")
-    config_for, first = namespace["read_provenance"]("test-model", "test-revision", tmp_path)
+    config_for, first = read_provenance("test-model", "test-revision", tmp_path)
     assert first["repo_revision"].startswith("local-sha256:")
     assert first["repo_source"] == "local-snapshot"
+    assert first["repo_dirty"] is None
+    assert first["repo_revision"] == "local-sha256:" + first["helper_sha256"]
     assert config_for(clip)["repo_revision"] == first["repo_revision"]
-    _, repeated = namespace["read_provenance"]("test-model", "test-revision", tmp_path)
+    _, repeated = read_provenance("test-model", "test-revision", tmp_path)
     assert repeated["repo_revision"] == first["repo_revision"]
     helper.write_text("VALUE = 2\n")
-    _, changed = namespace["read_provenance"]("test-model", "test-revision", tmp_path)
+    _, changed = read_provenance("test-model", "test-revision", tmp_path)
     assert changed["repo_revision"] != first["repo_revision"]
+
+
+@pytest.mark.parametrize("change", ["tracked", "untracked"])
+def test_local_helper_edits_change_exported_run_identity(pinned_checkout, monkeypatch, change):
+    import importlib.metadata
+    import json
+
+    from src.run_ledger import build_evidence_json, matched_control_ids, run_record
+
+    _, repo, revision = pinned_checkout
+    project = repo / "avllm_interpretability"
+    clip = project / "assets/clip.mp4"
+    monkeypatch.setattr(importlib.metadata, "version", lambda _: "test-version")
+    read_provenance = _provenance_reader()
+    config_for, first = read_provenance("test-model", "test-revision", project)
+    before = config_for(clip, comparison_key="fixture-pair", nframes=8)
+    helper = project / "src" / ("helper.py" if change == "tracked" else "extra.py")
+    helper.write_text("VALUE = 2\n")
+    config_for, changed = read_provenance("test-model", "test-revision", project)
+    after = config_for(clip, comparison_key="fixture-pair", nframes=8)
+
+    assert first["repo_revision"] == changed["repo_revision"] == revision
+    assert before != after, "Changed helper code must change the recorded experiment identity"
+    assert before["helper_sha256"] != after["helper_sha256"]
+    assert first["helper_sha256"] == before["helper_sha256"]
+    assert changed["helper_sha256"] == after["helper_sha256"]
+    assert first["repo_dirty"] is False
+    if change == "tracked":
+        assert changed["repo_dirty"] is True
+
+    common = dict(kind="teacher_forcing", condition="answer→audio", metric_name="delta_per_token",
+                  metric_value=0.1, metric_unit="nats/token")
+    control = run_record(**common, config={**before, "clip": "silent.mp4"}, is_control=True)
+    unchanged = run_record(**common, config=before)
+    assert matched_control_ids(unchanged, [control, unchanged]) == [control["run_id"]]
+    experiment = run_record(**common, config=after)
+    assert unchanged["run_id"] != experiment["run_id"]
+    assert matched_control_ids(experiment, [control, experiment]) == []
+    updated_control = run_record(**common, config={**after, "clip": "silent.mp4"}, is_control=True)
+    assert matched_control_ids(experiment, [updated_control, experiment]) == [updated_control["run_id"]]
+    exported = json.loads(build_evidence_json([experiment], provenance=changed))
+    assert exported["runs"][0]["config"]["helper_sha256"] == changed["helper_sha256"]
+
+
+def test_local_provenance_ignores_generated_results(pinned_checkout, monkeypatch):
+    import importlib.metadata
+
+    _, repo, _ = pinned_checkout
+    project = repo / "avllm_interpretability"
+    monkeypatch.setattr(importlib.metadata, "version", lambda _: "test-version")
+    read_provenance = _provenance_reader()
+    _, before = read_provenance("test-model", "test-revision", project)
+    (project / "lab_evidence.json").write_text('{"runs": []}')
+    (project / "src/__pycache__").mkdir()
+    (project / "src/__pycache__/helper.pyc").write_bytes(b"cache")
+    _, after = read_provenance("test-model", "test-revision", project)
+    assert before == after

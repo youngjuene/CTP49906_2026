@@ -104,19 +104,21 @@ function div(parent, className, text) {
   return node;
 }
 
-function showError(el, err) {
+function showError(el, err, lang = "en") {
   el.textContent = "";
   const box = document.createElement("pre");
   box.className = "pg-error";
   // Inside molab's locked-down iframe the console is not reachable, so the
   // error has to become visible content or the widget just looks blank.
   box.textContent =
-    "probe_grid.js failed to render:\n" +
+    (lang === "ko" ? "프로브 표를 표시하지 못했습니다:\n" : "probe_grid.js failed to render:\n") +
     (err && err.stack ? err.stack : String(err));
   el.appendChild(box);
 }
 
 function build(model, el) {
+  const ko = model.get("lang") === "ko";
+  const label = (english, korean) => ko ? korean : english;
   const layerNames = model.get("layer_names") || [];
   const positions = model.get("positions") || [];
   const vocab = model.get("vocab") || [];
@@ -130,7 +132,7 @@ function build(model, el) {
   const nPos = positions.length;
   const needed = 2 * nPos * nLayers;
   if (!nLayers || !nPos || !indexBytes || indexBytes.byteLength < needed) {
-    div(el, "pg-empty", "No logit-lens probe grid yet — run the sweep first.");
+    div(el, "pg-empty", label("No logit-lens probe grid yet — run the sweep first.", "아직 프로브 결과가 없습니다. 먼저 로짓 렌즈 실험을 실행하세요."));
     return () => {};
   }
 
@@ -197,11 +199,12 @@ function build(model, el) {
 
   // ---------------------------------------------------------------- DOM ----
   const head = div(el, "pg-head");
-  div(head, "pg-title", "Logit-lens probe grid");
+  div(head, "pg-title", label("Logit-lens probe grid", "로짓 렌즈: 레이어별 프로브 결과"));
   div(
     head,
     "pg-verdict",
-    `final layer: ${finalJunk}/${nPos} junk · ${stats[nLayers - 1].unique} unique tokens`
+    label(`final layer: ${finalJunk}/${nPos} junk · ${stats[nLayers - 1].unique} unique tokens`,
+      `마지막 레이어: ${nPos}개 위치 중 공백·기호류 ${finalJunk}개 · 출력 문자열 ${stats[nLayers - 1].unique}종류`)
   );
   const readout = div(el, "pg-readout", "");
 
@@ -219,10 +222,10 @@ function build(model, el) {
     div(item, "pg-sw pg-sw-" + cls);
     div(item, "pg-legend-label", label);
   };
-  swatch("content", "content");
-  swatch("junk", "junk (all punctuation / space / symbol)");
-  swatch("undecodable", "undecodable (U+FFFD)");
-  swatch("settled", "ring = already equals this position's final token");
+  swatch("content", label("content", "그 밖의 문자열"));
+  swatch("junk", label("junk (all punctuation / space / symbol)", "공백·기호류"));
+  swatch("undecodable", label("undecodable (U+FFFD)", "대체 문자(�) 포함"));
+  swatch("settled", label("ring = already equals this position's final token", "테두리 = 같은 위치의 마지막 레이어와 출력이 같음"));
 
   const controls = div(el, "pg-controls");
   const toggleLabel = document.createElement("label");
@@ -230,12 +233,13 @@ function build(model, el) {
   const toggle = document.createElement("input");
   toggle.type = "checkbox";
   toggleLabel.appendChild(toggle);
-  toggleLabel.appendChild(document.createTextNode(" show junk undimmed"));
+  toggleLabel.appendChild(document.createTextNode(label(" show junk undimmed", " 공백·기호류도 선명하게 표시")));
   controls.appendChild(toggleLabel);
   div(
     controls,
     "pg-hint",
-    "drag the grid to scrub layers · click a column to pin its trajectory"
+    label("drag the grid to scrub layers · click a column to pin its trajectory",
+      "표를 드래그해 레이어를 선택하세요. 열을 클릭하면 해당 오디오 위치의 레이어별 출력을 고정해 볼 수 있습니다.")
   );
 
   const chipsHead = div(el, "pg-chips-head", "");
@@ -266,11 +270,15 @@ function build(model, el) {
   div(
     notes,
     "pg-note",
-    `x axis is the ORDINAL audio position (0–${nPos - 1}) at ${hz} Hz, not the ` +
+    label(`x axis is the ORDINAL audio position (0–${nPos - 1}) at ${hz} Hz, not the ` +
       `absolute token index: the ${nPos} positions arrive in ${breaks.length + 1} ` +
       `run(s) (${positions[0]}–${positions[nPos - 1]}), and the dashed rules mark ` +
       `where the absolute index jumps. Times are frame ends — (ordinal + 1) × ${spp} s, ` +
-      `so the last frame lands at ${(nPos * spp).toFixed(2)} s.`
+      `so the last frame lands at ${(nPos * spp).toFixed(2)} s.`,
+      `가로축은 오디오 토큰의 순서(0–${nPos - 1}, 초당 ${hz}개)입니다. 전체 입력에서의 토큰 위치와 구분하세요. ` +
+      `${nPos}개 오디오 위치는 전체 입력의 ${breaks.length + 1}개 구간(${positions[0]}–${positions[nPos - 1]})에 나뉘어 있으며, ` +
+      `점선은 구간 경계를 표시합니다. 시간은 각 오디오 구간의 끝을 기준으로 (순서 + 1) × ${spp}초로 환산합니다. ` +
+      `마지막 위치는 약 ${(nPos * spp).toFixed(2)}초입니다.`)
   );
   div(notes, "pg-note pg-note-def", junkDefinition);
   div(notes, "pg-note pg-note-caveat", caveat);
@@ -298,11 +306,13 @@ function build(model, el) {
   function describe(p, k) {
     const slot = at(p, k);
     const cls = classOf(slot);
-    const kind = cls === JUNK ? "junk" : cls === UNDECODABLE ? "undecodable" : "content";
-    return (
+    const kind = cls === JUNK ? label("junk", "공백·기호류") : cls === UNDECODABLE ? label("undecodable", "대체 문자(�) 포함") : label("content", "그 밖의 문자열");
+    return label(
       `pos ${positions[p]} · t≈${timeLabel(p)} ` +
       `(audio token ${p + 1}/${nPos} @ ${hz} Hz) · ` +
-      `'${escapeToken(vocab[slot])}' · ${kind}`
+      `'${escapeToken(vocab[slot])}' · ${kind}`,
+      `전체 입력 위치 ${positions[p]} · 약 ${timeLabel(p)} ` +
+      `(오디오 토큰 ${p + 1}/${nPos}, 초당 ${hz}개) · '${escapeToken(vocab[slot])}' · ${kind}`
     );
   }
 
@@ -435,8 +445,9 @@ function build(model, el) {
 
     canvas.setAttribute(
       "aria-label",
-      `${nLayers} layers by ${nPos} audio positions; active ${layerNames[activeLayer]}, ` +
-        `${stats[activeLayer].junk} of ${nPos} junk`
+      label(`${nLayers} layers by ${nPos} audio positions; active ${layerNames[activeLayer]}, ` +
+        `${stats[activeLayer].junk} of ${nPos} junk`,
+        `${nLayers}개 레이어와 ${nPos}개 오디오 위치. 선택한 레이어 ${layerNames[activeLayer]}, 공백·기호류 ${stats[activeLayer].junk}개`)
     );
   }
 
@@ -451,16 +462,19 @@ function build(model, el) {
   // ---------------------------------------------------------- DOM sync ----
   function renderReadout() {
     const s = stats[activeLayer];
-    const extra = s.undecodable ? ` · ${s.undecodable} undecodable` : "";
-    readout.textContent =
+    const extra = s.undecodable ? label(` · ${s.undecodable} undecodable`, ` · 대체 문자 포함 ${s.undecodable}개`) : "";
+    readout.textContent = label(
       `${layerNames[activeLayer]} · ${s.junk}/${nPos} junk · ${s.unique} unique` +
       `${extra} · modal '${escapeToken(s.modal)}' ×${s.modalCount} · ` +
-      `${s.settled}/${nPos} already equal the final token`;
+      `${s.settled}/${nPos} already equal the final token`,
+      `${layerNames[activeLayer]} · 공백·기호류 ${s.junk}/${nPos}개 · 출력 문자열 ${s.unique}종류` +
+      `${extra} · 최빈 문자열 '${escapeToken(s.modal)}' ${s.modalCount}개 · 마지막 레이어와 출력이 같은 위치 ${s.settled}/${nPos}개`);
   }
 
   function renderChips() {
-    chipsHead.textContent =
-      `${layerNames[activeLayer]} — all ${nPos} probe tokens, in time order`;
+    chipsHead.textContent = label(
+      `${layerNames[activeLayer]} — all ${nPos} probe tokens, in time order`,
+      `${layerNames[activeLayer]} — 시간순으로 나열한 ${nPos}개 위치의 프로브 출력`);
     for (let p = 0; p < nPos; p++) {
       const slot = at(p, activeLayer);
       const cls = classOf(slot);
@@ -480,9 +494,11 @@ function build(model, el) {
       return;
     }
     pinPanel.hidden = false;
-    pinHead.textContent =
+    pinHead.textContent = label(
       `pos ${positions[pinned]} · audio token ${pinned + 1}/${nPos} · ` +
-      `t≈${timeLabel(pinned)} — its ${nLayers}-layer trajectory`;
+      `t≈${timeLabel(pinned)} — its ${nLayers}-layer trajectory`,
+      `전체 입력 위치 ${positions[pinned]} · 오디오 토큰 ${pinned + 1}/${nPos} · ` +
+      `약 ${timeLabel(pinned)} — ${nLayers}개 레이어의 출력 비교`);
     for (let k = 0; k < nLayers; k++) {
       const slot = at(pinned, k);
       const cls = classOf(slot);
@@ -693,12 +709,13 @@ export function render({ model, el }) {
     try {
       teardown = build(model, el);
     } catch (err) {
-      showError(el, err);
+      showError(el, err, model.get("lang"));
     }
   };
 
   // Listening for py->js updates is fine; writing back is what we never do.
   const keys = [
+    "lang",
     "layer_names",
     "positions",
     "vocab",
@@ -713,7 +730,7 @@ export function render({ model, el }) {
     rebuild();
     keys.forEach((key) => model.on("change:" + key, rebuild));
   } catch (err) {
-    showError(el, err);
+    showError(el, err, model.get("lang"));
   }
 
   return () => {
