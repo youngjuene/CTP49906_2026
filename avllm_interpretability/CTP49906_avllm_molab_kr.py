@@ -2256,9 +2256,9 @@ def guided_tf_tokens(mo, selected_drop_share, w9_threshold, w9_tf_result):
             mo.md(
                 f"전체 {len(_words)}개 표시 묶음 중 **{len(_hit)}개**에서 로그 확률이 {_th:.2f} nats를 초과해 감소했습니다(Δ < −{_th:.2f}). 선택된 묶음의 "
                 f"Δ 합계는 {sum(_w[1] for _w in _hit):+.2f} nats입니다. 감소한 표시 묶음의 총 감소량 중 "
-                f"선택된 묶음가 **{_share:.0f}%**를 차지합니다. 색 범위는 모든 실행에서 ±8 nats입니다."
+                f"선택된 묶음이 **{_share:.0f}%**를 차지합니다. 색 범위는 모든 실행에서 ±8 nats입니다."
             ),
-            mo.md('<details>\n<summary>해석 도움말</summary>\n\n선택 비율은 Δ 합계가 음수인 표시 묶음들의 총 감소량 중, 임계값을 넘어 강조된 묶음가 차지하는 비율입니다. ⟨special⟩은 문장 종료 등 특수 토큰이며 별도로 채점합니다. 그 값을 이웃 단어의 의미로 해석하지 마세요.\n\n</details>'),
+            mo.md('<details>\n<summary>해석 도움말</summary>\n\n선택 비율은 Δ 합계가 음수인 표시 묶음들의 총 감소량 중, 임계값을 넘어 강조된 묶음이 차지하는 비율입니다. ⟨special⟩은 문장 종료 등 특수 토큰이며 별도로 채점합니다. 그 값을 이웃 단어의 의미로 해석하지 마세요.\n\n</details>'),
         ])
     _out
 
@@ -3100,7 +3100,7 @@ def tf_result_panel(
                     mo.md('<details>\n<summary>해석 도움말</summary>\n\n평균 Δ가 0에 가까워도 토큰별 증가와 감소가 상쇄됐을 수 있습니다. 토큰별 Δ도 함께 확인하세요. 평균은 채점한 모델 토큰 수로 나눈 값이며 특수 토큰도 포함될 수 있습니다.\n\n</details>'),
                     mo.md(
                         '<span style="color:#4C78A8;font-weight:600">다음 →</span> 타깃을 `video`로 바꾸거나 레이어를 `[0,12)`로 좁혀 보세요. '
-                        "영어로 바꾸면 차이가 날 수 있습니다. 같은 조건의 원본·무음 쌍으로 확인하세요."
+                        "한국어 질문의 표현도 바꿔 보세요. 한 번에 한 설정만 바꾸고, 같은 장면의 원본·무음에 동일하게 적용하세요."
                     ),
                 ])
                 try:
@@ -3192,9 +3192,9 @@ def tf_tokens_panel(mo, selected_drop_share, tf_result, tf_threshold):
             mo.md(
                 f"전체 {len(_words)}개 표시 묶음 중 **{len(_hit)}개**에서 로그 확률이 {_th:.2f} nats를 초과해 감소했습니다(Δ < −{_th:.2f}). 선택된 묶음의 "
                 f"Δ 합계는 {sum(_w[1] for _w in _hit):+.2f} nats입니다. 감소한 표시 묶음의 총 감소량 중 "
-                f"선택된 묶음가 **{_share:.0f}%**를 차지합니다. 색 범위는 모든 실행에서 ±8 nats입니다."
+                f"선택된 묶음이 **{_share:.0f}%**를 차지합니다. 색 범위는 모든 실행에서 ±8 nats입니다."
             ),
-            mo.md('<details>\n<summary>해석 도움말</summary>\n\n선택 비율은 Δ 합계가 음수인 표시 묶음들의 총 감소량 중, 임계값을 넘어 강조된 묶음가 차지하는 비율입니다. ⟨special⟩은 문장 종료 등 특수 토큰이며 별도로 채점합니다. 그 값을 이웃 단어의 의미로 해석하지 마세요.\n\n</details>'),
+            mo.md('<details>\n<summary>해석 도움말</summary>\n\n선택 비율은 Δ 합계가 음수인 표시 묶음들의 총 감소량 중, 임계값을 넘어 강조된 묶음이 차지하는 비율입니다. ⟨special⟩은 문장 종료 등 특수 토큰이며 별도로 채점합니다. 그 값을 이웃 단어의 의미로 해석하지 마세요.\n\n</details>'),
             mo.ui.table(_rows, selection=None, pagination=True, page_size=16),
         ])
     _out
