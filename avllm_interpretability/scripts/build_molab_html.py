@@ -48,6 +48,7 @@ def molab_html_navigation(mo):
       <h1 class="ctp-html-title">AVLLM 해석 가능성 실험실</h1>
       <p class="ctp-html-description">자신의 Molab GPU에서 설정을 바꾸고 실행합니다. 입력을 편집한 뒤 각 실험의 실행 버튼을 누르세요. 결과에는 마지막 실행에 사용한 설정이 표시됩니다.</p>
       <nav class="ctp-html-nav" aria-label="실습 섹션 이동">
+        <a href="#ctp-clips">영상 미리보기</a>
         <a href="#ctp-guide">가이드</a>
         <a href="#ctp-diversity">다양성</a>
         <a href="#ctp-band">경로 차단</a>
@@ -73,7 +74,7 @@ DIVERSITY_TEMPLATE = '''(
         '<section class="ctp-html-card" aria-label="프로브 다양성 입력">'
         '<p>설정 변경 후 실행을 눌러 적용하세요. 결과에는 마지막 실행에 사용한 설정이 표시됩니다.</p>'
         '<div class="ctp-html-fields">'
-        '<div class="ctp-html-field"><span class="ctp-html-field-label">클립</span>{clip}</div>'
+        '<div class="ctp-html-field"><span class="ctp-html-field-label">영상 · 원본/무음</span>{clip}</div>'
         '<div class="ctp-html-field"><span class="ctp-html-field-label">프레임 수</span>{nframes}</div>'
         '</div>'
         '<div class="ctp-html-field"><span class="ctp-html-field-label">프롬프트</span>{prompt}</div>'
@@ -115,7 +116,7 @@ TF_TEMPLATE = '''(
         '<p>이 실행에서 생성한 캡션을 고정하고, 선택한 직접 어텐션 연결을 차단하기 전후의 토큰 로그 확률을 비교합니다.</p>'
         '<p>설정 변경 후 실행을 눌러 적용하세요. 결과에는 마지막 실행에 사용한 설정이 표시됩니다.</p>'
         '<div class="ctp-html-fields">'
-        '<div class="ctp-html-field"><span class="ctp-html-field-label">클립</span>{clip}</div>'
+        '<div class="ctp-html-field"><span class="ctp-html-field-label">영상 · 원본/무음</span>{clip}</div>'
         '<div class="ctp-html-field"><span class="ctp-html-field-label">프레임 수</span>{nframes}</div>'
         '</div>'
         '<div class="ctp-html-field"><span class="ctp-html-field-label">프롬프트</span>{prompt}</div>'

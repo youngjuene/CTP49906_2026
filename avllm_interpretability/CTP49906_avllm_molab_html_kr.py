@@ -57,6 +57,7 @@ def molab_html_navigation(mo):
       <h1 class="ctp-html-title">AVLLM 해석 가능성 실험실</h1>
       <p class="ctp-html-description">자신의 Molab GPU에서 설정을 바꾸고 실행합니다. 입력을 편집한 뒤 각 실험의 실행 버튼을 누르세요. 결과에는 마지막 실행에 사용한 설정이 표시됩니다.</p>
       <nav class="ctp-html-nav" aria-label="실습 섹션 이동">
+        <a href="#ctp-clips">영상 미리보기</a>
         <a href="#ctp-guide">가이드</a>
         <a href="#ctp-diversity">다양성</a>
         <a href="#ctp-band">경로 차단</a>
@@ -86,7 +87,7 @@ def lab_intro(mo):
     | 순서 | 할 일 | 남길 것 |
     |---|---|---|
     | 1 · 준비 | GPU 연결 → Run all → 시범 결과 읽기 | 입력·출력·두 지표의 의미 |
-    | 2 · 비교 | 티처 포싱에서 한국어 무음/원본 쌍을 실행한 뒤 영어 쌍 비교 | 같은 설정의 두 실행 ID와 캡션 |
+    | 2 · 비교 | 한 장면의 무음/원본 쌍을 같은 한국어 질문으로 실행 | 같은 설정의 두 실행 ID와 캡션 |
     | 3 · 탐색 | 다양성 실험의 프레임 수 또는 티처 포싱의 레이어 구간 변경 | 바꾼 변수, 관측, 경쟁 설명 |
     | 4 · 제출 | 실습 기록에서 해석 작성 → Markdown과 JSON 내려받기 | 재현 가능한 결과와 다음 질문 |
 
@@ -111,9 +112,9 @@ def lab_intro(mo):
     바꾸는 부분)로 나뉩니다. 이 실습은 talker를 비활성화하고 thinker만 사용하므로, 아래에서는 ‘thinker 레이어’라고 부릅니다.
 
     이 노트북은 `CTP49906_avllm_molab.py`의 **한국어판**입니다. 공통 설정 셀의
-    `LOGIT_PROMPT`와 `ATTENTION_PROMPT`는 한국어 질문입니다. 프롬프트 언어를 바꾸면
-    질문 토큰과 생성 캡션이 달라질 수 있습니다. 언어에 따른 차이를 비교할 때는
-    같은 클립·모델·차단 규칙·레이어 구간을 사용하세요.
+    `LOGIT_PROMPT`와 `ATTENTION_PROMPT`는 한국어 질문입니다. 질문을 바꾸면
+    질문 토큰과 생성 캡션이 달라질 수 있습니다. 같은 장면의 원본·무음을 비교할 때는
+    질문·모델·차단 규칙·레이어 구간을 같게 유지하세요.
     """)
     return
 
@@ -757,11 +758,10 @@ def _(MODEL_PATH, MODEL_REVISION, PROJECT_DIR):
             "runtime_packages": dict(run_provenance["packages"]),
             "python": run_provenance["python"], **settings,
         }
-        # Only the unchanged shipped pair has established visual correspondence.
-        _shipped_hashes = {'02321.mp4': '9dcf1572e593777267eab01351022fcaf7b00f9a564da6059eb97f422266ddec', '02321_silent.mp4': '88c72f00bf52f18b1a62a31d3f187990518bdb7b0b77b64b75bf2b4c5295e231'}
-        if (config["clip_sha256"] == _shipped_hashes.get(clip_path.name)
-                and clip_path.resolve() == (PROJECT_DIR / "assets" / clip_path.name).resolve()):
-            config["comparison_key"] = "builtin-02321-av-pair-v1"
+        from src.classroom_media import verified_pair_key as _verified_pair_key
+        _pair_key = _verified_pair_key(clip_path, PROJECT_DIR, clip_sha256=config["clip_sha256"])
+        if _pair_key is not None:
+            config["comparison_key"] = _pair_key
         return config
 
     return experiment_config, run_provenance
@@ -830,7 +830,7 @@ def _(mo):
     | 바꿀 것 | 예상되는 변화 | 비교할 때 고정할 것 |
     |---|---|---|
     | 프레임 8→4 | 비디오 토큰 수가 줄어듦. 같은 클립의 오디오 길이는 유지 | 클립·프롬프트·규칙 |
-    | 한국어→영어 프롬프트 | 질문 토큰과 생성 캡션이 함께 달라질 수 있음 | 원본/무음 각각 같은 프롬프트로 쌍 만들기 |
+    | 한국어 질문 바꾸기 | 질문 토큰과 생성 캡션이 함께 달라질 수 있음 | 같은 장면의 원본/무음에 같은 질문 사용 |
     | `audio`→`video` 타깃 | 다른 직접 어텐션 연결을 차단 | 클립·프롬프트·레이어 |
     | 레이어 `[0,12)`→`[12,24)` | 이 개입에 민감한 구간 비교 | `end`는 포함하지 않음; 다른 설정은 유지 |
     | 🎯 캡션 상한 32→64 | 더 긴 캡션을 생성할 수 있음 | 실제 길이·문장을 함께 기록 |
@@ -906,18 +906,42 @@ def _(validate_experiment):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## 영상 미리 보기 (프레임 + 내장 오디오가 그대로 Qwen에 들어갑니다)
+    ## 영상 미리 보기 — 세 장면에서 소리와 화면 관찰하기
     """)
     return
 
 
 @app.cell(hide_code=True)
-def clip_preview(VIDEO_PATH, mo):
+def clip_preview_selector(CLIP_CHOICES, CLIP_DEFAULT, mo):
+    preview_clip = mo.ui.dropdown(
+        {label: value for label, value in CLIP_CHOICES.items() if value != "Upload"},
+        value=CLIP_DEFAULT, allow_select_none=False, full_width=True,
+        label="미리 볼 영상",
+    )
+    mo.vstack([
+        mo.Html('<div id="ctp-clips"><strong>세 장면의 원본·무음 미리보기</strong></div>'),
+        mo.md("각 장면은 10초입니다. 미리보기 선택은 실험 설정을 바꾸지 않습니다. "
+              "아래 🎛️ 다양성·🎯 티처 포싱 입력란에서도 같은 장면을 선택한 뒤 실행하세요. "
+              "가이드 시범과 경로 차단 시범은 장면 1을 사용합니다."),
+        preview_clip,
+    ])
+    return (preview_clip,)
+
+
+@app.cell(hide_code=True)
+def clip_preview(mo, preview_clip, resolve_clip):
     import base64 as _video_base64
 
-    # The small bundled clip is self-contained across Studio's projection route.
-    _video_uri = "data:video/mp4;base64," + _video_base64.b64encode(VIDEO_PATH.read_bytes()).decode("ascii")
-    mo.video(src=_video_uri, width="100%")
+    _preview_path, _preview_control, _preview_error = resolve_clip(preview_clip.value, [])
+    if _preview_error:
+        _preview_panel = mo.callout(mo.md(_preview_error), kind="warn")
+    else:
+        _video_uri = "data:video/mp4;base64," + _video_base64.b64encode(_preview_path.read_bytes()).decode("ascii")
+        _preview_panel = mo.vstack([
+            mo.md(f"**미리보기 파일:** `{_preview_path.name}` · " + ("무음" if _preview_control else "소리 있음")),
+            mo.video(src=_video_uri, width="100%", autoplay=False),
+        ])
+    _preview_panel
     return
 
 
@@ -1113,40 +1137,27 @@ def _(RESULTS_DIR):
 
 
 @app.cell(hide_code=True)
-def _(Path, RESULTS_DIR, SILENT_VIDEO_PATH, VIDEO_PATH, preflight_clip):
+def clip_library(PROJECT_DIR, Path, RESULTS_DIR, preflight_clip):
 
     import hashlib as _hashlib
 
-    # Upload limits. The PyAV shim above decodes *every* frame into a Python list
-    # before stacking, so a two-minute 4K clip materializes tens of gigabytes and
-    # takes the kernel — and both loaded models — with it. "Bring your own clip"
-    # is the point of the last session, and the natural student clip is a 1080p60
-    # phone video, so these are checked before a single frame is decoded.
-    # Korean labels over the English values the rest of the notebook (and the
-    # ledger, and `resolve_clip` below) already speaks. Defined here, in the cell
-    # that owns clip semantics, so both playground forms read one definition.
-    CLIP_CHOICES = {
-        "기본 클립": "Default clip",
-        "무음 대조군": "Silent control",
-        "업로드": "Upload",
-    }
-    CLIP_DEFAULT = "기본 클립"
+    from src.classroom_media import builtin_clip_choices, resolve_builtin_clip
+
+    CLIP_CHOICES = builtin_clip_choices()
+    CLIP_DEFAULT = next(iter(CLIP_CHOICES))
     CLIP_UPLOAD = "업로드"
 
     from src.classroom_safety import MAX_UPLOAD_BYTES
 
     def resolve_clip(choice, uploads):
-        """Turn a clip choice into `(path, is_control, error)`.
-
-        The silent control lives in the repo, so in molab it exists only on the
-        kernel side — there is nothing on the student's machine for a browser file
-        picker to select. Choosing it by name and resolving server-side is what
-        makes the one control in this lab that can fail actually reachable.
-        """
-        if choice == "Default clip":
-            return VIDEO_PATH, False, preflight_clip(VIDEO_PATH)
-        if choice == "Silent control":
-            return SILENT_VIDEO_PATH, True, preflight_clip(SILENT_VIDEO_PATH)
+        """Resolve the submitted video, checking each bundled file before use."""
+        if choice != "Upload":
+            try:
+                _builtin_path, _is_control = resolve_builtin_clip(choice, PROJECT_DIR)
+            except (ValueError, TypeError) as _choice_error:
+                return None, False, str(_choice_error)
+            _why = preflight_clip(_builtin_path)
+            return (_builtin_path, _is_control, None) if _why is None else (None, _is_control, _why)
         if not uploads or not uploads[0].contents:
             # Deliberately an error, not a fallback: silently substituting the
             # default clip is how a "silent control" run became a duplicate of
@@ -2233,7 +2244,7 @@ def diversity_form(
         '<section class="ctp-html-card" style="border:1px solid #94a3b8;border-radius:16px;padding:clamp(1rem,3vw,1.75rem);overflow-wrap:anywhere" aria-label="프로브 다양성 입력">'
         '<p style="line-height:1.65;margin:.75rem 0">설정 변경 후 실행을 눌러 적용하세요. 결과에는 마지막 실행에 사용한 설정이 표시됩니다.</p>'
         '<div class="ctp-html-fields" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:1rem;margin:1rem 0">'
-        '<div class="ctp-html-field" style="min-width:0"><span class="ctp-html-field-label" style="display:block;font-weight:650;margin-bottom:.35rem">클립</span>{clip}</div>'
+        '<div class="ctp-html-field" style="min-width:0"><span class="ctp-html-field-label" style="display:block;font-weight:650;margin-bottom:.35rem">영상 · 원본/무음</span>{clip}</div>'
         '<div class="ctp-html-field" style="min-width:0"><span class="ctp-html-field-label" style="display:block;font-weight:650;margin-bottom:.35rem">프레임 수</span>{nframes}</div>'
         '</div>'
         '<div class="ctp-html-field" style="min-width:0"><span class="ctp-html-field-label" style="display:block;font-weight:650;margin-bottom:.35rem">프롬프트</span>{prompt}</div>'
@@ -2261,11 +2272,12 @@ def diversity_form(
                                 _v.get("max_new_tokens", 32))
         except ValueError as _err:
             return str(_err)
-        # The radio carries Korean labels over English values, and `validate` sees
-        # the frontend value — which for a radio is the *label* (`_convert_value`
-        # indexes `options` with it). Comparing against the English value alone
-        # would silently never match and let this check fail open, so accept both.
-        if _v.get("clip") in ("Upload", CLIP_UPLOAD) and not _v.get("video"):
+        # A dropdown submits a list of labels to validation, then converts it
+        # to the stored choice ID. Also accept scalar labels/IDs for old callers.
+        _clip_value = _v.get("clip")
+        if isinstance(_clip_value, list):
+            _clip_value = _clip_value[0] if _clip_value else None
+        if _clip_value in ("Upload", CLIP_UPLOAD) and not _v.get("video"):
             return "업로드를 선택했지만 파일을 고르지 않았습니다."
         # `validate` receives the *frontend* value, not the converted Python one
         # (`form._validate` calls `self.validate(value.value)`), and a dropdown
@@ -2292,7 +2304,7 @@ def diversity_form(
         return None
 
     ko_controls = mo.Html(_template).batch(
-        clip=mo.ui.radio(CLIP_CHOICES, value=CLIP_DEFAULT, inline=True),
+        clip=mo.ui.dropdown(CLIP_CHOICES, value=CLIP_DEFAULT, allow_select_none=False, full_width=True),
         video=mo.ui.file(
             filetypes=[".mp4", ".mov", ".mkv", ".webm"],
             multiple=False,
@@ -2705,13 +2717,13 @@ def _(mo):
 
     ### 탐색 1 · 원본과 무음을 같은 설정으로 비교하기
 
-    1. 한국어 프롬프트, 8프레임, `audio`, `[0,36)`, 상한32로 **무음 대조군**을 실행합니다.
-    2. **클립만 기본 클립으로** 바꾸어 실행합니다. 두 실행의 ID·전체 캡션·토큰당 Δ를 기록하세요.
-    3. 프롬프트를 `Describe what you hear in the video`로 바꾸고 **영어 무음/원본 쌍을 새로** 만듭니다.
-       영어 원본을 한국어 무음과 짝지으면 프롬프트와 오디오가 동시에 바뀝니다.
+    1. 영상 드롭다운에서 한 장면의 **무음**을 선택하고 한국어 질문, 8프레임, `audio`, `[0,36)`, 상한32로 실행합니다.
+    2. **같은 장면의 원본**으로만 바꾸어 실행합니다. 두 실행의 ID·전체 캡션·토큰별 Δ를 기록하세요.
+    3. 질문을 `영상에 보이는 장면을 설명해 주세요`로 바꾸고 같은 장면의 무음/원본을 다시 실행합니다.
+       질문을 바꿔도 오디오 입력 자체가 제거되는 것은 아닙니다. 다른 장면을 탐색할 때도 같은 장면끼리 비교하세요.
 
-    **예상과 관측을 구분하세요.** 이 예제에서는 한국어 쌍의 효과가 작고 영어 쌍에서 차이가
-    커질 수 있습니다. 직접 재현해 확인하세요. 무음도 표현을 만들므로 Δ=0이 보장되지 않습니다.
+    **예상과 관측을 구분하세요.** 답변이나 변화량이 비슷한 경우도 관찰 결과입니다.
+    무음도 표현을 만들므로 Δ=0이 보장되지 않습니다. 서로 다른 캡션의 Δ 크기로 정답 여부나 성능 순위를 매기지 마세요.
     평균 Δ가 작다는 것은 이 캡션의 평균 로그 확률 순변화가 작다는 뜻입니다. 토큰별 증가와 감소가 상쇄됐을 수 있으므로 토큰별 Δ도 확인하세요. 캡션이 비슷해도 토큰 확률까지 비슷하다는 뜻은 아닙니다.
     모델이 소리를 전혀 쓰지 않았거나 측정이 완전하다는 증거는 아닙니다. 다른 연결,
     중복된 정보, 문장 내용과 지표의 민감도도 가능한 설명입니다.
@@ -2752,7 +2764,7 @@ def tf_form(
         '<p style="line-height:1.65;margin:.75rem 0">이 실행에서 생성한 캡션을 고정하고, 선택한 직접 어텐션 연결을 차단하기 전후의 토큰 로그 확률을 비교합니다.</p>'
         '<p style="line-height:1.65;margin:.75rem 0">설정 변경 후 실행을 눌러 적용하세요. 결과에는 마지막 실행에 사용한 설정이 표시됩니다.</p>'
         '<div class="ctp-html-fields" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:1rem;margin:1rem 0">'
-        '<div class="ctp-html-field" style="min-width:0"><span class="ctp-html-field-label" style="display:block;font-weight:650;margin-bottom:.35rem">클립</span>{clip}</div>'
+        '<div class="ctp-html-field" style="min-width:0"><span class="ctp-html-field-label" style="display:block;font-weight:650;margin-bottom:.35rem">영상 · 원본/무음</span>{clip}</div>'
         '<div class="ctp-html-field" style="min-width:0"><span class="ctp-html-field-label" style="display:block;font-weight:650;margin-bottom:.35rem">프레임 수</span>{nframes}</div>'
         '</div>'
         '<div class="ctp-html-field" style="min-width:0"><span class="ctp-html-field-label" style="display:block;font-weight:650;margin-bottom:.35rem">프롬프트</span>{prompt}</div>'
@@ -2783,8 +2795,11 @@ def tf_form(
                                 _v.get("max_new_tokens", 32))
         except ValueError as _err:
             return str(_err)
-        # Label *or* value: see the note in the 🎛️ form's validator.
-        if _v.get("clip") in ("Upload", CLIP_UPLOAD) and not _v.get("video"):
+        # Frontend dropdown list, scalar label or stored ID: see the 🎛️ validator.
+        _clip_value = _v.get("clip")
+        if isinstance(_clip_value, list):
+            _clip_value = _clip_value[0] if _clip_value else None
+        if _clip_value in ("Upload", CLIP_UPLOAD) and not _v.get("video"):
             return "업로드를 선택했지만 파일을 고르지 않았습니다."
         # `.get` with a default: the batch value is partial on first render.
         _lo, _hi = _v.get("layers") or (0, 1)
@@ -2793,7 +2808,7 @@ def tf_form(
         return None
 
     tf_controls = mo.Html(_tf_template).batch(
-        clip=mo.ui.radio(CLIP_CHOICES, value=CLIP_DEFAULT, inline=True),
+        clip=mo.ui.dropdown(CLIP_CHOICES, value=CLIP_DEFAULT, allow_select_none=False, full_width=True),
         video=mo.ui.file(
             filetypes=[".mp4", ".mov", ".mkv", ".webm"], multiple=False, kind="area"
         ),

@@ -5,7 +5,7 @@ assertions name the English panel titles and that pack's probe numbers, so the
 Korean twin needs its own. Beyond re-checking that every cell runs, this file
 guards the two things localization can quietly break:
 
-* the clip radio and the verdict dropdown now carry **Korean labels over English
+* the clip and verdict dropdowns now carry **Korean labels over English
   values**, because `resolve_clip` and `run_ledger.VERDICTS` are shared with the
   English notebook. A label that stops mapping to a known value fails open — the
   form still submits, and the run is silently mislabelled.
@@ -169,20 +169,19 @@ def test_the_probe_grid_is_built_from_the_replayed_csv(replay):
 
 
 def test_korean_clip_labels_map_onto_the_values_resolve_clip_knows(replay):
-    # The regression this file exists for: the radio shows Korean, submits
-    # English. A label mapped to anything `resolve_clip` does not branch on would
-    # silently resolve to the "Upload with no file" error -- or worse, succeed.
+    # Every displayed scene/variant must resolve to its own verified asset.
+    # Existing two choice IDs remain compatible with earlier records.
     _, defs = replay
     choices, resolve = defs["CLIP_CHOICES"], defs["resolve_clip"]
 
-    assert set(choices.values()) == {"Default clip", "Silent control", "Upload"}
+    assert set(choices.values()) == {"Default clip", "Silent control", "scene02", "scene02_silent", "scene03", "scene03_silent", "Upload"}
     assert defs["CLIP_DEFAULT"] in choices
     assert choices[defs["CLIP_UPLOAD"]] == "Upload"
 
     default_clip, is_control, err = resolve(choices[defs["CLIP_DEFAULT"]], [])
     assert err is None and not is_control and default_clip.name == "02321.mp4"
 
-    silent, is_control, err = resolve(choices["무음 대조군"], [])
+    silent, is_control, err = resolve("Silent control", [])
     assert err is None and is_control and silent.name == "02321_silent.mp4"
 
     path, _, err = resolve(choices[defs["CLIP_UPLOAD"]], [])
@@ -190,8 +189,8 @@ def test_korean_clip_labels_map_onto_the_values_resolve_clip_knows(replay):
 
 
 def test_the_upload_gate_fires_for_the_korean_label_and_the_english_value(replay):
-    # `validate` sees the *frontend* value, which for a radio is the label. A
-    # check written against the English value alone never matches and fails open.
+    # Validation sees a dropdown list of labels, before conversion to IDs.
+    # Scalar labels and old values are also accepted for existing callers.
     _, defs = replay
     base = {
         "prediction": "가설", "video": None, "nframes": 8, "prompt": "p",
@@ -205,6 +204,9 @@ def test_the_upload_gate_fires_for_the_korean_label_and_the_english_value(replay
         assert validate({**base, "clip": defs["CLIP_UPLOAD"]}) is not None
         assert validate({**base, "clip": "Upload"}) is not None
         assert validate({**base, "clip": defs["CLIP_UPLOAD"], "video": [object()]}) is None
+        assert validate({**base, "clip": [defs["CLIP_UPLOAD"]]}) is not None
+        assert validate({**base, "clip": [defs["CLIP_UPLOAD"]], "video": [object()]}) is None
+        assert validate({**base, "clip": [defs["CLIP_DEFAULT"]]}) is None
 
 
 def test_the_verdict_dropdown_submits_values_the_ledger_accepts(replay):

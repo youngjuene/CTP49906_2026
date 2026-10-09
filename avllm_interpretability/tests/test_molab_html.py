@@ -151,6 +151,7 @@ def _construct_form(name, **overrides):
     marimo = pytest.importorskip("marimo", reason="HTML form construction needs marimo")
     sys.path.insert(0, str(PROJECT))
     from src.classroom_safety import validate_experiment
+    from src.classroom_media import builtin_clip_choices
 
     cell = copy.deepcopy(_cell(name))
     cell.decorator_list = []
@@ -165,8 +166,8 @@ def _construct_form(name, **overrides):
         "VIDEO_PATH": Path("02321.mp4"),
         "attention_model": SimpleNamespace(thinker=SimpleNamespace(model=SimpleNamespace(layers=[None] * 36))),
         "mo": marimo, "validate_experiment": validate_experiment,
-        "CLIP_CHOICES": {"기본 클립": "Default clip", "무음 대조군": "Silent control", "업로드": "Upload"},
-        "CLIP_DEFAULT": "기본 클립", "CLIP_UPLOAD": "업로드",
+        "CLIP_CHOICES": builtin_clip_choices(),
+        "CLIP_DEFAULT": next(iter(builtin_clip_choices())), "CLIP_UPLOAD": "업로드",
     }
     kwargs.update(overrides)
     fn = namespace[name]
@@ -292,9 +293,9 @@ def test_native_html_form_keeps_blank_prompt_and_missing_upload_guards(name):
     value["prompt"] = "   "
     assert "공백" in form.validate(value)
     value["prompt"] = "영상의 소리를 설명해 주세요"
-    value.update(clip="업로드", video=None)
+    value.update(clip=["업로드"], video=None)
     assert "파일" in form.validate(value)
-    value["clip"] = "기본 클립"
+    value["clip"] = ["장면 1 · 원본 (10초)"]
     assert form.validate(value) is None
     assert form.value is None
 
@@ -337,7 +338,7 @@ def test_navigation_uses_unique_static_anchors_and_no_javascript():
         if isinstance(node, ast.Constant) and isinstance(node.value, str):
             parser.feed(node.value)
     targets = [attrs["href"] for tag, attrs in parser.tags if tag == "a"]
-    assert set(targets) == {"#ctp-guide", "#ctp-diversity", "#ctp-band", "#ctp-tf", "#ctp-evidence"}
+    assert set(targets) == {"#ctp-clips", "#ctp-guide", "#ctp-diversity", "#ctp-band", "#ctp-tf", "#ctp-evidence"}
     assert len(targets) == len(set(targets))
     assert not any(tag in {"script", "iframe"} for tag, _ in parser.tags)
     assert not any(key.startswith("on") for _, attrs in parser.tags for key in attrs)
@@ -388,3 +389,18 @@ def test_companion_app_runs_in_replay_and_keeps_gpu_forms_disabled(tmp_path, mon
     finally:
         for number in set(plt.get_fignums()) - prior_figures:
             plt.close(number)
+
+
+@pytest.mark.parametrize("name", ["diversity_form", "tf_form"])
+def test_each_video_dropdown_value_survives_real_marimo_form_submission(name):
+    from src.classroom_media import builtin_clip_choices
+    for label, choice in builtin_clip_choices(include_upload=False).items():
+        form = _construct_form(name)
+        frontend = dict(form.element._initial_value_frontend)
+        assert isinstance(frontend["clip"], list), "clip must be a dropdown, not a radio"
+        frontend["clip"] = [label]
+        assert form.validate(frontend) is None
+        assert form.value is None, "editing draft must not submit"
+        form._update(frontend)
+        assert form.value["clip"] == choice
+        assert form.value["video"] == () or not form.value["video"]

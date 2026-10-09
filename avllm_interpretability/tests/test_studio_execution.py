@@ -347,3 +347,47 @@ def test_cleared_threshold_shows_prompt_and_retyping_restores_counts(cell, resul
     })
     assert "전체 2개 표시 묶음 중 <strong>2개</strong>" in output.text
     assert control.value == 1.52
+
+
+@pytest.mark.parametrize("choice,filename,is_control", [
+    ("scene02", "scene02.mp4", False),
+    ("scene02_silent", "scene02_silent.mp4", True),
+    ("scene03", "scene03.mp4", False),
+    ("scene03_silent", "scene03_silent.mp4", True),
+])
+def test_new_video_selection_reaches_model_input_and_record(tmp_path, monkeypatch, choice, filename, is_control):
+    calls = _install_heavy_boundary_fakes(monkeypatch)
+    env = _base_kwargs(tmp_path, controls_value={**_submitted_value(), "clip": choice})
+    library = _extract_function("clip_library")
+    _, _, _, resolve = library(PROJECT, Path, tmp_path, lambda path: None)
+    env["kwargs"]["resolve_clip"] = resolve
+    _extract_function("tf_result_panel")(**env["kwargs"])
+    conversation = calls["mm"][0]["conversation"]
+    assert conversation[0]["content"][1]["video"] == str(PROJECT / "assets" / filename)
+    assert env["runs"][-1]["config"]["clip"] == filename
+    assert env["runs"][-1]["is_control"] is is_control
+    assert len(calls["tfd"]) == 1
+
+
+def test_changing_video_cannot_reuse_another_videos_caption(tmp_path, monkeypatch):
+    calls = _install_heavy_boundary_fakes(monkeypatch)
+    env = _base_kwargs(tmp_path, controls_value=None)
+    _, _, _, resolve = _extract_function("clip_library")(PROJECT, Path, tmp_path, lambda path: None)
+    env["kwargs"]["resolve_clip"] = resolve
+    panel = _extract_function("tf_result_panel")
+    for choice in ("scene02", "scene03", "scene03_silent", "scene02"):
+        env["kwargs"]["tf_controls"] = Controls({**_submitted_value(), "clip": choice})
+        panel(**env["kwargs"])
+    assert len(calls["mm"]) == 3
+    assert all(call["cached_caption_ids"] is None for call in calls["tfd"][:3])
+    assert calls["tfd"][3]["cached_caption_ids"] is not None
+
+
+def test_preview_selection_does_not_become_an_inference_dependency():
+    source = ast.parse(_notebook_source())
+    readers = {node.name for node in source.body if isinstance(node, ast.FunctionDef)
+               and any(arg.arg == "preview_clip" for arg in node.args.args)}
+    assert readers == {"clip_preview"}
+    for name in ("tf_result_panel", "diversity_result_panel", "band_result_panel"):
+        cell = next(node for node in source.body if isinstance(node, ast.FunctionDef) and node.name == name)
+        assert all(arg.arg not in {"preview_clip", "clip_preview"} for arg in cell.args.args)
