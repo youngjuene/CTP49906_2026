@@ -560,7 +560,7 @@ def _(mo, studio_bundle_status):
 
     # A release identity is explicit; never destroy a student's edited clone.
     import os as _os
-    REPO_REF = _os.environ.get("CTP49906_REPO_REF", "863d3b0f96a1d817eb0ad2c94bfcf4b4ce1bf6e6")
+    REPO_REF = _os.environ.get("CTP49906_REPO_REF", "a0b21c76acded84462093229c4cc3ce842f23e52")
     _repo_url = "https://github.com/youngjuene/CTP49906_2026.git"
 
     def _notebook_dir_from_location(location):
