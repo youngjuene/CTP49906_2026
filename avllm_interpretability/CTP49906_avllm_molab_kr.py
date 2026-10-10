@@ -1582,7 +1582,7 @@ def probe_summary_panel(mo, probe_summary):
 
 @app.cell(hide_code=True)
 def probe_layer_map(mo, probe_summary):
-    from wigglystuff import ParallelCoordinates as _ParallelCoordinates
+    from wigglystuff import ParallelCoordinates as _ProbeParallelCoordinates
 
     # Constructed and displayed here, read only in `probe_layer_map_selection`.
     # Unlike ProbeGrid this widget DOES sync brush state back to Python, so no GPU
@@ -1614,7 +1614,7 @@ def probe_layer_map(mo, probe_summary):
     _colors = dict(zip(_labels, ["#4C78A8", "#F58518", "#54A24B"]))
 
     probe_layer_pc = mo.ui.anywidget(
-        _ParallelCoordinates(_rows, color_by="구간", color_map=_colors, height=380)
+        _ProbeParallelCoordinates(_rows, color_by="구간", color_map=_colors, height=380)
     )
     mo.vstack([
         mo.md(
@@ -3346,7 +3346,7 @@ def ledger_map_picker(mo):
 
 @app.cell(hide_code=True)
 def ledger_map_panel(get_runs, ledger_map_kind, mo):
-    from wigglystuff import ParallelCoordinates as _ParallelCoordinates
+    from wigglystuff import ParallelCoordinates as _LedgerParallelCoordinates
 
     from src.run_ledger import ledger_pc_rows as _pc_rows
 
@@ -3361,7 +3361,7 @@ def ledger_map_panel(get_runs, ledger_map_kind, mo):
         ),
     )
     ledger_map = mo.ui.anywidget(
-        _ParallelCoordinates(
+        _LedgerParallelCoordinates(
             _rows,
             color_by="대조군 짝",
             color_map={"짝 있음": "#54A24B", "짝 없음": "#E45756", "대조군": "#4C78A8"},
