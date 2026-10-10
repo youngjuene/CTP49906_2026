@@ -164,3 +164,30 @@ def test_knob_edits_do_not_invalidate_the_model_loads(cells):
             f"loader cell {cell['index']} depends on knobs {cell['refs'] & knobs} — "
             "editing a prompt would reload the model"
         )
+
+
+# ParallelCoordinates, unlike ProbeGrid, syncs brush state *back* to Python
+# (`brush_extents`, `selected_indices`, `filtered_indices`), so every cell that
+# refers to one re-runs on each brush. The Korean notebook adds two such widgets.
+# Whatever reads them must be a cheap, terminal display cell: it may not be a GPU
+# cell or a form, and it may define nothing, so no other cell (and so no GPU cell,
+# even transitively) can depend on a brush.
+PC_WIDGETS = ("probe_layer_pc", "ledger_map", "ledger_map_ids")
+
+
+def test_parallel_coordinate_widgets_are_read_only_by_terminal_display_cells(cells):
+    if not _defining(cells, "probe_layer_pc"):
+        pytest.skip("this notebook has no parallel-coordinates widgets")
+    expensive = {c["index"] for c in _expensive(cells)}
+    forms = {c["index"] for c in cells if ".form(" in c["code"]}
+    for name in PC_WIDGETS:
+        defining = {c["index"] for c in _defining(cells, name)}
+        assert len(defining) == 1, f"{name} must be defined once, found {defining}"
+        referring = _referring(cells, name)
+        assert referring, f"{name} is never read"
+        indices = {c["index"] for c in referring}
+        assert not (indices & defining), f"{name} is defined and read in one cell"
+        assert not (indices & (expensive | forms)), f"{name} is read by a GPU or form cell"
+        assert all(not c["defs"] for c in referring), (
+            f"{name} is read by a cell that defines names; a brush would re-run its dependents"
+        )

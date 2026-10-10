@@ -1581,6 +1581,100 @@ def probe_summary_panel(mo, probe_summary):
 
 
 @app.cell(hide_code=True)
+def probe_layer_map(mo, probe_summary):
+    from wigglystuff import ParallelCoordinates as _ParallelCoordinates
+
+    # Constructed and displayed here, read only in `probe_layer_map_selection`.
+    # Unlike ProbeGrid this widget DOES sync brush state back to Python, so no GPU
+    # cell may ever refer to `probe_layer_pc`: a brush would re-run it. Only the
+    # one cheap reader below does.
+    _n = len(probe_summary)
+    _cut1, _cut2 = _n // 3, 2 * (_n // 3)
+
+    def _band(layer):
+        # The same three-way split the 경로 차단 section asks students to sweep.
+        if layer < _cut1:
+            return f"초반 [0, {_cut1})"
+        if layer < _cut2:
+            return f"중반 [{_cut1}, {_cut2})"
+        return f"후반 [{_cut2}, {_n})"
+
+    _rows = [
+        {
+            "레이어": _r["layer"],
+            "출력 문자열 종류": _r["unique"],
+            "공백·기호류": _r["junk"],
+            "대체 문자(�) 포함": _r["undecodable"],
+            "최종 레이어와 일치": _r["matches_final"],
+            "구간": _band(_r["layer"]),
+        }
+        for _r in probe_summary
+    ]
+    _labels = list(dict.fromkeys(_row["구간"] for _row in _rows))
+    _colors = dict(zip(_labels, ["#4C78A8", "#F58518", "#54A24B"]))
+
+    probe_layer_pc = mo.ui.anywidget(
+        _ParallelCoordinates(_rows, color_by="구간", color_map=_colors, height=380)
+    )
+    mo.vstack([
+        mo.md(
+            "### 🗺️ 레이어 지도 — 브러시로 레이어 찾기\n\n"
+            "위 집계표의 레이어마다 선 하나를 그렸습니다. **축 위를 세로로 드래그**하면 그 범위에 걸린 "
+            "레이어만 강조되고, **축 이름을 드래그**하면 축 순서를 바꿀 수 있습니다. 예를 들어 ‘공백·기호류’ 축의 "
+            "높은 값을 고르면, 그 레이어들이 ‘출력 문자열 종류’와 ‘최종 레이어와 일치’ 축에서는 어디에 놓이는지 "
+            "한눈에 볼 수 있습니다."
+        ),
+        probe_layer_pc,
+        mo.md(
+            "선 색은 레이어를 셋으로 나눈 구간이며, 경로 차단에서 비교하는 구간과 같은 분할입니다. "
+            "이 지도는 프로브 출력의 요약일 뿐 어느 레이어가 중요한지를 보여 주지 않습니다. "
+            "마지막 레이어는 비교 기준이므로 ‘최종 레이어와 일치’가 항상 가장 큽니다."
+        ),
+    ], gap=0.4)
+    return (probe_layer_pc,)
+
+
+@app.cell(hide_code=True)
+def probe_layer_map_selection(mo, probe_layer_pc, probe_summary):
+    # The only reader of `probe_layer_pc`. It is cheap, so re-running on every
+    # brush is the point; nothing downstream of it touches the model.
+    def _ranges(layers):
+        # [0, 1, 2, 5, 7, 8] -> "0–2, 5, 7–8"
+        spans, start, prev = [], None, None
+        for _layer in layers:
+            if start is None:
+                start = prev = _layer
+            elif _layer == prev + 1:
+                prev = _layer
+            else:
+                spans.append((start, prev))
+                start = prev = _layer
+        if start is not None:
+            spans.append((start, prev))
+        return ", ".join(f"{a}" if a == b else f"{a}–{b}" for a, b in spans)
+
+    _n = len(probe_summary)
+    # An empty `selected_indices` is ambiguous: no brush yet, or a brush that
+    # catches nothing. `brush_extents` is empty exactly when no axis is brushed.
+    _brushed = bool(probe_layer_pc.brush_extents)
+    _kept = probe_layer_pc.selected_indices if _brushed else probe_layer_pc.filtered_indices
+    _layers = sorted(probe_summary[_i]["layer"] for _i in _kept if _i < _n)
+
+    if _brushed:
+        _msg = f"브러시에 걸린 레이어 **{len(_layers)} / {_n}개**" + (f" — 레이어 {_ranges(_layers)}" if _layers else "")
+        _msg += (
+            "\n\n이 범위를 ‘경로 차단’의 레이어 슬라이더에 넣어 직접 차단해 볼 수 있습니다. "
+            "프로브에서 눈에 띄는 구간이 차단에도 민감하다는 보장은 없으므로 둘을 따로 확인하세요."
+        )
+    elif len(_layers) < _n:
+        _msg = f"Keep/Exclude 뒤에 남은 레이어 **{len(_layers)} / {_n}개** — 레이어 {_ranges(_layers)}"
+    else:
+        _msg = "축 위를 세로로 드래그하면 선택한 레이어 번호가 여기에 표시됩니다."
+    mo.md(_msg)
+    return
+
+
+@app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
     ## 어텐션 연결 차단(Attention Knockout)
@@ -3221,6 +3315,96 @@ def _(mo):
     내려받으세요. 기록표의 저장 상태가 실패/메모리 전용이면 세션 안에서 보이더라도 디스크에
     저장됐다고 가정하지 마세요. 세션 종료 전에 내보내고 실제 파일을 열어 확인하세요.
     """)
+    return
+
+
+@app.cell(hide_code=True)
+def ledger_map_picker(mo):
+    # Its own cell, refs = {mo} only: a dropdown rebuilt on every appended run
+    # would reset itself the moment the run it should show is recorded.
+    ledger_map_kind = mo.ui.dropdown(
+        {
+            "경로 차단 · 캡션 유사도": "band_sweep",
+            "다양성 · 레이어 평균 Δ": "diversity",
+            "티처 포싱 · Δ 로그 확률": "teacher_forcing",
+        },
+        value="경로 차단 · 캡션 유사도",
+        allow_select_none=False,
+        label="실행 종류",
+    )
+    mo.vstack([
+        mo.md(
+            "### 🗺️ 실행 지도 — 지금까지의 실험을 한눈에\n\n"
+            "기록한 실행마다 선 하나를 그립니다. 실행 종류마다 지표가 달라 한 축에 섞을 수 없으므로 "
+            "종류를 골라 한 번에 하나씩 봅니다. **‘대조군 짝’ 축에서 ‘짝 없음’을 드래그**하면 아직 "
+            "무음 대조군과 비교하지 않은 실행의 ID를 아래에서 확인할 수 있습니다."
+        ),
+        ledger_map_kind,
+    ], gap=0.4)
+    return (ledger_map_kind,)
+
+
+@app.cell(hide_code=True)
+def ledger_map_panel(get_runs, ledger_map_kind, mo):
+    from wigglystuff import ParallelCoordinates as _ParallelCoordinates
+
+    from src.run_ledger import ledger_pc_rows as _pc_rows
+
+    # Reads the ledger, so it re-runs (and clears any brush) when a run is
+    # recorded. It is not a form and no GPU cell refers to it.
+    _rows, ledger_map_ids, _other = _pc_rows(get_runs(), ledger_map_kind.value)
+    mo.stop(
+        not _rows,
+        mo.callout(
+            mo.md("이 종류의 실행이 아직 없습니다. 위 실험에서 ▶를 눌러 실행하면 여기에 선으로 나타납니다."),
+            kind="info",
+        ),
+    )
+    ledger_map = mo.ui.anywidget(
+        _ParallelCoordinates(
+            _rows,
+            color_by="대조군 짝",
+            color_map={"짝 있음": "#54A24B", "짝 없음": "#E45756", "대조군": "#4C78A8"},
+            height=360,
+        )
+    )
+    _note = (
+        f"이 종류에는 다른 지표로 기록된 실행이 {_other}건 더 있어 지도에서 뺐습니다. "
+        "서로 다른 지표는 한 축에 그리지 않습니다."
+        if _other else ""
+    )
+    mo.vstack([ledger_map, mo.md(_note)] if _note else [ledger_map], gap=0.4)
+    return ledger_map, ledger_map_ids
+
+
+@app.cell(hide_code=True)
+def ledger_map_selection(ledger_map, ledger_map_ids, mo):
+    from collections import Counter as _Counter
+
+    # An empty `selected_indices` is ambiguous (no brush vs a brush that catches
+    # nothing); `brush_extents` is empty exactly when no axis is brushed.
+    _brushed = bool(ledger_map.brush_extents)
+    _kept = ledger_map.selected_indices if _brushed else ledger_map.filtered_indices
+    _picked = [(ledger_map_ids[_i], ledger_map.data[_i]) for _i in _kept if _i < len(ledger_map_ids)]
+    _total = len(ledger_map_ids)
+
+    if not _brushed and len(_picked) == _total:
+        _out = mo.md("축 위를 세로로 드래그하면 선택한 실행의 ID가 여기에 표시됩니다.")
+    else:
+        _pairs = _Counter(_row["대조군 짝"] for _, _row in _picked)
+        _head = (
+            f"{'브러시에 걸린' if _brushed else 'Keep/Exclude 뒤에 남은'} 실행 **{len(_picked)} / {_total}건**"
+            + (" — " + ", ".join(f"{_k} {_v}건" for _k, _v in _pairs.items()) if _picked else "")
+        )
+        _out = mo.vstack([
+            mo.md(_head),
+            mo.ui.table(
+                [{"실행 ID": _rid, **_row} for _rid, _row in _picked],
+                selection=None, pagination=True, page_size=10,
+            ) if _picked else mo.md("선택된 실행이 없습니다."),
+            mo.md("실행 ID는 아래 **판정 기록**에 그대로 붙여 넣을 수 있습니다. 짝이 있다는 표시도 인과 결론을 보증하지는 않습니다."),
+        ], gap=0.4)
+    _out
     return
 
 

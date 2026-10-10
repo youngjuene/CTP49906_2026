@@ -348,6 +348,115 @@ def ledger_counts(runs):
     }
 
 
+# --- Parallel-coordinates view -----------------------------------------------
+# Rows for `wigglystuff.ParallelCoordinates`, one polyline per run. The ledger
+# welds `metric_name` and `metric_unit` to the number because a caption
+# similarity and a Δ in nats are incommensurable; a plot that put both on one
+# axis would rebuild exactly that error. So `ledger_pc_rows` never mixes metrics:
+# it plots one kind, and within it one metric, and reports how many runs it left
+# out rather than silently dropping them.
+_PC_METRIC_LABELS_KO = {
+    "caption_similarity": "캡션 유사도 (비율)",
+    "mean_delta_diversity": "다양성 Δ (레이어 평균)",
+    "mean_unique_per_layer": "다양성 (레이어 평균)",
+    "delta_per_token": "Δ 로그 확률 (nats/토큰)",
+}
+_PC_SCENES_KO = {"02321": "장면 1", "scene02": "장면 2", "scene03": "장면 3"}
+
+
+def _pc_is_number(value):
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and value == value
+        and value not in (float("inf"), float("-inf"))
+    )
+
+
+def _pc_scene(clip):
+    clip = str(clip or "")
+    if clip.startswith("upload_"):
+        return "업로드"
+    stem = clip.rsplit(".", 1)[0]
+    if stem.endswith("_silent"):
+        stem = stem[: -len("_silent")]
+    return _PC_SCENES_KO.get(stem, stem or "?")
+
+
+def _pc_rules(run):
+    """`(source, target, start, end)` tuples recorded for a run, or `[]`.
+
+    band_sweep and teacher_forcing store one rule as flat `target/start/end`
+    keys; diversity stores a list of `[source, target, start, end]` rules. A
+    baseline-only diversity run has none, and plots as "없음".
+    """
+    config = run.get("config") or {}
+    if "target" in config:
+        source = "answer" if run.get("kind") == "teacher_forcing" else "generated"
+        return [(source, config.get("target"), config.get("start"), config.get("end"))]
+    return [tuple(r) for r in (config.get("rules") or []) if len(r) == 4]
+
+
+def ledger_pc_rows(runs, kind, *, metric_name=None):
+    """Plot-ready rows for one kind of run: `(rows, run_ids, n_other_metric)`.
+
+    `rows[i]` is a flat dict of JSON-native values (no `None`, no numpy) and
+    `run_ids[i]` is the ledger id of the same run, so a brush over the plot can
+    be traced back to the ledger without putting an all-unique id on an axis.
+    Only runs of `kind` that share `metric_name` (default: the newest run's) are
+    returned; `n_other_metric` counts the runs of that kind left out because
+    they recorded a different metric.
+    """
+    runs = list(runs)
+    of_kind = [
+        r for r in runs if r.get("kind") == kind and _pc_is_number(r.get("metric_value"))
+    ]
+    if not of_kind:
+        return [], [], 0
+    if metric_name is None:
+        metric_name = of_kind[-1].get("metric_name")
+    same = [r for r in of_kind if r.get("metric_name") == metric_name]
+
+    label = _PC_METRIC_LABELS_KO.get(metric_name) or f"{metric_name} ({same[-1].get('metric_unit', '')})"
+
+    rows, run_ids = [], []
+    for run in same:
+        config = run.get("config") or {}
+        rules = _pc_rules(run)
+        if run.get("is_control"):
+            pair = "대조군"
+        else:
+            pair = "짝 있음" if matched_control_ids(run, runs) else "짝 없음"
+        row = {
+            "장면": _pc_scene(config.get("clip")),
+            "소리": "무음" if run.get("is_control") else "원본",
+        }
+        if _pc_is_number(config.get("nframes")):
+            row["프레임 수"] = config["nframes"]
+        if kind == "diversity":
+            row["소스"] = "+".join(sorted({str(r[0]) for r in rules})) or "없음"
+        row["타깃"] = "+".join(sorted({str(r[1]) for r in rules})) or "없음"
+        starts = [r[2] for r in rules if _pc_is_number(r[2])]
+        ends = [r[3] for r in rules if _pc_is_number(r[3])]
+        if starts and ends:
+            row["시작 레이어"] = min(starts)
+            row["차단 레이어 수"] = max(ends) - min(starts)
+        else:
+            row["시작 레이어"] = 0
+            row["차단 레이어 수"] = 0
+        row[label] = run["metric_value"]
+        row["대조군 짝"] = pair
+        row["판정"] = VERDICT_LABELS_KO.get(run.get("verdict"), "미판정") if run.get("verdict") else "미판정"
+        rows.append(row)
+        run_ids.append(run.get("run_id", ""))
+    # Every row must carry the same keys: drop an axis that only some runs have
+    # rather than plot a ragged column (a student-invented kind may omit nframes).
+    if any("프레임 수" not in row for row in rows):
+        for row in rows:
+            row.pop("프레임 수", None)
+    return rows, run_ids, len(of_kind) - len(same)
+
+
 def _esc(value):
     return escape(str(value), quote=True)
 
