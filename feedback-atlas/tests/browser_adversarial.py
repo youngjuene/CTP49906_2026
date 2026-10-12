@@ -1,7 +1,8 @@
 """Opt-in interface QA scenarios using synthetic data and a loopback server.
 
 Run: .venv/bin/python -m pytest tests/browser_adversarial.py -q
-Desktop repair acceptance checks. Mobile-only cases remain explicit exclusions.
+Desktop repair acceptance checks, plus the phone cases F04 (tap to read) and F05
+(long tooltip stays inside the map).
 """
 
 import csv
@@ -26,6 +27,56 @@ def context(browser):
     )
     yield ctx
     ctx.close()
+
+
+@pytest.fixture
+def phone_context(browser):
+    """A 390x844 phone-sized window driven by a mouse (F05 hover reproduction)."""
+    ctx = browser.new_context(viewport={"width": 390, "height": 844})
+    ctx.add_init_script(
+        "Object.defineProperty(navigator, 'gpu', {configurable:true, value:undefined})"
+    )
+    yield ctx
+    ctx.close()
+
+
+@pytest.fixture
+def touch_context(browser):
+    """The same phone, but touch-only: there is no hover, only taps."""
+    ctx = browser.new_context(viewport={"width": 390, "height": 844},
+                              has_touch=True, is_mobile=True)
+    ctx.add_init_script(
+        "Object.defineProperty(navigator, 'gpu', {configurable:true, value:undefined})"
+    )
+    yield ctx
+    ctx.close()
+
+
+LONG_OPINION = "읽을 수 있어야 하는 긴 피드백입니다. " * 40
+
+
+def submit_long_opinion(page, server):
+    page.fill("#c-text", LONG_OPINION)
+    page.click("#c-submit")
+    page.wait_for_function("() => document.querySelector('#c-text').value === ''")
+    page.wait_for_function("() => document.querySelectorAll('#map [data-id]').length === 4")
+    page.click("#tab-legend")
+    page.click("#btn-fit")
+    rows = export_rows(page, server)
+    return next(row["id"] for row in rows if row["text"] == LONG_OPINION.strip())
+
+
+def tip_bounds(page):
+    return page.evaluate("""() => {
+      const tip = document.querySelector('.tip'), map = document.querySelector('#map-card');
+      const a = tip.getBoundingClientRect(), b = map.getBoundingClientRect();
+      const text = tip.querySelector('.text');
+      return {tipBottom:a.bottom, mapBottom:b.bottom, tipTop:a.top, mapTop:b.top,
+              tipLeft:a.left, tipRight:a.right, mapLeft:b.left, mapRight:b.right,
+              pointerEvents:getComputedStyle(tip).pointerEvents,
+              textOverflowY:getComputedStyle(text).overflowY,
+              textScrollable:text.scrollHeight > text.clientHeight};
+    }""")
 
 
 def enter(page, server, identity="writer1"):
@@ -124,42 +175,53 @@ def test_closed_compose_choice_survives_reconnect(live_server, context):
     assert page.is_hidden("#compose")
 
 
-@pytest.mark.skip(reason="F04: mobile-only behavior excluded by user")
-def test_mobile_tap_opens_opinion_text(live_server, context):
-    page = context.new_page()
+def test_mobile_tap_opens_opinion_text(live_server, touch_context):
+    page = touch_context.new_page()
     enter(page, live_server)
     page.click("#tab-legend")
-    point = page.locator('#map [data-id="o_browser_1"]')
-    point.tap()
+    page.locator('#map [data-id="o_browser_1"]').tap()
     assert page.locator(".tip .text").count() == 1
     assert "첫 의견" in page.inner_text(".tip .text")
+    # A touch pointer "leaves" the instant the finger lifts; the text must outlive that.
+    page.wait_for_timeout(300)
+    assert page.locator(".tip .text").count() == 1
 
 
-@pytest.mark.skip(reason="F05: phone-only reproduction; desktop 1440x900 replay passed")
-def test_long_opinion_tooltip_is_readable_within_map(live_server, context):
-    page = context.new_page()
+def test_tapped_opinion_can_be_dismissed(live_server, touch_context):
+    page = touch_context.new_page()
     enter(page, live_server)
-    opinion = "읽을 수 있어야 하는 긴 피드백입니다. " * 40
-    page.fill("#c-text", opinion)
-    page.click("#c-submit")
-    page.wait_for_function("() => document.querySelector('#c-text').value === ''")
-    page.wait_for_function("() => document.querySelectorAll('#map [data-id]').length === 4")
     page.click("#tab-legend")
-    page.click("#btn-fit")
-    rows = export_rows(page, live_server)
-    oid = next(row["id"] for row in rows if row["text"] == opinion.strip())
+    page.locator('#map [data-id="o_browser_1"]').tap()
+    page.wait_for_selector(".tip .text")
+    page.locator(".tip .tip-close").tap()
+    assert page.locator(".tip").count() == 0
+
+
+def test_long_opinion_tooltip_is_readable_within_map(live_server, phone_context):
+    page = phone_context.new_page()
+    enter(page, live_server)
+    oid = submit_long_opinion(page, live_server)
     page.locator(f'#map [data-id="{oid}"]').hover(force=True)
     page.wait_for_selector(".tip")
-    bounds = page.evaluate("""() => {
-      const tip = document.querySelector('.tip'), map = document.querySelector('#map-card');
-      const a = tip.getBoundingClientRect(), b = map.getBoundingClientRect();
-      return {tipBottom:a.bottom, mapBottom:b.bottom, tipTop:a.top, mapTop:b.top,
-              tipHeight:a.height, mapHeight:b.height,
-              pointerEvents:getComputedStyle(tip).pointerEvents,
-              overflow:getComputedStyle(map).overflow};
-    }""")
-    page.screenshot(path="/tmp/feedback-atlas-qa-long-tooltip.png", full_page=True)
+    bounds = tip_bounds(page)
     assert bounds["tipBottom"] <= bounds["mapBottom"] and bounds["tipTop"] >= bounds["mapTop"], bounds
+    assert bounds["tipLeft"] >= bounds["mapLeft"] and bounds["tipRight"] <= bounds["mapRight"], bounds
+
+
+def test_tapped_long_opinion_is_scrollable_inside_map(live_server, touch_context):
+    page = touch_context.new_page()
+    enter(page, live_server)
+    oid = submit_long_opinion(page, live_server)
+    page.locator(f'#map [data-id="{oid}"]').tap()
+    page.wait_for_selector(".tip .text")
+    bounds = tip_bounds(page)
+    assert bounds["tipBottom"] <= bounds["mapBottom"] and bounds["tipTop"] >= bounds["mapTop"], bounds
+    # The whole opinion has to be reachable: a bounded box the reader can scroll.
+    assert bounds["pointerEvents"] != "none", bounds
+    assert bounds["textOverflowY"] in ("auto", "scroll") and bounds["textScrollable"], bounds
+    page.evaluate("() => { const t = document.querySelector('.tip .text'); t.scrollTop = t.scrollHeight }")
+    assert page.evaluate("() => { const t = document.querySelector('.tip .text');"
+                         " return t.scrollTop + t.clientHeight >= t.scrollHeight - 1 }")
 
 
 def test_submission_validation_and_rate_limit_preserve_draft(live_server, context):

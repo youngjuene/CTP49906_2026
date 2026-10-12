@@ -74,6 +74,9 @@ export class Atlas {
 
     this.onSelect = opts.onSelect || (() => {});
     this.onPick = opts.onPick || (() => {});
+    // A tap or click that did not drag. `hit` is null on empty map and after any
+    // drag, so a consumer holding something open can close it.
+    this.onTap = opts.onTap || (() => {});
     this.mode = "pan";                 // "pan" | "marquee" | "lasso"
     this.selected = new Set();         // ids, admin-only
     this.matches = null;               // ids matching the search, or null
@@ -376,6 +379,9 @@ export class Atlas {
         if (moved < 4) {
           const hit = this._nearest(...local(e));
           this.onPick(hit ? hit.point : null);
+          this.onTap(hit);
+        } else {
+          this.onTap(null);
         }
         return;
       }

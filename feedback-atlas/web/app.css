@@ -137,7 +137,13 @@ textarea { resize:vertical; min-height:90px; line-height:var(--lh-body); word-br
   border:1px solid var(--hair); border-radius:6px; box-shadow:var(--shadow);
   padding:8px; max-width:340px; pointer-events:none; z-index:5;
   display:flex; flex-direction:column; gap:8px }
-.tip .text { font-size:var(--fs-body); line-height:var(--lh-body); color:var(--fg) }
+.tip .text { font-size:var(--fs-body); line-height:var(--lh-body); color:var(--fg);
+  overflow-y:auto; min-height:0 }
+.tip-body { min-height:0; display:flex; flex-direction:column; flex:0 1 auto }
+.tip.pinned { pointer-events:auto }
+.tip-close { align-self:flex-end; font:inherit; font-size:12px; min-height:28px;
+  padding:0 12px; border:1px solid var(--hair); border-radius:6px;
+  background:var(--chip); color:var(--fg); cursor:pointer }
 .tip .meta { display:flex; gap:6px; flex-wrap:wrap }
 .badge { font-size:11px; padding:1px 8px; border:1px solid var(--hair);
   background:var(--chip); border-radius:6px; color:var(--muted);

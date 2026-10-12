@@ -1,6 +1,8 @@
 # Desktop QA repairs — completed 2026-09-09
 
-**All four goals are complete. All 12 desktop-applicable QA findings are resolved.** F04 (touch-only interaction) and F05 (phone tooltip clipping) are excluded by the user's instruction. The original F05 scenario passed when replayed at 1440×900. Mobile behavior was not a repair acceptance requirement.
+**All four goals are complete. All 12 desktop-applicable QA findings are resolved.** F04 (touch-only interaction) and F05 (phone tooltip clipping) were excluded from this pass by the user's instruction. The original F05 scenario passed when replayed at 1440×900. Mobile behavior was not a repair acceptance requirement.
+
+> **Update 2026-10-12:** F04 and F05 are now fixed too. A tapped opinion is pinned with a close button (also dismissed by Escape, a tap on empty map, or a pan/zoom) and its text scrolls inside a tooltip bounded to the map; the hover tooltip is bounded to the map as well. The two skipped tests were replaced by four regression tests in `tests/browser_adversarial.py`; the browser suites now report 68 passed, 0 skipped. Keyboard-only reading remains unaddressed.
 
 | Goal | Findings | Result |
 | --- | --- | --- |

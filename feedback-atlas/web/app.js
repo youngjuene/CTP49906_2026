@@ -66,7 +66,13 @@ function colorScheme() {
 }
 
 /* ---------------- the map ---------------- */
-const atlas = new Atlas($("map"), { onHover: showTip, onCameraChange: renderStatus });
+const atlas = new Atlas($("map"), {
+  // A touch pointer "leaves" the moment the finger lifts, so a tapped tooltip is
+  // pinned and only a tap elsewhere, its close button or Escape dismisses it.
+  onHover: (hit) => { if (!tipPinned) showTip(hit); },
+  onTap: (hit) => showTip(hit, true),
+  onCameraChange: (camera) => { showTip(null); renderStatus(camera); },
+});
 atlas.colorOf = (p) => {
   const i = state.targetIndex.get(p.target_id);
   return i == null || i >= CATEGORY10.length ? OTHER : CATEGORY10[i];
@@ -81,16 +87,19 @@ atlas.dimmed = (p) =>
 
 /* ---------------- tooltip ---------------- */
 let tipEl = null;
-function showTip(hit) {
-  tipEl?.remove(); tipEl = null;
+let tipPinned = false;
+function showTip(hit, pinned = false) {
+  tipEl?.remove(); tipEl = null; tipPinned = false;
   if (!hit) return;
+  tipPinned = pinned;
   const p = hit.point;
   const card = $("map-card");
   tipEl = document.createElement("div");
   tipEl.className = "tip";
   const colour = atlas.colorOf(p);
+  tipEl.classList.toggle("pinned", pinned);
   tipEl.innerHTML =
-    `<div><div class="flabel" style="margin-bottom:4px">의견</div>
+    `<div class="tip-body"><div class="flabel" style="margin-bottom:4px">의견</div>
        <div class="text"></div></div>
      <div class="meta">
        <span class="badge"><span class="sw" style="background:${colour}"></span>
@@ -104,15 +113,33 @@ function showTip(hit) {
   tipEl.querySelector(".tgt").textContent = atlas.labelOf(p.target_id);
   if (p.reviewer_name) tipEl.querySelector(".rev").textContent = p.reviewer_name;
 
+  if (pinned) {
+    const close = document.createElement("button");
+    close.type = "button";
+    close.className = "tip-close";
+    close.textContent = "닫기";
+    close.addEventListener("click", () => showTip(null));
+    tipEl.appendChild(close);
+  }
+
   card.appendChild(tipEl);
-  const box = card.getBoundingClientRect(), t = tipEl.getBoundingClientRect();
+  const box = card.getBoundingClientRect();
+  // A long opinion must not outgrow the map, which clips it: cap the tip and let
+  // the text scroll inside the cap (a pinned tip takes pointer events to allow it).
+  tipEl.style.maxHeight = `${Math.max(80, box.height - 4)}px`;
+  const t = tipEl.getBoundingClientRect();
   let left = hit.cx - t.width / 2;
   let top = hit.cy - t.height - 8;
   if (top < 2) top = hit.cy + 12;                       // flip below near the top
+  top = Math.max(2, Math.min(top, box.height - t.height - 2));
   left = Math.max(2, Math.min(left, box.width - t.width - 2));
   tipEl.style.left = `${left}px`;
   tipEl.style.top = `${top}px`;
 }
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && tipPinned) showTip(null);
+});
 
 /* ---------------- chrome ---------------- */
 function renderStatus() {
