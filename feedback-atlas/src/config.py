@@ -168,6 +168,8 @@ class AtlasConfig:
     enable_demo: bool = False
     demo_db_path: str = ".run/demo/atlas.db"
     is_demo: bool = False
+    # Written by scripts/build_chat_atlas.py, read per request by /api/chats.
+    chats_path: str = ".run/chats/atlas.json"
 
 
 def _int_env(env: Mapping[str, str], name: str, default: int) -> int:
@@ -240,4 +242,5 @@ def load_config(env: Mapping[str, str] | None = None) -> AtlasConfig:
         require_https=env.get("ATLAS_ALLOW_INSECURE_HTTP", "") != "1",
         enable_demo=env.get("ATLAS_ENABLE_DEMO", "") == "1",
         demo_db_path=env.get("ATLAS_DEMO_DB", ".run/demo/atlas.db"),
+        chats_path=env.get("ATLAS_CHATS", ".run/chats/atlas.json"),
     )

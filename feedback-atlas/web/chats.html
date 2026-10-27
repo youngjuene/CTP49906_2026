@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>대화 지도 · feedback-atlas</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M5 25 L13 12 L20 18 L27 6' fill='none' stroke='%233b82f6' stroke-width='3'/%3E%3Ccircle cx='27' cy='6' r='3.5' fill='%233b82f6'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="chats.css">
+</head>
+<body>
+
+<!-- 개인 접근 코드: 같은 탭에서 수업 지도에 이미 들어와 있으면 건너뜁니다. -->
+<section class="gate" id="gate" hidden>
+  <form class="gate-card" id="gate-form" autocomplete="off" novalidate>
+    <h1>대화 지도</h1>
+    <p class="sub">학생과 AI의 대화를 문장 단위로 펼쳐, 대화가 의미 공간에서 지나간 길을 따라갑니다.</p>
+    <label for="gate-code">개인 접근 코드</label>
+    <input type="password" id="gate-code" autocapitalize="off" autocorrect="off"
+           spellcheck="false" enterkeyhint="go" required>
+    <p class="err" id="gate-error" role="alert" hidden></p>
+    <button class="btn pri" type="submit">열기</button>
+    <p class="hint"><a href="/">수업 지도로 돌아가기</a></p>
+  </form>
+</section>
+
+<main class="app" id="app" hidden>
+  <header class="bar">
+    <h1>대화 지도</h1>
+    <label class="sr-only" for="conv">대화</label>
+    <select id="conv"></select>
+    <div class="legend" aria-label="범례">
+      <span><svg viewBox="0 0 12 12" aria-hidden="true"><rect x="2" y="2" width="8" height="8" class="lg-student"/></svg>학생</span>
+      <span><svg viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="4" class="lg-ai"/></svg>AI</span>
+      <span><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M6 1.5 10.5 6 6 10.5 1.5 6Z" class="lg-status"/></svg>상태</span>
+      <span class="ramp" aria-hidden="true"></span><span class="ramp-label">앞 → 뒤 턴</span>
+    </div>
+    <label class="toggle"><input type="checkbox" id="show-route" checked> 턴 경로</label>
+    <label class="toggle"><input type="checkbox" id="show-status" checked> 상태 표시</label>
+    <a class="back" href="/">수업 지도</a>
+  </header>
+
+  <div class="stage">
+    <svg id="map" role="img" aria-label="대화 문장의 2차원 의미 지도"></svg>
+    <svg id="overlay" aria-hidden="true"></svg>
+    <p class="map-note" id="map-note"></p>
+  </div>
+
+  <section class="panel" aria-live="polite">
+    <div class="controls">
+      <button class="btn" id="prev-turn" title="이전 턴 (Shift+←)">⏮ 턴</button>
+      <button class="btn" id="prev" title="이전 문장 (←)">◀</button>
+      <button class="btn pri" id="play" title="재생 (Space)">▶ 재생</button>
+      <button class="btn" id="next" title="다음 문장 (→)">▶</button>
+      <button class="btn" id="next-turn" title="다음 턴 (Shift+→)">턴 ⏭</button>
+      <label class="sr-only" for="speed">재생 속도</label>
+      <select id="speed" title="재생 속도">
+        <option value="0.5">0.5×</option>
+        <option value="1" selected>1×</option>
+        <option value="2">2×</option>
+        <option value="4">4×</option>
+      </select>
+      <label class="toggle" title="확대했을 때 커서를 따라 지도를 옮깁니다"><input type="checkbox" id="follow" checked> 따라가기</label>
+      <input type="range" id="scrub" min="0" max="0" value="0" aria-label="대화 위치">
+      <span class="pos" id="pos"></span>
+    </div>
+    <div class="now">
+      <p class="meta" id="meta"></p>
+      <ol class="turn" id="turn"></ol>
+    </div>
+  </section>
+</main>
+
+<script type="module" src="chats.js"></script>
+</body>
+</html>

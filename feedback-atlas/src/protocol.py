@@ -25,7 +25,7 @@ ERROR_CODES = (
     "UNKNOWN_ID", "EMPTY_TEXT", "TEXT_TOO_LONG", "UNKNOWN_TARGET", "BAD_WEEK",
     "BAD_SOURCE", "NOT_AUTHENTICATED", "BAD_ACCESS_CODE", "RATE_LIMITED",
     "TOO_LARGE", "MALFORMED", "PROTOCOL_MISMATCH", "UNKNOWN_OPINION", "DEMO_FULL", "OUTSIDE_CLASS_PERIOD",
-    "STALE_SCHEDULE", "BAD_SCHEDULE",
+    "STALE_SCHEDULE", "BAD_SCHEDULE", "NO_CHATS",
 )
 
 # One table, so PRD 5.1's escalation -- suspect a typo first, send them to the
@@ -49,6 +49,7 @@ MESSAGES: dict[str, tuple[str, str]] = {
     "MALFORMED": ("요청을 이해하지 못했습니다.", "새로고침한 뒤 다시 시도해 주세요."),
     "PROTOCOL_MISMATCH": ("앱이 오래된 버전입니다.", "새로고침해 주세요."),
     "UNKNOWN_OPINION": ("해당 의견을 찾을 수 없습니다.", "새로고침한 뒤 다시 시도해 주세요."),
+    "NO_CHATS": ("아직 올라온 대화가 없습니다.", "조교가 대화 지도를 만든 뒤 다시 열어 주세요."),
 }
 
 MAX_FRAME_BYTES = 8192

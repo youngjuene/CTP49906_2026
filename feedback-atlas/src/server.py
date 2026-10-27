@@ -396,6 +396,41 @@ def create_app(cfg: AtlasConfig | None = None, *, atlas: Atlas | None = None) ->
             headers={"Content-Disposition":
                      'attachment; filename="feedback-atlas.csv"'})
 
+    if not atlas.cfg.is_demo:
+        @app.post("/api/chats")
+        async def chats(request: Request):
+            """The chat-trajectory map (web/chats.html), for roster members only.
+
+            The file holds what students wrote to a model, and this server is on a
+            public address, so it is never a static file. A participant session
+            token, a participant's own code, or the admin code unlocks it -- in
+            the body, for the same reason as /api/export.csv. It is read per
+            request so a rebuild shows up without a restart.
+            """
+            try:
+                body = await _request_json(request)
+            except HTTPException:
+                raise
+            except Exception:      # noqa: BLE001
+                return JSONResponse(error("MALFORMED"), status_code=400)
+            if not isinstance(body, dict):
+                return JSONResponse(error("MALFORMED"), status_code=400)
+            allowed = (atlas.access.verify(body.get("session_token")) is not None
+                       or atlas.access.authenticate_code(body.get("code")) is not None
+                       or _valid_admin_code(body.get("code"), atlas.cfg.admin_code))
+            if not allowed:
+                if not atlas.admin_limiter.allow(_client_ip(request)):
+                    return JSONResponse(error("RATE_LIMITED"), status_code=429)
+                await asyncio.sleep(0.5)
+                return JSONResponse(error("BAD_ACCESS_CODE"), status_code=403)
+            path = Path(atlas.cfg.chats_path)
+            try:
+                payload = path.read_bytes()
+            except FileNotFoundError:
+                return JSONResponse(error("NO_CHATS"), status_code=404)
+            # TransportSecurity already marks every response no-store.
+            return Response(content=payload, media_type="application/json")
+
     @app.post("/data/query")
     async def data_query(request: Request):
         """The SQL endpoint Embedding Atlas's viewer runs on.

@@ -333,6 +333,42 @@ cannot be resolved are skipped and listed, never guessed at. Use `--dry-run`
 first: opinion ids are generated per row, so importing the same file twice
 imports it twice.
 
+## Chat trajectories (`/chats.html`)
+
+A separate view for students' conversations with an LLM: each conversation is
+split into sentences, laid out in the same embedding space, and drawn as a path
+in the order it was said. It is deliberately not on the classroom map — one
+conversation is ~800 sentences, the map is sized for ~1000 opinions a semester,
+and a student's own prompts are not peer feedback.
+
+1. Open the claude.ai share link, scroll to the end, and save it with
+   **Ctrl+S → "Webpage, Complete"** (not "HTML Only": the page renders with
+   scripts). The saved page marks who said what and when; a copy-paste does not.
+2. Put it in `.run/chats/` named `<target_id>__w<week>__<nn>.html`, e.g.
+   `kim.seoyeon__w1__01.html`. The target must be a student on the roster.
+3. Rebuild the map (only new text is embedded; the cache is
+   `.run/chats/embeddings.db`, never the classroom database):
+
+```bash
+HF_HUB_OFFLINE=1 python scripts/build_chat_atlas.py --chats .run/chats --roster roster.csv
+```
+
+No restart is needed: `/api/chats` reads `.run/chats/atlas.json` per request,
+and only for a roster member's session or code (or the admin code). To check a
+conversation's split before building, `scripts/chat_to_trajectory.py` writes a
+readable `<stem>.preview.md`.
+
+What the conversion keeps and drops: student prompts (square) and model
+sentences (circle) are both points; status lines such as "웹 검색됨" are kept as
+markers (diamond) pinned to the next sentence rather than laid out; code blocks
+(pasted Claude Code prompts), citation chips and the screen-reader heading are
+dropped. Fragments under 20 characters merge into a neighbour. The week comes
+from the file name, not the message times.
+
+The view draws three strengths of path: the current turn sentence by sentence,
+earlier sentences faintly, and a numbered **turn route** through the centre of
+each turn — the conversation's overall course.
+
 ## After the semester (PRD 6, 7)
 
 ```bash
