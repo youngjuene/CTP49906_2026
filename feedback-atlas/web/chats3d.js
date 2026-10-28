@@ -244,7 +244,7 @@ export function createView3d(canvas, { onTap }) {
   // right-drag or two fingers pan; wheel and pinch zoom toward the pointer;
   // double-click resets; a tap picks a sentence. Any of it pauses following.
   const pointers = new Map();
-  let drag = null, pinch = null, moved = 0;
+  let drag = null, pinch = null, moved = 0, tapTimer = 0;
   const explore = () => { quietUntil = performance.now() + 4000; };
 
   function zoomAbout(mx, my, factor) {
@@ -308,7 +308,13 @@ export function createView3d(canvas, { onTap }) {
     canvas.classList.remove("dragging");
     explore();
     requestDraw();
-    if (moved < 4 && e.type === "pointerup" && last) pick(e);
+    // A tap waits a moment: if it was the first half of a double-click (reset the
+    // view), it must not also pick a sentence and stop playback.
+    if (moved < 4 && e.type === "pointerup" && last) {
+      const at = { clientX: e.clientX, clientY: e.clientY };
+      clearTimeout(tapTimer);
+      tapTimer = setTimeout(() => pick(at), 250);
+    }
   }
   canvas.addEventListener("pointerup", release);
   canvas.addEventListener("pointercancel", release);
@@ -319,7 +325,7 @@ export function createView3d(canvas, { onTap }) {
     explore();
     requestDraw();
   }, { passive: false });
-  canvas.addEventListener("dblclick", () => { reset(); requestDraw(); });
+  canvas.addEventListener("dblclick", () => { clearTimeout(tapTimer); reset(); requestDraw(); });
 
   function pick(e) {
     const r = canvas.getBoundingClientRect();

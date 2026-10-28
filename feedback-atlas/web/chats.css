@@ -123,7 +123,13 @@ a { color:var(--accent-strong) }
 .meta { margin:0 0 4px; color:var(--muted); position:sticky; top:0; z-index:1;
   background:var(--card); padding:2px 0 }
 .turn { margin:0; padding:0; list-style:none; font-size:var(--fs-body); line-height:var(--lh-body) }
-.turn li { padding:2px 6px; border-radius:4px; cursor:pointer }
+.turn li { padding:2px 6px; border-radius:4px; cursor:pointer; position:relative }
+/* While playing: how much of the sentence's reading time is left. */
+.turn li.here.reading::after { content:""; position:absolute; left:6px; right:6px; bottom:0;
+  height:2px; border-radius:1px; background:var(--accent); opacity:.6; transform-origin:left;
+  animation:read var(--read) linear forwards }
+@keyframes read { from { transform:scaleX(0) } to { transform:scaleX(1) } }
+@media (prefers-reduced-motion:reduce) { .turn li.here.reading::after { animation:none; opacity:.3 } }
 .turn li:hover { background:var(--panel) }
 .turn li.status { color:var(--muted); font-size:12px }
 .turn li.here { background:var(--chip); box-shadow:inset 3px 0 0 var(--accent) }

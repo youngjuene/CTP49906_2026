@@ -417,12 +417,34 @@ function nextTurn() {
 function stop() {
   state.playing = null;
   $("play").textContent = "▶ 재생";
+  $("turn").querySelector("li.reading")?.classList.remove("reading");
 }
 
-// Time to read a unit before moving on: longer sentences hold longer. At 1x a
-// typical 55-character sentence takes about 1.1 s including the glide.
-const dwell = (u) => Math.min(1600, Math.max(250, 150 + 8 * u.text.length)) / speed();
+// Time to read a unit, from the moment it is highlighted: reading speed, not a
+// fixed beat. At 1x, 10 Hangul syllables a second -- an ordinary silent reading
+// pace -- with Latin letters, digits and punctuation counting half, and never
+// less than 1.2 s. A typical 55-character sentence gets about 4 s; the speed
+// menu scales all of it.
+const READ_RATE = 10;
+const MIN_READ_MS = 1200;
+function readingMs(u) {
+  const syllables = (u.text.match(/[가-힣]/g) || []).length;
+  const other = (u.text.match(/[^\s가-힣]/g) || []).length;
+  return Math.max(MIN_READ_MS, (1000 * (syllables + 0.5 * other)) / READ_RATE);
+}
+// The glide to a unit is already reading time, so the pause is the rest of it.
+const dwell = (u) => Math.max(0, readingMs(u) - GLIDE_MS) / speed();
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// A thin bar under the highlighted sentence fills over the time left to read it.
+function showReading(ms) {
+  const li = $("turn").querySelector("li.here");
+  if (!li) return;
+  li.style.setProperty("--read", `${Math.round(ms)}ms`);
+  li.classList.remove("reading");
+  void li.offsetWidth;              // restart the animation
+  li.classList.add("reading");
+}
 
 async function togglePlay() {
   if (state.playing) return stop();
@@ -431,7 +453,9 @@ async function togglePlay() {
   $("play").textContent = "⏸ 멈춤";
   if (state.cur >= state.units.length - 1) await go(0, { animate: false });
   while (state.playing === run) {
-    await sleep(dwell(state.units[state.cur]));
+    const wait = dwell(state.units[state.cur]);
+    showReading(wait);
+    await sleep(wait);
     if (state.playing !== run) return;
     if (state.cur >= state.units.length - 1) return stop();
     await go(state.cur + 1);
@@ -511,7 +535,7 @@ document.addEventListener("keydown", (e) => {
 // ---------- pan, zoom, tap ----------
 
 const pointers = new Map();
-let dragFrom = null, pinchFrom = null, moved = 0;
+let dragFrom = null, pinchFrom = null, moved = 0, tapTimer = 0;
 
 svg.addEventListener("pointerdown", (e) => {
   svg.setPointerCapture(e.pointerId);
@@ -546,7 +570,13 @@ function release(e) {
   if (pointers.size === 0) {
     if (dragFrom && moved >= 4) render();     // settle the drag: re-place once
     dragFrom = null; svg.classList.remove("dragging");
-    if (moved < 4 && e.type === "pointerup") tap(e);
+    // Wait a moment before acting on a tap, so the first click of a double-click
+    // (fit the map) does not also pick a sentence and stop playback.
+    if (moved < 4 && e.type === "pointerup") {
+      const at = { clientX: e.clientX, clientY: e.clientY };
+      clearTimeout(tapTimer);
+      tapTimer = setTimeout(() => tap(at), 250);
+    }
   }
 }
 svg.addEventListener("pointerup", release);
@@ -563,7 +593,7 @@ svg.addEventListener("wheel", (e) => {
   state.view.cy = my - (my - state.view.cy) / k;
   render();
 }, { passive: false });
-svg.addEventListener("dblclick", () => { fit(); render(); });
+svg.addEventListener("dblclick", () => { clearTimeout(tapTimer); fit(); render(); });
 
 function tap(e) {
   const r = svg.getBoundingClientRect();

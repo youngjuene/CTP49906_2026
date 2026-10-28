@@ -342,6 +342,12 @@ the cursor on screen, and waits a few seconds after the reader moves it. The 3D 
 map in 3D, but any single view of it is a flattening, so the flat map remains
 the more faithful still picture.
 
+Playback is paced for reading: each sentence stays highlighted for its reading
+time at 10 Hangul syllables a second (Latin letters, digits and punctuation count
+half, minimum 1.2 s), shown by a thin bar under the sentence. A typical sentence
+gets about 4 s and a 30-turn conversation about an hour at 1x; the speed menu
+(0.5x-4x) scales all of it.
+
 The view draws three strengths of path: the current turn sentence by sentence,
 earlier sentences faintly, and a numbered **turn route** through the centre of
 each turn — the conversation's overall course.
