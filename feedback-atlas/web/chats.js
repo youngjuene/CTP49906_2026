@@ -9,6 +9,7 @@ const NS = "http://www.w3.org/2000/svg";
 // The classroom page's theme key (app-context.js storageKey at base "/"), so both
 // pages follow the same light/dark choice.
 const THEME_KEY = "atlas.theme:classroom";
+const COLOR_KEY = "atlas.chats.color-by";
 
 const $ = (id) => document.getElementById(id);
 
@@ -17,6 +18,7 @@ if (location.hash === "#admin") location.replace("/admin");
 const state = {
   data: null, conv: null, units: [], route: [], cur: 0, showStatus: true,
   playing: null, glide: null, disp: null, routeDisp: null,
+  colorBy: "turn", clusterColor: new Map(),
   view: { cx: 0, cy: 0, scale: 1 }, fitScale: 1, size: [0, 0], drawn: null, els: new Map(),
 };
 
@@ -91,8 +93,10 @@ turnMark.setAttribute("class", "turn-mark");
 // Everything placed in pixels by renderStatic sits in gWorld (and gStops). A pan
 // that does not change the zoom -- a drag, or the view following the cursor --
 // only translates these two groups; the 800 points are re-placed once, after.
+// Cluster keyword labels ride with the points, so a pan moves them together.
+const gLabels = document.createElementNS(NS, "g");
 const gWorld = document.createElementNS(NS, "g");
-gWorld.append(gPathAll, gPathWalked, gPoints);
+gWorld.append(gPathAll, gPathWalked, gPoints, gLabels);
 svg.append(gWorld);
 $("overlay").append(gRoute, gStops, gPathTurn, cursor, turnMark);
 
@@ -203,16 +207,22 @@ function renderStatic() {
     if (!mine) cls += " other";
     else if (here && p.seq > here.seq) cls += " ahead";
     setOnce(el, "_cls", cls, (c) => el.setAttribute("class", c));
-    const paint = mine ? color((p.turn - 1) / turns) : "";
+    const paint = !mine ? ""
+      : state.colorBy === "cluster" && p.cluster != null ? state.clusterColor.get(p.cluster)
+      : color((p.turn - 1) / turns);
     setOnce(el, "_paint", `${p.kind}:${paint}`, () => {
       el.style.fill = p.kind === "status" ? "" : paint;
       el.style.stroke = p.kind === "status" ? paint : "";
     });
   }
   if (!placed) {
+    for (const label of gLabels.children) {
+      label.setAttribute("x", sx(label._at.x)); label.setAttribute("y", sy(label._at.y));
+    }
     state.drawn = { cx: v.cx, cy: v.cy, scale: v.scale, w: state.size[0], h: state.size[1] };
     gWorld.removeAttribute("transform");
   }
+  gLabels.style.display = state.colorBy === "cluster" ? "" : "none";
   gStops.removeAttribute("transform");
   gPathAll.setAttribute("d", line(state.units));
   const start = here ? turnStart(here.turn) : 0;
@@ -548,8 +558,57 @@ new ResizeObserver(() => { if (state.data && state.conv) render(); }).observe(sv
 
 // ---------- start ----------
 
+// ---------- clusters ----------
+// Topic clusters come from the build (scripts/chat_clusters.py): one colour from
+// matplotlib's default cycle each, with neighbouring clusters kept visually apart.
+
+function buildClusters(clusters) {
+  state.clusterColor = new Map(clusters.map((c) => [c.id, c.color]));
+  const legend = $("cluster-legend");
+  legend.replaceChildren();
+  gLabels.replaceChildren();
+  for (const c of clusters) {
+    const row = document.createElement("div");
+    row.className = "row";
+    const sw = document.createElement("span");
+    sw.className = "sw";
+    sw.style.background = c.color;
+    const name = document.createElement("span");
+    name.textContent = c.label;
+    const n = document.createElement("span");
+    n.className = "n";
+    n.textContent = c.size;
+    row.append(sw, name, n);
+    legend.append(row);
+
+    const label = document.createElementNS(NS, "text");
+    label.setAttribute("class", "cluster-label");
+    label.style.fill = c.color;
+    label.textContent = c.label;
+    label._at = c;
+    gLabels.append(label);
+  }
+  $("color-by-wrap").hidden = !clusters.length;
+  let saved = null;
+  try { saved = localStorage.getItem(COLOR_KEY); } catch { /* storage blocked */ }
+  setColorBy(clusters.length && saved !== "turn" ? "cluster" : "turn");
+}
+
+function setColorBy(mode) {
+  state.colorBy = mode;
+  $("color-by").value = mode;
+  $("legend-turn").hidden = mode !== "turn";
+  $("cluster-legend").hidden = mode !== "cluster";
+  if (state.conv) renderStatic();
+}
+
+$("color-by").addEventListener("change", (e) => {
+  try { localStorage.setItem(COLOR_KEY, e.target.value); } catch { /* storage blocked */ }
+  setColorBy(e.target.value);
+});
+
 function start(data) {
-  if (!data.points?.length) return showGate("아직 올라온 대화가 없습니다.");
+  if (!data.points?.length) return showNotice("아직 올라온 대화가 없습니다.");
   state.data = data;
   $("notice").hidden = true;
   $("app").hidden = false;
@@ -563,6 +622,7 @@ function start(data) {
     opt.textContent = `${names[c.target_id] || c.target_id} · ${c.week}주차 · #${nn} (${c.turns}턴)`;
     select.append(opt);
   }
+  buildClusters(data.clusters || []);
   $("map-note").textContent =
     `문장 ${data.points.length}개 · 위치는 의미 유사도, 선은 대화 순서 · 더블클릭으로 전체 보기`;
   fit();

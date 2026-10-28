@@ -22,6 +22,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # -> feedback-atlas/
 
 from scripts.build_chat_atlas import main as build  # noqa: E402
+from scripts.chat_clusters import TAB10  # noqa: E402
 from scripts.chat_to_trajectory import (  # noqa: E402
     convert, merge_short, parse_conversation, split_long, split_sentences)
 from src.roster import Roster  # noqa: E402
@@ -169,6 +170,51 @@ def test_build_lays_out_sentences_and_pins_status_lines(tmp_path, roster):
         nxt = next(by_seq[s] for s in range(p["seq"] + 1, len(points))
                    if by_seq[s]["kind"] != "status")
         assert abs(p["x"] - nxt["x"]) < 0.1 and abs(p["y"] - nxt["y"]) < 0.1
+        # ... and coloured as part of that sentence's cluster.
+        assert p["cluster"] == nxt["cluster"]
+    clusters = data["clusters"]
+    assert clusters and sorted(c["id"] for c in clusters) == list(range(len(clusters)))
+    assert all(p["cluster"] in {c["id"] for c in clusters} for p in points)
+    assert sum(c["size"] for c in clusters) == sum(p["kind"] != "status" for p in points)
+    assert len({c["color"] for c in clusters}) == len(clusters)
+    assert all(c["color"] in TAB10 and c["label"] for c in clusters)
+
+
+def test_clusters_can_be_turned_off(tmp_path, roster):
+    page = _page(tmp_path)
+    out = tmp_path / "atlas.json"
+    build(["--chats", str(page.parent), "--roster", str(roster), "--out", str(out),
+           "--cache", str(tmp_path / "cache.db"), "--fake-embedder", "--clusters", "0"])
+    data = json.loads(out.read_text(encoding="utf-8"))
+    assert data["clusters"] == [] and not any("cluster" in p for p in data["points"])
+
+
+def test_neighbouring_clusters_get_colours_far_apart():
+    """tab10's closest pairs (blue/cyan, orange/brown...) must not be neighbours."""
+    import numpy as np
+
+    from scripts.chat_clusters import _lab, assign_colours
+    centres = np.array([[0, 0], [0.1, 0], [5, 5], [5.1, 5], [10, 0], [0, 10], [10, 10], [-5, 3]])
+    colours = assign_colours(centres)
+    assert len(set(colours)) == 8 and set(colours) <= set(TAB10)
+    assert "#7f7f7f" not in colours        # grey is kept for other conversations
+    de = [np.linalg.norm(_lab(a) - _lab(b)) for i, a in enumerate(TAB10) for b in TAB10[i + 1:]]
+    for a, b in ((0, 1), (2, 3)):
+        assert np.linalg.norm(_lab(colours[a]) - _lab(colours[b])) > np.median(de)
+    assert assign_colours(centres) == colours        # deterministic
+
+
+def test_keyword_labels_are_distinctive_korean_nouns():
+    from scripts.chat_clusters import keywords, tokens
+    assert tokens("죽음이란 무엇일까? 모델의 SAE 특징을 Gemma에서 봤어요") == \
+        ["죽음", "모델", "sae", "특징", "gemma"]
+    texts = ["죽음은 감각이에요."] * 4 + ["토큰의 벡터 차원이에요."] * 4 + ["죽음과 토큰"] * 2
+    labels = [0] * 4 + [1] * 4 + [0, 1]
+    words = keywords(texts, labels, n=2)
+    assert set(words[0]) == {"죽음", "감각"}
+    # 토큰 also turns up in cluster 0, so 벡터 and 차원 say more about cluster 1.
+    assert set(words[1]) == {"벡터", "차원"}
+    assert not set(words[0]) & set(words[1])
 
 
 # --- /api/chats ---------------------------------------------------------------

@@ -4,8 +4,9 @@
 Reads each .run/chats/<target_id>__w<week>__<nn>.html through
 scripts/chat_to_trajectory.py, embeds every unit with the classroom's model, and
 projects them all together, so two students' trajectories share one space and can
-be compared. Writes a single JSON file the server hands to logged-in roster
-members:
+be compared. Sentences are also grouped into topic clusters (scripts/chat_clusters.py)
+with keyword labels and colours. Writes a single JSON file the server serves at
+/api/chats:
 
     uv run --python .venv/bin/python scripts/build_chat_atlas.py \\
         --chats .run/chats --roster roster.csv
@@ -21,8 +22,8 @@ classroom database: this script runs while the server is up, and writing into a
 database another process owns is how a class loses its data. Rebuilding after a
 new chat is added only embeds the new text.
 
-The output is private: 0600, under .run/, which git ignores. It holds what
-students wrote to a model.
+The output file is 0600, under .run/, which git ignores: it holds what students
+wrote to a model, and the server, not the filesystem, decides who sees it.
 """
 
 import argparse
@@ -37,6 +38,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from scripts.chat_clusters import assign_colours, cluster, keywords  # noqa: E402
 from scripts.chat_to_trajectory import convert  # noqa: E402
 from src.config import DEFAULT_MODEL, cache_key, resolve_spec  # noqa: E402
 from src.projection import normalize_scale, project  # noqa: E402
@@ -72,14 +74,16 @@ def embed(texts, store: Store, embedder, key: str) -> np.ndarray:
     return np.stack([cached[h] for h in hashes]) if hashes else np.zeros((0, 2))
 
 
-def _pin_status(rows, coords, offset: float = 0.04) -> None:
+def _pin_status(rows, coords, offset: float = 0.04) -> dict[int, int]:
     """Place each status line just off the next prose unit of its conversation
     (the previous one when it comes last), so it sits on the path where it
-    happened. Offsets fan out so stacked status lines stay individually visible."""
+    happened. Offsets fan out so stacked status lines stay individually visible.
+    Returns {status row: the prose row it is pinned to}."""
     def prose_in(conversation, indices):
         return next((j for j in indices if rows[j]["conversation"] == conversation
                      and rows[j]["kind"] != "status"), None)
 
+    anchors = {}
     for i, row in enumerate(rows):
         if row["kind"] != "status":
             continue
@@ -90,6 +94,34 @@ def _pin_status(rows, coords, offset: float = 0.04) -> None:
             continue
         angle = 2.4 * row["seq"]            # golden-angle-ish spread
         coords[i] = coords[anchor] + offset * np.array([np.cos(angle), np.sin(angle)])
+        anchors[i] = anchor
+    return anchors
+
+
+def _clusters(rows, prose, X, coords, anchors, k: int, seed: int):
+    """-> (cluster id per row, cluster summaries). Status lines take the cluster
+    of the sentence they are pinned to."""
+    labels = cluster(X, k, seed=seed)
+    per_row = np.full(len(rows), -1)
+    per_row[prose] = labels
+    for i, anchor in anchors.items():
+        per_row[i] = per_row[anchor]
+    words = keywords([rows[i]["text"] for i in prose], labels)
+    # The label sits on the member nearest the cluster's centre on the map, so it
+    # lands on the cluster's own points rather than in a gap between them.
+    centres, summaries = [], []
+    for c in range(int(labels.max()) + 1):
+        members = np.array(prose)[labels == c]
+        centre = coords[members].mean(axis=0)
+        at = members[np.argmin(np.linalg.norm(coords[members] - centre, axis=1))]
+        centres.append(coords[at])
+        summaries.append({"id": c, "keywords": words[c],
+                          "label": " · ".join(words[c]) or f"군집 {c + 1}",
+                          "size": int(len(members)),
+                          "x": round(float(coords[at][0]), 5), "y": round(float(coords[at][1]), 5)})
+    for summary, colour in zip(summaries, assign_colours(np.array(centres)), strict=True):
+        summary["color"] = colour
+    return per_row, summaries
 
 
 def _write_private(path: Path, text: str) -> None:
@@ -119,6 +151,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--max-chars", type=int, default=1000)
     ap.add_argument("--n-neighbors", type=int, default=15)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--clusters", type=int, default=8,
+                    help="topic clusters to colour the map by; 0 turns them off")
     ap.add_argument("--fake-embedder", action="store_true", help=argparse.SUPPRESS)
     args = ap.parse_args(argv)
     out = args.out or args.chats / "atlas.json"
@@ -166,10 +200,15 @@ def main(argv: list[str] | None = None) -> int:
 
     coords = np.zeros((len(rows), 2))
     coords[prose] = normalize_scale(project(X, n_neighbors=args.n_neighbors, seed=args.seed))
-    _pin_status(rows, coords)
+    anchors = _pin_status(rows, coords)
+    per_row, clusters = (_clusters(rows, prose, X, coords, anchors, args.clusters, args.seed)
+                         if args.clusters > 0 else (np.full(len(rows), -1), []))
     points = [{**r, "id": f"{r['conversation']}#{r['seq']}",
-               "x": round(float(x), 5), "y": round(float(y), 5)}
-              for r, (x, y) in zip(rows, coords)]
+               "x": round(float(x), 5), "y": round(float(y), 5),
+               **({"cluster": int(c)} if c >= 0 else {})}
+              for r, (x, y), c in zip(rows, coords, per_row, strict=True)]
+    for c in clusters:
+        print(f"  cluster {c['id'] + 1}: {c['size']:4d}  {c['color']}  {c['label']}")
     names = {t["id"]: t["display_name"] for t in roster.targets()}
     payload = {
         "built_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -177,6 +216,7 @@ def main(argv: list[str] | None = None) -> int:
         "targets": [{"id": c, "display_name": names.get(c, c)}
                     for c in sorted({c["target_id"] for c in conversations})],
         "conversations": conversations,
+        "clusters": clusters,
         "points": points,
     }
     _write_private(out, json.dumps(payload, ensure_ascii=False, separators=(",", ":")))

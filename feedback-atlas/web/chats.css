@@ -94,6 +94,17 @@ a { color:var(--accent-strong) }
 .stop-label { fill:var(--fg); font-size:8.5px; font-weight:700; text-anchor:middle;
   pointer-events:none }
 .cursor { fill:none; stroke:var(--accent); stroke-width:2.5 }
+.cluster-label { font-size:11.5px; font-weight:700; text-anchor:middle; paint-order:stroke;
+  stroke:var(--card); stroke-width:3.5px; stroke-linejoin:round; pointer-events:none }
+.cluster-legend { position:absolute; top:8px; right:8px; max-width:min(260px, 45%);
+  background:var(--card); border:1px solid var(--hair); border-radius:8px; padding:6px 8px;
+  font-size:12px; display:flex; flex-direction:column; gap:3px; box-shadow:var(--shadow);
+  pointer-events:none }
+.cluster-legend .row { display:flex; align-items:center; gap:6px; min-width:0 }
+.cluster-legend .row > span:nth-child(2) { flex:1; min-width:0; overflow:hidden;
+  text-overflow:ellipsis; white-space:nowrap }
+.cluster-legend .sw { width:9px; height:9px; border-radius:50%; flex:none }
+.cluster-legend .n { color:var(--muted); font-variant-numeric:tabular-nums }
 .turn-mark { fill:var(--label); font-size:11px; font-weight:600; paint-order:stroke;
   stroke:var(--halo); stroke-width:3px; pointer-events:none }
 
@@ -121,5 +132,7 @@ a { color:var(--accent-strong) }
 }
 @media (max-width:520px) {
   .ramp-label { display:none }
+  /* On a phone the labels on the map carry the names; the box would cover it. */
+  .cluster-legend { display:none }
   .btn { padding:0 8px }
 }

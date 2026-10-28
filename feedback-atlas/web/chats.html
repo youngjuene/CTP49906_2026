@@ -30,8 +30,14 @@
       <span><svg viewBox="0 0 12 12" aria-hidden="true"><rect x="2" y="2" width="8" height="8" class="lg-student"/></svg>학생</span>
       <span><svg viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="4" class="lg-ai"/></svg>AI</span>
       <span><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M6 1.5 10.5 6 6 10.5 1.5 6Z" class="lg-status"/></svg>상태</span>
-      <span class="ramp" aria-hidden="true"></span><span class="ramp-label">앞 → 뒤 턴</span>
+      <span class="legend-turn" id="legend-turn"><span class="ramp" aria-hidden="true"></span><span class="ramp-label">앞 → 뒤 턴</span></span>
     </div>
+    <label class="toggle" id="color-by-wrap" hidden>색
+      <select id="color-by">
+        <option value="cluster">군집</option>
+        <option value="turn">턴</option>
+      </select>
+    </label>
     <label class="toggle"><input type="checkbox" id="show-route" checked> 턴 경로</label>
     <label class="toggle"><input type="checkbox" id="show-status" checked> 상태 표시</label>
     <a class="back" href="/map">의견 지도</a>
@@ -40,6 +46,7 @@
   <div class="stage">
     <svg id="map" role="img" aria-label="대화 문장의 2차원 의미 지도"></svg>
     <svg id="overlay" aria-hidden="true"></svg>
+    <aside class="cluster-legend" id="cluster-legend" aria-label="군집" hidden></aside>
     <p class="map-note" id="map-note"></p>
   </div>
 
