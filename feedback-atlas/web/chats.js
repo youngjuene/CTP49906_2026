@@ -71,11 +71,11 @@ const svg = $("map");
 // the full sentence path is a tangle by mid-conversation; it stays as faint
 // context. The current turn is drawn strong, sentence by sentence. And the turn
 // route -- one stop per turn, at the centre of that turn's sentences -- shows
-// where the conversation as a whole travelled.
+// where the conversation as a whole travelled. It grows with playback: only the
+// turns already reached are drawn, so it never reads as a path nobody played.
 const gPathAll = document.createElementNS(NS, "path");
 const gPathWalked = document.createElementNS(NS, "path");
 const gPathTurn = document.createElementNS(NS, "path");
-const gRouteAhead = document.createElementNS(NS, "path");
 const gRoute = document.createElementNS(NS, "path");
 const gPoints = document.createElementNS(NS, "g");
 const gStops = document.createElementNS(NS, "g");
@@ -84,7 +84,6 @@ const turnMark = document.createElementNS(NS, "text");
 gPathAll.setAttribute("class", "path-all");
 gPathWalked.setAttribute("class", "path-walked");
 gPathTurn.setAttribute("class", "path-turn");
-gRouteAhead.setAttribute("class", "route ahead");
 gRoute.setAttribute("class", "route");
 cursor.setAttribute("class", "cursor");
 cursor.setAttribute("r", "9");
@@ -93,7 +92,7 @@ turnMark.setAttribute("class", "turn-mark");
 // that does not change the zoom -- a drag, or the view following the cursor --
 // only translates these two groups; the 800 points are re-placed once, after.
 const gWorld = document.createElementNS(NS, "g");
-gWorld.append(gPathAll, gPathWalked, gPoints, gRouteAhead);
+gWorld.append(gPathAll, gPathWalked, gPoints);
 svg.append(gWorld);
 $("overlay").append(gRoute, gStops, gPathTurn, cursor, turnMark);
 
@@ -223,16 +222,16 @@ function renderStatic() {
 
   const at = here ? here.turn : 0;
   const showRoute = $route.checked;
-  gRouteAhead.setAttribute("d", showRoute ? line(state.route.filter((c) => c.turn >= at)) : "");
   gStops.replaceChildren();
   if (showRoute) {
     for (const c of state.route) {
+      if (c.turn > at) break;          // route is sorted by turn
       const [X, Y] = [sx(c.x), sy(c.y)];
       const dot = document.createElementNS(NS, "circle");
-      dot.setAttribute("class", `stop${c.turn > at ? " ahead" : ""}${c.turn === at ? " now" : ""}`);
+      dot.setAttribute("class", `stop${c.turn === at ? " now" : ""}`);
       dot.setAttribute("cx", X); dot.setAttribute("cy", Y); dot.setAttribute("r", 7);
       const label = document.createElementNS(NS, "text");
-      label.setAttribute("class", `stop-label${c.turn > at ? " ahead" : ""}`);
+      label.setAttribute("class", "stop-label");
       label.setAttribute("x", X); label.setAttribute("y", Y + 3.5);
       label.textContent = c.turn;
       gStops.append(dot, label);

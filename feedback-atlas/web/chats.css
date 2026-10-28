@@ -89,13 +89,10 @@ a { color:var(--accent-strong) }
 .path-turn { fill:none; stroke:var(--accent); stroke-width:2; opacity:.95 }
 .route { fill:none; stroke:var(--path-walked); stroke-width:2.5; opacity:.8;
   stroke-linejoin:round }
-.route.ahead { stroke-dasharray:4 4; opacity:.3 }
 .stop { fill:var(--card); stroke:var(--path-walked); stroke-width:1.5 }
-.stop.ahead { opacity:.35 }
 .stop.now { fill:var(--accent); stroke:var(--accent) }
 .stop-label { fill:var(--fg); font-size:8.5px; font-weight:700; text-anchor:middle;
   pointer-events:none }
-.stop-label.ahead { opacity:.4 }
 .cursor { fill:none; stroke:var(--accent); stroke-width:2.5 }
 .turn-mark { fill:var(--label); font-size:11px; font-weight:600; paint-order:stroke;
   stroke:var(--halo); stroke-width:3px; pointer-events:none }
