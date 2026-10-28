@@ -471,6 +471,16 @@ def create_app(cfg: AtlasConfig | None = None, *, atlas: Atlas | None = None) ->
         return RedirectResponse("../admin", status_code=307)
 
     if (WEB_DIR / "index.html").exists():
+        # The chat map is the home page; the opinion map lives at /map, served
+        # the same way /admin is, so both resolve their assets against "/".
+        @app.get("/", include_in_schema=False)
+        async def home():
+            return FileResponse(WEB_DIR / "chats.html")
+
+        @app.get("/map", include_in_schema=False)
+        async def opinion_map():
+            return FileResponse(WEB_DIR / "index.html")
+
         app.mount("/", StaticFiles(directory=str(WEB_DIR), html=True), name="web")
     else:
         @app.get("/")

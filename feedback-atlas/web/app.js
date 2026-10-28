@@ -541,7 +541,7 @@ $("admin-form").addEventListener("submit", (e) => {
 });
 $("admin-back").addEventListener("click", (e) => {
   e.preventDefault();
-  location.assign(apiUrl(""));
+  location.assign(apiUrl("map"));
 });
 
 /* ---------------- boot ---------------- */

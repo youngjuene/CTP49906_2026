@@ -76,7 +76,7 @@ def tip_bounds(page):
 
 
 def enter(page, server):
-    page.goto(server.url)
+    page.goto(server.map_url)
     page.wait_for_selector("#view-main:not([hidden])")
     page.wait_for_selector("#map [data-id]", state="attached")
 
@@ -93,7 +93,7 @@ def test_slow_boot_shows_the_boot_card_until_the_app_is_ready(live_server, conte
     page = context.new_page()
     held = []
     page.route("**/app.js", lambda route: held.append(route))
-    page.goto(live_server.url, wait_until="commit")
+    page.goto(live_server.map_url, wait_until="commit")
     try:
         page.wait_for_selector("#view-boot:not([hidden])")
         assert "불러오는 중" in page.inner_text("#boot-status")

@@ -95,6 +95,7 @@ class LiveServer:
         self.db = tmpdir / "atlas.db"
         self.port = _free_port()
         self.url = f"http://127.0.0.1:{self.port}/"
+        self.map_url = self.url + "map"   # "/" is the chat map
         self.log = (tmpdir / "server.log").open("w", encoding="utf-8")
         self.proc: subprocess.Popen | None = None
 
@@ -214,7 +215,7 @@ def test_webgpu_unavailable_keeps_the_map_visible_and_disables_the_button(live_s
     context.add_init_script("Object.defineProperty(navigator, 'gpu', { configurable: true, value: undefined });")
     page = context.new_page()
     try:
-        _enter(page, live_server.url)
+        _enter(page, live_server.map_url)
         page.wait_for_function("document.querySelector('#tab-viewer').disabled")
 
         assert page.get_attribute("#map-card", "hidden") is None
@@ -231,7 +232,7 @@ def test_narrow_viewport_can_open_the_viewer_manually(live_server, browser):
     page = context.new_page()
     _route_viewer(page, READY_VIEWER)
     try:
-        _enter(page, live_server.url)
+        _enter(page, live_server.map_url)
         page.wait_for_function("window.refreshes === 0")
 
         assert page.get_attribute("#tab-viewer", "aria-pressed") == "false"
@@ -250,7 +251,7 @@ def test_reader_closed_choice_survives_server_restart(live_server, browser):
     page = context.new_page()
     _route_viewer(page, READY_VIEWER)
     try:
-        _enter(page, live_server.url)
+        _enter(page, live_server.map_url)
         page.wait_for_function("document.querySelector('#tab-viewer').getAttribute('aria-pressed') === 'true'")
 
         page.click("#tab-viewer")
@@ -271,7 +272,7 @@ def test_delayed_capability_probe_can_be_cancelled_while_open_is_pending(live_se
     page = context.new_page()
     _route_viewer(page, STUB_VIEWER)
     try:
-        _enter(page, live_server.url)
+        _enter(page, live_server.map_url)
         page.wait_for_function("window.probes.length === 1")
 
         page.click("#tab-viewer")
@@ -292,7 +293,7 @@ def test_delayed_default_probe_cannot_reopen_after_an_explicit_close(live_server
     page = context.new_page()
     _route_viewer(page, STUB_VIEWER)
     try:
-        _enter(page, live_server.url)
+        _enter(page, live_server.map_url)
         page.wait_for_function("window.probes.length === 1")
 
         page.click("#tab-viewer")
@@ -314,7 +315,7 @@ def test_sighup_refreshes_open_viewer_and_queries_the_renamed_target(live_server
     page = context.new_page()
     _route_viewer(page, READY_VIEWER)
     try:
-        _enter(page, live_server.url)
+        _enter(page, live_server.map_url)
         page.wait_for_function("window.refreshes > 0")
         before = page.evaluate("window.refreshes")
 
@@ -348,7 +349,7 @@ def test_viewer_failure_displays_error_text_without_executing_markup(live_server
         "node.textContent = 'Mounted viewer';",
         "throw new Error('<img src=x onerror=window.injected=true>');"))
     try:
-        _enter(page, live_server.url)
+        _enter(page, live_server.map_url)
         page.wait_for_selector("#viewer-note:not([hidden])")
         assert page.locator("#viewer-note img").count() == 0
         assert "<img" in page.inner_text("#viewer-note")

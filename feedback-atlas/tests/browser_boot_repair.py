@@ -19,7 +19,7 @@ def test_module_boot_failure_has_visible_retry(live_server, browser):
             route.abort()
 
         page.route("**/app.js", app_route)
-        page.goto(live_server.url, wait_until="networkidle")
+        page.goto(live_server.map_url, wait_until="networkidle")
         page.wait_for_selector("#boot-error:not([hidden])")
         assert page.is_visible("#boot-retry")
         assert page.is_hidden("#view-main")
@@ -41,7 +41,7 @@ def test_a_fatal_participant_error_lands_on_the_boot_card(live_server, browser):
             route.fulfill(content_type="text/javascript", body=body)
 
         page.route("**/app.js", stale_app)
-        page.goto(live_server.url)
+        page.goto(live_server.map_url)
         page.wait_for_selector("#boot-error:not([hidden])")
         assert page.is_hidden("#view-main")
         assert "새로고침" in page.inner_text("#boot-error-text")

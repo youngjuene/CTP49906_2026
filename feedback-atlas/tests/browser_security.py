@@ -13,7 +13,7 @@ def test_legacy_admin_bookmark_redirects_to_path_and_back_to_classroom(live_serv
     page.wait_for_url(live_server.url + "admin")
     page.wait_for_selector("#view-admin-gate:not([hidden])")
     page.click("#admin-back")
-    page.wait_for_url(live_server.url)
+    page.wait_for_url(live_server.map_url)
     page.wait_for_selector("#view-main:not([hidden])")
 
 
@@ -28,7 +28,7 @@ def test_anonymous_boot_and_reload_with_csp(live_server, context):
     page = context.new_page()
     failures = []
     page.on("pageerror", lambda exc: failures.append(str(exc)))
-    response = page.goto(live_server.url)
+    response = page.goto(live_server.map_url)
     assert "frame-ancestors 'none'" in response.headers["content-security-policy"]
     page.wait_for_selector("#view-main:not([hidden])")
     page.wait_for_selector("#map [data-id]", state="attached")
@@ -44,7 +44,7 @@ def test_anonymous_boot_and_reload_with_csp(live_server, context):
 
 def test_anonymous_browser_reads_feedback_but_never_authorship(live_server, context):
     page = context.new_page()
-    page.goto(live_server.url)
+    page.goto(live_server.map_url)
     result = page.evaluate("""async () => {
         const ask = async (sql) => {
           const r = await fetch('/data/query', {method:'POST',
@@ -66,7 +66,7 @@ def test_admin_then_participant_has_no_cached_authorship(live_server, context):
     page.fill("#admin-code", CODE)
     page.locator("#admin-form button[type=submit]").click()
     page.wait_for_selector("#view-main:not([hidden])")
-    page.goto(live_server.url)
+    page.goto(live_server.map_url)
     page.wait_for_selector("#view-main:not([hidden])")
     page.wait_for_selector("#map [data-id]", state="attached")
     assert page.locator("#adminpanel").is_hidden()

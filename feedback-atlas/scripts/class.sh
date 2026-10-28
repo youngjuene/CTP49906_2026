@@ -14,7 +14,7 @@ url() {
   health_ok || { echo 'HTTPS server is not ready. Run scripts/class.sh start.' >&2; return 1; }
   .venv/bin/python scripts/make_qr.py "$URL" .run/qr.png
   echo "학생 공유 주소: $URL"
-  echo "대화 지도: $URL/chats.html"
+  echo "의견 지도: $URL/map"
   echo "관리자: $URL/admin"
   echo "슬라이드용 QR: $PWD/.run/qr.png"
 }

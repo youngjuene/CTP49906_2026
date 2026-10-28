@@ -11,6 +11,9 @@ const NS = "http://www.w3.org/2000/svg";
 const THEME_KEY = "atlas.theme:classroom";
 
 const $ = (id) => document.getElementById(id);
+
+// "/" used to be the opinion map, whose "#admin" bookmark opened admin mode.
+if (location.hash === "#admin") location.replace("/admin");
 const state = {
   data: null, conv: null, units: [], route: [], cur: 0, showStatus: true,
   playing: null, glide: null, disp: null, routeDisp: null,

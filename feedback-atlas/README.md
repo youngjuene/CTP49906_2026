@@ -10,6 +10,9 @@ link opens the map on a phone or the projector, with no login. Each opinion is
 embedded **locally** — no API call — projected to 2D, and pushed to every
 connected screen as soon as it is imported.
 
+The home page (`/`, also `/chats.html`) is the [chat map](#chat-trajectories-chatshtml);
+the opinion map is at `/map`, and admin mode at `/admin`.
+
 Colour encodes **which student the feedback is about**; shape encodes **AI or
 human**. That second channel is the point: the session asks how far a model can
 describe subjective experience, and this puts both kinds of comment in one

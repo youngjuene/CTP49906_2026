@@ -37,7 +37,7 @@ def open_viewer(live_server, context):
     page.on("request", lambda request: queries.append(json.loads(request.post_data))
             if request.url.endswith("/data/query") and request.post_data else None)
     page.on("pageerror", lambda error: errors.append(str(error)))
-    page.goto(live_server.url)
+    page.goto(live_server.map_url)
     page.wait_for_selector("#viewer-card:not([hidden])")
     return page, queries, errors
 

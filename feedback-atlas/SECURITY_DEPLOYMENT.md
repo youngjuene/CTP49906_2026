@@ -14,7 +14,7 @@ Cloudflare tunnel in the normal path.
 - One app at `https://143.248.249.7:8888/`, backed by `.run/classroom/atlas.db`
   (`ATLAS_DB` in `.env`). There is no `/demo/` practice app.
 - Viewing is open: the map, the Embedding Atlas analysis view and the chat map
-  (`/chats.html`, read from `.run/chats/atlas.json`) need no code. There are no
+  (the home page `/`, read from `.run/chats/atlas.json`; the opinion map is `/map`) need no code. There are no
   personal access codes and no participant sessions.
 - Viewing is read-only: the participant websocket accepts no write frame, so
   nothing reaches the corpus from a browser. Opinions arrive only through

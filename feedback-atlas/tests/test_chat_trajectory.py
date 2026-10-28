@@ -212,3 +212,13 @@ def test_a_rebuild_is_served_without_a_restart(client, tmp_path):
 def test_no_chats_yet_is_a_clear_404(client):
     r = client.get("/api/chats")
     assert r.status_code == 404 and r.json()["code"] == "NO_CHATS"
+
+
+def test_the_chat_map_is_the_home_page_and_the_opinion_map_moved_to_map(client):
+    home = client.get("/")
+    assert home.status_code == 200 and 'src="chats.js"' in home.text
+    opinions = client.get("/map")
+    assert opinions.status_code == 200 and 'src="bootstrap.js"' in opinions.text
+    # The old addresses keep working.
+    assert 'src="chats.js"' in client.get("/chats.html").text
+    assert 'src="bootstrap.js"' in client.get("/index.html").text
