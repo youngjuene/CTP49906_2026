@@ -217,6 +217,43 @@ def test_keyword_labels_are_distinctive_korean_nouns():
     assert not set(words[0]) & set(words[1])
 
 
+
+def _build(tmp_path, roster, chats, *extra):
+    out = tmp_path / "atlas.json"
+    assert build(["--chats", str(chats), "--roster", str(roster), "--out", str(out),
+                  "--cache", str(tmp_path / "cache.db"), "--fake-embedder", *extra]) == 0
+    return json.loads(out.read_text(encoding="utf-8"))
+
+
+def test_a_rebuild_with_nothing_new_moves_and_recolours_nothing(tmp_path, roster):
+    page = _page(tmp_path)
+    first = _build(tmp_path, roster, page.parent)
+    again = _build(tmp_path, roster, page.parent)
+    # Status lines are re-pinned from rounded anchors, so allow a sub-pixel 1e-4.
+    assert all(abs(a["x"] - b["x"]) < 1e-4 and abs(a["y"] - b["y"]) < 1e-4
+               and a["cluster"] == b["cluster"] for a, b in zip(first["points"], again["points"], strict=True))
+    assert [c["color"] for c in first["clusters"]] == [c["color"] for c in again["clusters"]]
+    fresh = _build(tmp_path, roster, page.parent, "--fresh")
+    assert len(fresh["points"]) == len(first["points"])
+
+
+def test_a_second_save_of_the_same_conversation_is_skipped(tmp_path, roster, capsys):
+    page = _page(tmp_path)
+    (page.parent / "target1__w1__02.html").write_text(PAGE, encoding="utf-8")
+    data = _build(tmp_path, roster, page.parent)
+    assert [c["id"] for c in data["conversations"]] == ["target1__w1__01"]
+    assert "skipped target1__w1__02.html" in capsys.readouterr().err
+
+
+def test_kept_clusters_keep_their_colours_and_new_ones_avoid_them():
+    import numpy as np
+
+    from scripts.chat_clusters import assign_colours
+    centres = np.array([[0, 0], [0.1, 0], [5, 5], [5.1, 5]])
+    colours = assign_colours(centres, fixed={0: "#2ca02c", 1: "#d62728"})
+    assert colours[:2] == ["#2ca02c", "#d62728"]
+    assert len(set(colours)) == 4
+
 # --- /api/chats ---------------------------------------------------------------
 
 @pytest.fixture

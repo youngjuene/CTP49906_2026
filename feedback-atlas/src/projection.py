@@ -71,7 +71,7 @@ def _pca_2d(X: np.ndarray) -> np.ndarray:
     return out
 
 
-def _umap_2d(X: np.ndarray, n_neighbors: int, seed: int) -> np.ndarray:
+def _umap_2d(X: np.ndarray, n_neighbors: int, seed: int, init=None) -> np.ndarray:
     import warnings
 
     import umap  # optional, and slow to import: keep it out of module scope
@@ -109,7 +109,9 @@ def _umap_2d(X: np.ndarray, n_neighbors: int, seed: int) -> np.ndarray:
         min_dist=0.1,
         metric="cosine",
         random_state=seed,
-        init="spectral",
+        # A caller with a previous layout passes it as the starting point, so a
+        # refit settles near where points already were instead of anywhere.
+        init="spectral" if init is None else np.asarray(init, dtype=np.float32),
         verbose=False,
         **({"precomputed_knn": knn} if knn is not None else {}),
     )
@@ -129,7 +131,8 @@ def _umap_2d(X: np.ndarray, n_neighbors: int, seed: int) -> np.ndarray:
 
 
 def project(
-    X: np.ndarray, *, threshold: int = 80, n_neighbors: int = 15, seed: int = 0
+    X: np.ndarray, *, threshold: int = 80, n_neighbors: int = 15, seed: int = 0,
+    init: np.ndarray | None = None,
 ) -> np.ndarray:
     """(n, dim) embeddings -> (n, 2) coordinates.
 
@@ -157,7 +160,7 @@ def project(
         return np.array([[-1.0, 0.0], [1.0, 0.0]])
     if choose_projector(n, threshold) == "umap":
         try:
-            return _umap_2d(X, n_neighbors, seed)
+            return _umap_2d(X, n_neighbors, seed, init=init)
         except Exception:
             # umap missing or failing (numba/llvmlite mismatch, a degenerate
             # neighbour graph) must not take the class down. PCA is worse, not

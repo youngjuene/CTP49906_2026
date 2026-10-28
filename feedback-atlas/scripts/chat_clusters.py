@@ -29,12 +29,19 @@ _GREY = "#7f7f7f"
 # --- membership ------------------------------------------------------------------
 
 
-def cluster(X: np.ndarray, k: int, seed: int = 0) -> np.ndarray:
-    """KMeans on unit-normalised vectors (cosine geometry). Deterministic."""
+def cluster(X: np.ndarray, k: int, seed: int = 0, centres: np.ndarray | None = None) -> np.ndarray:
+    """KMeans on unit-normalised vectors (cosine geometry). Deterministic.
+
+    With `centres` (one row per previous cluster), KMeans starts from them and
+    cluster i stays cluster i, so a rebuild keeps ids -- and therefore colours.
+    """
     from sklearn.cluster import KMeans
 
-    k = max(1, min(k, len(X)))
     Xn = X / np.maximum(np.linalg.norm(X, axis=1, keepdims=True), 1e-12)
+    if centres is not None and 0 < len(centres) <= len(X):
+        start = centres / np.maximum(np.linalg.norm(centres, axis=1, keepdims=True), 1e-12)
+        return KMeans(len(start), init=start, n_init=1, random_state=seed).fit_predict(Xn)
+    k = max(1, min(k, len(X)))
     labels = KMeans(k, n_init=10, random_state=seed).fit_predict(Xn)
     # Number clusters by first appearance, so cluster 0 is where the first
     # conversation starts and ids do not shuffle between identical rebuilds.
@@ -120,16 +127,21 @@ def _lab(hex_colour: str) -> np.ndarray:
     return np.array([116 * f[1] - 16, 500 * (f[0] - f[1]), 200 * (f[1] - f[2])])
 
 
-def assign_colours(centres: np.ndarray, palette=TAB10) -> list[str]:
+def assign_colours(centres: np.ndarray, palette=TAB10, fixed: dict[int, str] | None = None) -> list[str]:
     """One palette colour per cluster, with neighbours on the map kept far apart.
 
     Maximises sum(w_ij * dE(colour_i, colour_j)) where w_ij falls off with the
     distance between cluster centres, so the nearest pairs dominate. A greedy
     start, then swaps (including with unused colours) until nothing improves --
     deterministic, and at ten colours it settles in a few passes.
+
+    `fixed` pins clusters that already have a colour from an earlier build; only
+    the others are chosen, so a rebuild never recolours what readers know.
     """
     k = len(centres)
+    fixed = {i: c for i, c in (fixed or {}).items() if 0 <= i < k}
     pool = [c for c in palette if c != _GREY] if k < len(palette) else list(palette)
+    pool += [c for c in fixed.values() if c not in pool]
     if k > len(pool):
         pool = [pool[i % len(pool)] for i in range(k)]
     lab = np.array([_lab(c) for c in pool])
@@ -141,24 +153,32 @@ def assign_colours(centres: np.ndarray, palette=TAB10) -> list[str]:
     def score(order):
         return float((w * dE[np.ix_(order, order)]).sum())
 
-    # Greedy start: the most crowded cluster first, each taking the free colour
-    # furthest from its already-coloured neighbours.
-    chosen: dict[int, int] = {}
+    # Greedy start: pinned clusters first, then the most crowded free cluster,
+    # each taking the free colour furthest from its already-coloured neighbours.
+    chosen: dict[int, int] = {i: pool.index(c) for i, c in fixed.items()}
     for i in np.argsort(-w.sum(axis=1), kind="stable"):
+        if int(i) in chosen:
+            continue
         free = [c for c in range(len(pool)) if c not in chosen.values()] or list(range(len(pool)))
         chosen[int(i)] = max(free, key=lambda c: sum(w[i, j] * dE[c, cj] for j, cj in chosen.items()))
     order = [chosen[i] for i in range(k)]
 
-    # Then swaps, including with unused colours, until nothing improves.
+    # Then swaps among the free clusters (and unused colours) until nothing improves.
+    movable = [a for a in range(k) if a not in fixed]
+    taken = {chosen[i] for i in fixed}
     improved = True
     while improved:
         improved = False
         base = score(order)
-        for a in range(k):
+        for a in movable:
             for c in range(len(pool)):
+                if c in taken:
+                    continue
                 trial = list(order)
                 if c in trial:
                     b = trial.index(c)
+                    if b not in movable:
+                        continue
                     trial[a], trial[b] = trial[b], trial[a]
                 else:
                     trial[a] = c

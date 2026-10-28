@@ -316,6 +316,13 @@ conversations the students have agreed to show this way. To check a
 conversation's split before building, `scripts/chat_to_trajectory.py` writes a
 readable `<stem>.preview.md`.
 
+Rebuilding keeps the map stable: the layout starts from the previous build and is
+rotated onto it, and clusters keep their ids, colours and legend order, so adding a
+chat does not spin or recolour the map (sentences still shift locally as the layout
+makes room). With nothing new, nothing moves. `--fresh` lays everything out from
+scratch. A second save of the same conversation (same first message at the same
+time) is skipped in favour of the longer save, with a note in the build output.
+
 What the conversion keeps and drops: student prompts (square) and model
 sentences (circle) are both points; status lines such as "웹 검색됨" are kept as
 markers (diamond) pinned to the next sentence rather than laid out; code blocks
