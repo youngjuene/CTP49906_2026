@@ -98,6 +98,37 @@ curl --noproxy '*' --resolve 143.248.249.7:8888:127.0.0.1 https://143.248.249.7:
 This routes the request to loopback while preserving certificate validation for
 `143.248.249.7`.
 
+## Backups
+
+The private data is not in git: `.run/` (classroom database, saved chats and the
+chat map, admin code, TLS keys), `roster.csv` and `.env`.
+`scripts/backup_data.py` snapshots it into a dated, compressed archive on the
+system disk (`~/backups/feedback-atlas/`, a different physical disk from
+`/mnt/hdd`), copying each SQLite database through SQLite's backup API and
+integrity-checking the copy. The newest 14 archives are kept; they are 0600 in
+a 0700 directory.
+
+```bash
+.venv/bin/python scripts/backup_data.py                      # one backup now
+systemctl --user link "$(pwd)/deploy/feedback-atlas-backup.service"
+systemctl --user link "$(pwd)/deploy/feedback-atlas-backup.timer"
+systemctl --user daemon-reload
+systemctl --user enable --now feedback-atlas-backup.timer   # nightly at 03:30
+```
+
+Restore: stop the service, unpack the chosen archive over the project
+directory, start the service.
+
+```bash
+systemctl --user stop feedback-atlas.service
+tar -xzf ~/backups/feedback-atlas/feedback-atlas-<time>.tar.gz -C "$(pwd)"
+systemctl --user start feedback-atlas.service
+```
+
+Both disks are in this one machine, so this survives a disk failure but not the
+loss of the machine. The archives hold student conversations and secrets: copy
+them elsewhere only encrypted.
+
 ## Certificate Renewal
 
 The renewal timer runs twice daily:

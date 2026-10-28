@@ -1,0 +1,10 @@
+[Unit]
+Description=Back up Feedback Atlas private data to the system disk
+
+[Service]
+Type=oneshot
+WorkingDirectory=/mnt/hdd/research/2026/CTP49906_2026/feedback-atlas
+ExecStart=/mnt/hdd/research/2026/CTP49906_2026/feedback-atlas/.venv/bin/python scripts/backup_data.py --dest %h/backups/feedback-atlas --keep 14
+TimeoutStartSec=300
+UMask=0077
+NoNewPrivileges=true
