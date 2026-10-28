@@ -17,6 +17,9 @@ about a thousand opinions over the whole semester, and every point it holds move
 every other point when the layout is refitted. Chats would bury the peer feedback
 the map exists to show, and a student's own prompts are not feedback at all.
 
+Every unit gets two layouts: the 2D map (x, y) and a 3D cloud (x3, y3, z3) for
+the 3D view, which draws each step as an arc. Both are fitted the same way.
+
 Rebuilds are stable. When the output file already exists (and was built with
 the same model), the layout starts from it: sentences already on the map start
 where they were, new ones start beside their nearest neighbours in meaning, and
@@ -170,40 +173,81 @@ def _previous(path: Path, key: str):
         return None
     if old.get("model") != key:
         return None
-    xy, members = {}, {}
+    xy, xyz, members = {}, {}, {}
     for p in old.get("points", []):
         if p.get("kind") == "status":
             continue
         h = text_hash(p["text"])
         xy[p["id"]] = (p["x"], p["y"])
         xy.setdefault(h, (p["x"], p["y"]))
+        if "z3" in p:
+            xyz[p["id"]] = (p["x3"], p["y3"], p["z3"])
+            xyz.setdefault(h, (p["x3"], p["y3"], p["z3"]))
         if "cluster" in p:
             members[p["id"]] = p["cluster"]
             members.setdefault(h, p["cluster"])
     colors = [c["color"] for c in sorted(old.get("clusters", []), key=lambda c: c["id"])]
     ids = {p["id"] for p in old.get("points", []) if p.get("kind") != "status"}
-    return {"xy": xy, "ids": ids, "cluster": members, "colors": colors} if xy else None
+    return ({"xy": xy, "xyz": xyz, "ids": ids, "cluster": members, "colors": colors}
+            if xy else None)
 
 
-def _unchanged(keys, prev) -> bool:
+def _unchanged(keys, prev, space: str = "xy") -> bool:
     """True when every sentence is already on the previous map, in its place."""
-    return bool(prev) and all(k in prev["xy"] for k in keys) \
+    return bool(prev) and all(k in prev[space] for k in keys) \
         and prev["ids"] == {k for k in keys if "#" in k}
 
 
-def _layout(X, keys, prev, n_neighbors: int, seed: int) -> np.ndarray:
+def _project3(X, n_neighbors: int, seed: int, init=None) -> np.ndarray:
+    """The 3D cloud: the same UMAP recipe as the 2D map, one more dimension."""
+    n = len(X)
+    if n < 4:
+        return np.pad(project(X, n_neighbors=n_neighbors, seed=seed), ((0, 0), (0, 1)))
+    centred = X - X.mean(axis=0)
+    pca = centred @ np.linalg.svd(centred, full_matrices=False)[2][:3].T
+    if n < 80:
+        return pca                     # same cut-over as src/projection.py
+    try:
+        import warnings
+
+        import umap
+
+        from src.ea_projection import knn_graph
+        k = max(2, min(n_neighbors, n - 1))
+        knn = knn_graph(X, n_neighbors=k, metric="cosine", random_state=seed)
+        if knn is not None:
+            k = int(np.asarray(knn[0]).shape[1])
+        reducer = umap.UMAP(n_components=3, n_neighbors=k, min_dist=0.1, metric="cosine",
+                            random_state=seed,
+                            init="spectral" if init is None else np.asarray(init, dtype=np.float32),
+                            **({"precomputed_knn": knn} if knn is not None else {}))
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message=".*n_jobs value .* overridden.*")
+            return np.asarray(reducer.fit_transform(X), dtype=float)
+    except Exception:                  # noqa: BLE001 - a worse layout beats none
+        return pca
+
+
+def _layout(X, keys, prev, n_neighbors: int, seed: int, dims: int = 2) -> np.ndarray:
     """Project, starting from the previous build when there is one, and rotate
     the result onto its frame so a rebuild does not spin or rescale the map."""
-    if not prev:
-        return normalize_scale(project(X, n_neighbors=n_neighbors, seed=seed))
-    if _unchanged(keys, prev):
+    space = "xy" if dims == 2 else "xyz"
+
+    def fit(init=None):
+        if dims == 2:
+            return project(X, n_neighbors=n_neighbors, seed=seed, init=init)
+        return _project3(X, n_neighbors, seed, init)
+
+    if not prev or not prev[space]:
+        return normalize_scale(fit())
+    if _unchanged(keys, prev, space):
         # Nothing new: a refit would only jiggle the map, so nothing moves.
-        return np.array([prev["xy"][k] for k in keys], dtype=float)
-    known = [i for i, k in enumerate(keys) if k in prev["xy"]]
+        return np.array([prev[space][k] for k in keys], dtype=float)
+    known = [i for i, k in enumerate(keys) if k in prev[space]]
     init = None
     if known:
-        start = np.zeros((len(X), 2))
-        start[known] = [prev["xy"][keys[i]] for i in known]
+        start = np.zeros((len(X), dims))
+        start[known] = [prev[space][keys[i]] for i in known]
         new = [i for i in range(len(X)) if i not in set(known)]
         if new:
             # A new sentence starts at the mean of its five closest known ones.
@@ -212,8 +256,7 @@ def _layout(X, keys, prev, n_neighbors: int, seed: int) -> np.ndarray:
             nearest = np.argsort(-sim, axis=1)[:, :5]
             start[new] = start[np.array(known)[nearest]].mean(axis=1)
         init = start
-    coords = project(X, n_neighbors=n_neighbors, seed=seed, init=init)
-    return stabilize(coords, keys, prev["xy"])[0]
+    return stabilize(fit(init), keys, prev[space])[0]
 
 
 def _same_conversation(units) -> tuple | None:
@@ -334,13 +377,25 @@ def main(argv: list[str] | None = None) -> int:
             print(f"kept the previous layout: {len(shared)} sentence(s) already on the map moved "
                   f"a median {np.median(moved):.3f} (map radius ~1)")
     anchors = _pin_status(rows, coords)
+    coords3 = np.zeros((len(rows), 3))
+    coords3[prose] = _layout(X, keys, prev, args.n_neighbors, args.seed, dims=3)
+    for i, anchor in anchors.items():
+        a, b = 2.4 * rows[i]["seq"], 1.3 * rows[i]["seq"]
+        coords3[i] = coords3[anchor] + 0.04 * np.array([np.cos(a) * np.sin(b), np.sin(a) * np.sin(b), np.cos(b)])
     per_row, clusters = (_clusters(rows, prose, X, coords, anchors, args.clusters, args.seed, prev,
                                    _unchanged(keys, prev))
                          if args.clusters > 0 else (np.full(len(rows), -1), []))
+    for c in clusters:
+        # The 3D label sits on the member nearest the cluster's 3D centre.
+        members = [i for i in prose if per_row[i] == c["id"]]
+        centre = coords3[members].mean(axis=0)
+        at = coords3[members[int(np.argmin(np.linalg.norm(coords3[members] - centre, axis=1)))]]
+        c.update(x3=round(float(at[0]), 5), y3=round(float(at[1]), 5), z3=round(float(at[2]), 5))
     points = [{**r, "id": f"{r['conversation']}#{r['seq']}",
                "x": round(float(x), 5), "y": round(float(y), 5),
+               "x3": round(float(a), 5), "y3": round(float(b), 5), "z3": round(float(z), 5),
                **({"cluster": int(c)} if c >= 0 else {})}
-              for r, (x, y), c in zip(rows, coords, per_row, strict=True)]
+              for r, (x, y), (a, b, z), c in zip(rows, coords, coords3, per_row, strict=True)]
     for c in clusters:
         print(f"  cluster {c['id'] + 1}: {c['size']:4d}  {c['color']}  {c['label']}")
     names = {t["id"]: t["display_name"] for t in roster.targets()}

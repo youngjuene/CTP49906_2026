@@ -230,11 +230,22 @@ def test_a_rebuild_with_nothing_new_moves_and_recolours_nothing(tmp_path, roster
     first = _build(tmp_path, roster, page.parent)
     again = _build(tmp_path, roster, page.parent)
     # Status lines are re-pinned from rounded anchors, so allow a sub-pixel 1e-4.
-    assert all(abs(a["x"] - b["x"]) < 1e-4 and abs(a["y"] - b["y"]) < 1e-4
-               and a["cluster"] == b["cluster"] for a, b in zip(first["points"], again["points"], strict=True))
+    assert all(abs(a[k] - b[k]) < 1e-4 for a, b in zip(first["points"], again["points"], strict=True)
+               for k in ("x", "y", "x3", "y3", "z3"))
+    assert [p["cluster"] for p in first["points"]] == [p["cluster"] for p in again["points"]]
     assert [c["color"] for c in first["clusters"]] == [c["color"] for c in again["clusters"]]
     fresh = _build(tmp_path, roster, page.parent, "--fresh")
     assert len(fresh["points"]) == len(first["points"])
+
+
+def test_every_unit_also_gets_a_3d_position(tmp_path, roster):
+    import numpy as np
+    data = _build(tmp_path, roster, _page(tmp_path).parent)
+    xyz = np.array([[p["x3"], p["y3"], p["z3"]] for p in data["points"] if p["kind"] != "status"])
+    assert np.isfinite(xyz).all()
+    centred = xyz - xyz.mean(axis=0)
+    assert abs(np.sqrt((centred ** 2).sum(axis=1).mean()) - 1) < 1e-3   # same frame as the 2D map
+    assert all({"x3", "y3", "z3"} <= set(c) for c in data["clusters"])
 
 
 def test_a_second_save_of_the_same_conversation_is_skipped(tmp_path, roster, capsys):

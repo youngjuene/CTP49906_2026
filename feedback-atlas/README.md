@@ -330,6 +330,15 @@ markers (diamond) pinned to the next sentence rather than laid out; code blocks
 dropped. Fragments under 20 characters merge into a neighbour. The week comes
 from the file name, not the message times.
 
+The view opens in **3D** (a 보기 2D/3D switch keeps the flat map one click away):
+the build also fits a 3D cloud, drawn with perspective, and each step of the
+conversation is a SLERP arc about the cloud's centre, so the cursor travels a
+curve rather than a straight line. Drag to rotate, scroll or pinch to zoom,
+double-click to reset; with 따라가기 on, the cloud turns to keep the cursor in
+front. The 3D cloud keeps sentence neighbourhoods slightly better than the flat
+map in 3D, but any single view of it is a flattening, so the flat map remains
+the more faithful still picture.
+
 The view draws three strengths of path: the current turn sentence by sentence,
 earlier sentences faintly, and a numbered **turn route** through the centre of
 each turn — the conversation's overall course.

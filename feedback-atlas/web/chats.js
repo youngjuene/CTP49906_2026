@@ -8,8 +8,11 @@
 const NS = "http://www.w3.org/2000/svg";
 // The classroom page's theme key (app-context.js storageKey at base "/"), so both
 // pages follow the same light/dark choice.
+import { arc, createView3d } from "./chats3d.js";
+
 const THEME_KEY = "atlas.theme:classroom";
 const COLOR_KEY = "atlas.chats.color-by";
+const VIEW_KEY = "atlas.chats.view";
 
 const $ = (id) => document.getElementById(id);
 
@@ -19,6 +22,8 @@ const state = {
   data: null, conv: null, units: [], route: [], cur: 0, showStatus: true,
   playing: null, glide: null, disp: null, routeDisp: null,
   colorBy: "turn", clusterColor: new Map(),
+  // 3D view: on when the build has a 3D layout and the reader has not chosen 2D.
+  view3d: false, disp3: null, routeDisp3: null, clusters: [],
   view: { cx: 0, cy: 0, scale: 1 }, fitScale: 1, size: [0, 0], drawn: null, els: new Map(),
 };
 
@@ -189,6 +194,7 @@ function setOnce(el, key, value, write) {
 }
 
 function renderStatic() {
+  if (state.view3d) return draw3d();
   measure();
   const turns = Math.max(state.conv.turns - 1, 1);
   const here = state.units[state.cur];
@@ -253,6 +259,7 @@ function renderStatic() {
 const line = (list) => list.map((p, i) => `${i ? "L" : "M"}${sx(p.x).toFixed(1)} ${sy(p.y).toFixed(1)}`).join("");
 
 function renderMotion() {
+  if (state.view3d) return draw3d();
   const here = state.units[state.cur];
   if (!here) return;
   const at = state.disp || here;
@@ -298,9 +305,14 @@ function glide(ms) {
   const stopNow = state.route.find((c) => c.turn === here.turn);
   const from = state.disp || here;
   const routeFrom = state.routeDisp || stopNow;
+  // In 3D the cursor travels the same SLERP arc the path is drawn with.
+  const from3 = state.disp3 || here;
+  const routeFrom3 = state.routeDisp3 || stopNow;
   if (reduceMotion.matches || ms <= 0) {
     state.disp = { x: here.x, y: here.y };
     state.routeDisp = stopNow;
+    state.disp3 = here;
+    state.routeDisp3 = stopNow;
     renderMotion();
     return Promise.resolve();
   }
@@ -311,7 +323,11 @@ function glide(ms) {
       const k = ease(t);
       state.disp = lerp(from, here, k);
       state.routeDisp = stopNow ? lerp(routeFrom, stopNow, k) : null;
-      if ($("follow").checked) follow();
+      if (state.view3d) {
+        state.disp3 = arc(from3, here, k);
+        state.routeDisp3 = stopNow ? arc(routeFrom3, stopNow, k) : null;
+        if ($("follow").checked) view3d.lookToward(state.disp3);
+      } else if ($("follow").checked) follow();
       renderMotion();
       if (t < 1) state.glide.raf = requestAnimationFrame(frame);
       else { state.glide = null; done(); }
@@ -430,12 +446,14 @@ function buildRoute() {
   const byTurn = new Map();
   for (const p of state.data.points) {
     if (p.conversation !== state.conv.id || p.kind === "status") continue;
-    const acc = byTurn.get(p.turn) || { x: 0, y: 0, n: 0 };
+    const acc = byTurn.get(p.turn) || { x: 0, y: 0, x3: 0, y3: 0, z3: 0, n: 0 };
     acc.x += p.x; acc.y += p.y; acc.n += 1;
+    acc.x3 += p.x3 ?? 0; acc.y3 += p.y3 ?? 0; acc.z3 += p.z3 ?? 0;
     byTurn.set(p.turn, acc);
   }
   state.route = [...byTurn.entries()].sort((a, b) => a[0] - b[0])
-    .map(([turn, a]) => ({ turn, x: a.x / a.n, y: a.y / a.n }));
+    .map(([turn, a]) => ({ turn, x: a.x / a.n, y: a.y / a.n,
+                           x3: a.x3 / a.n, y3: a.y3 / a.n, z3: a.z3 / a.n }));
 }
 
 // Redraw everything at once, without the per-point fade, then let fades resume.
@@ -459,6 +477,8 @@ function selectConversationNow(id) {
   buildPoints();
   state.disp = null;
   state.routeDisp = null;
+  state.disp3 = null;
+  state.routeDisp3 = null;
   go(0, { animate: false });
 }
 
@@ -565,7 +585,80 @@ function tap(e) {
   go(state.units.findIndex((u) => u.id === best.id));
 }
 
-new ResizeObserver(() => { if (state.data && state.conv) render(); }).observe(svg);
+new ResizeObserver(() => {
+  if (!state.data || !state.conv) return;
+  if (state.view3d) view3d.resize();
+  render();
+}).observe(svg.parentElement);
+
+// ---------- 3D ----------
+// The same scene as the flat map, handed to chats3d.js to draw: which points are
+// shown and how each is coloured, the walked path, the current turn's line up to
+// the gliding cursor, and the turn route grown to the current turn.
+
+const view3d = createView3d($("map3d"), {
+  onTap(p) {
+    stop();
+    if (p.conversation !== state.conv.id) {
+      $("conv").value = p.conversation;
+      selectConversation(p.conversation);
+    }
+    go(state.units.findIndex((u) => u.id === p.id));
+  },
+});
+
+function draw3d() {
+  const here = state.units[state.cur];
+  if (!here) return;
+  const turns = Math.max(state.conv.turns - 1, 1);
+  const ramp = rampScale();
+  const css = getComputedStyle(document.documentElement);
+  const grey = css.getPropertyValue("--other").trim() || "#94a3b8";
+  const start = turnStart(here.turn);
+  const mine = (p) => p.conversation === state.conv.id;
+  view3d.draw({
+    points: state.data.points,
+    mine,
+    style(p) {
+      if (p.kind === "status" && !state.showStatus) return null;
+      if (!mine(p)) return { colour: grey, alpha: p.kind === "status" ? 0.2 : 0.35 };
+      const colour = state.colorBy === "cluster" && p.cluster != null
+        ? state.clusterColor.get(p.cluster) : ramp((p.turn - 1) / turns);
+      return { colour, alpha: p.seq > here.seq ? 0.45 : 1 };
+    },
+    units: state.units,
+    walked: state.units.slice(0, start + 1),
+    turnLine: state.units.slice(Math.max(start - 1, 0), state.cur),
+    cursor: state.disp3 || here,
+    turnMark: `T${here.turn}`,
+    route: $route.checked ? state.route.filter((c) => c.turn < here.turn) : [],
+    routeHead: $route.checked ? (state.routeDisp3 || state.route.find((c) => c.turn === here.turn)) : null,
+    stops: $route.checked
+      ? state.route.filter((c) => c.turn <= here.turn).map((c) => ({ ...c, now: c.turn === here.turn }))
+      : [],
+    labels: state.colorBy === "cluster" ? state.clusters.filter((c) => c.z3 != null) : [],
+  });
+}
+
+function setView(mode, { redraw = true } = {}) {
+  state.view3d = mode === "3d";
+  $("view-mode").value = mode;
+  // SVG elements have no `hidden` property, only the attribute.
+  svg.toggleAttribute("hidden", state.view3d);
+  $("overlay").toggleAttribute("hidden", state.view3d);
+  $("map3d").hidden = !state.view3d;
+  $("map-note").textContent = `문장 ${state.data.points.length}개 · 위치는 의미 유사도, 선은 대화 순서 · ` +
+    (state.view3d ? "끌어서 회전 · 휠로 확대 · 더블클릭으로 처음 보기" : "더블클릭으로 전체 보기");
+  if (state.view3d) view3d.resize();
+  if (!redraw || !state.conv) return;
+  state.drawn = null;                 // the flat map re-places everything when it returns
+  render();
+}
+
+$("view-mode").addEventListener("change", (e) => {
+  try { localStorage.setItem(VIEW_KEY, e.target.value); } catch { /* storage blocked */ }
+  setView(e.target.value);
+});
 
 // ---------- start ----------
 
@@ -574,6 +667,7 @@ new ResizeObserver(() => { if (state.data && state.conv) render(); }).observe(sv
 // matplotlib's default cycle each, with neighbouring clusters kept visually apart.
 
 function buildClusters(clusters) {
+  state.clusters = clusters;
   state.clusterColor = new Map(clusters.map((c) => [c.id, c.color]));
   const legend = $("cluster-legend");
   legend.replaceChildren();
@@ -634,9 +728,12 @@ function start(data) {
     select.append(opt);
   }
   buildClusters(data.clusters || []);
-  $("map-note").textContent =
-    `문장 ${data.points.length}개 · 위치는 의미 유사도, 선은 대화 순서 · 더블클릭으로 전체 보기`;
   fit();
+  const has3d = data.points.every((p) => p.z3 != null);
+  $("view-mode-wrap").hidden = !has3d;
+  let saved = null;
+  try { saved = localStorage.getItem(VIEW_KEY); } catch { /* storage blocked */ }
+  setView(has3d && saved !== "2d" ? "3d" : "2d", { redraw: false });
   selectConversation(data.conversations[0].id);
 }
 

@@ -32,6 +32,12 @@
       <span><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M6 1.5 10.5 6 6 10.5 1.5 6Z" class="lg-status"/></svg>상태</span>
       <span class="legend-turn" id="legend-turn"><span class="ramp" aria-hidden="true"></span><span class="ramp-label">앞 → 뒤 턴</span></span>
     </div>
+    <label class="toggle" id="view-mode-wrap" hidden>보기
+      <select id="view-mode">
+        <option value="3d">3D</option>
+        <option value="2d">2D</option>
+      </select>
+    </label>
     <label class="toggle" id="color-by-wrap" hidden>색
       <select id="color-by">
         <option value="cluster">군집</option>
@@ -46,6 +52,7 @@
   <div class="stage">
     <svg id="map" role="img" aria-label="대화 문장의 2차원 의미 지도"></svg>
     <svg id="overlay" aria-hidden="true"></svg>
+    <canvas id="map3d" role="img" aria-label="대화 문장의 3차원 의미 지도" hidden></canvas>
     <aside class="cluster-legend" id="cluster-legend" aria-label="군집" hidden></aside>
     <p class="map-note" id="map-note"></p>
   </div>
