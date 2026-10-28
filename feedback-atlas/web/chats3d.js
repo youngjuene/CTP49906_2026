@@ -81,6 +81,7 @@ export function createView3d(canvas, { onTap }) {
   // nothing to do. Zoomed in, the view slides -- eased, like the flat map -- to
   // keep the cursor inside the middle of the frame.
   function steer(p, dt) {
+    if (cam.zoom < 1.2) return false;         // the whole cloud is in view: hold still
     const q = project(p);
     const [w, h] = size, mx = w * 0.15, my = h * 0.15;
     let dx = 0, dy = 0;
