@@ -286,7 +286,8 @@ function renderMotion() {
 const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)");
 const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
 const lerp = (a, b, t) => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
-const speed = () => Number($("speed").value) || 1;
+// "2" is reading pace at 2x, "f2" the fixed pace at 2x.
+const speed = () => Number($("speed").value.replace(/^f/, "")) || 1;
 
 function cancelGlide() {
   if (!state.glide) return;
@@ -420,20 +421,26 @@ function stop() {
   $("turn").querySelector("li.reading")?.classList.remove("reading");
 }
 
-// Time to read a unit, from the moment it is highlighted: reading speed, not a
-// fixed beat. At 1x, 10 Hangul syllables a second -- an ordinary silent reading
-// pace -- with Latin letters, digits and punctuation counting half, and never
-// less than 1.2 s. A typical 55-character sentence gets about 4 s; the speed
-// menu scales all of it.
-const READ_RATE = 10;
-const MIN_READ_MS = 1200;
+// Time on a unit, from the moment it is highlighted. Two paces, chosen in the
+// speed menu:
+//   reading (0.5x-4x): reading speed. At 1x, 20 Hangul syllables a second -- a
+//     brisk read -- with Latin letters, digits and punctuation counting half, and
+//     never less than 0.9 s. A typical 55-character sentence gets about 2 s.
+//   fixed ("고정"): the earlier beat, 8 ms a character after the glide, between
+//     0.25 and 1.6 s, so long sentences are not held much longer than short ones.
+// The multiplier scales either.
+const READ_RATE = 20;
+const MIN_READ_MS = 900;
 function readingMs(u) {
   const syllables = (u.text.match(/[가-힣]/g) || []).length;
   const other = (u.text.match(/[^\s가-힣]/g) || []).length;
   return Math.max(MIN_READ_MS, (1000 * (syllables + 0.5 * other)) / READ_RATE);
 }
+const fixedPace = () => $("speed").value.startsWith("f");
 // The glide to a unit is already reading time, so the pause is the rest of it.
-const dwell = (u) => Math.max(0, readingMs(u) - GLIDE_MS) / speed();
+const dwell = (u) => (fixedPace()
+  ? Math.min(1600, Math.max(250, 150 + 8 * u.text.length))
+  : Math.max(0, readingMs(u) - GLIDE_MS)) / speed();
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // A thin bar under the highlighted sentence fills over the time left to read it.

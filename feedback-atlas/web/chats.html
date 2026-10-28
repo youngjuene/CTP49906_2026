@@ -65,11 +65,18 @@
       <button class="btn" id="next" title="다음 문장 (→)">▶</button>
       <button class="btn" id="next-turn" title="다음 턴 (Shift+→)">턴 ⏭</button>
       <label class="sr-only" for="speed">재생 속도</label>
-      <select id="speed" title="재생 속도">
-        <option value="0.5">0.5×</option>
-        <option value="1" selected>1×</option>
-        <option value="2">2×</option>
-        <option value="4">4×</option>
+      <select id="speed" title="재생 속도: 읽기 속도는 문장 길이에 맞춰 머물고, 고정 속도는 일정한 박자로 넘어갑니다">
+        <optgroup label="읽기 속도">
+          <option value="0.5">0.5×</option>
+          <option value="1" selected>1×</option>
+          <option value="2">2×</option>
+          <option value="4">4×</option>
+        </optgroup>
+        <optgroup label="고정 속도">
+          <option value="f1">고정 1×</option>
+          <option value="f2">고정 2×</option>
+          <option value="f4">고정 4×</option>
+        </optgroup>
       </select>
       <label class="toggle" title="커서가 화면 가장자리나 뒤쪽으로 가면 지도를 돌려 보여 줍니다. 직접 움직이는 동안은 잠시 멈춥니다."><input type="checkbox" id="follow" checked> 따라가기</label>
       <input type="range" id="scrub" min="0" max="0" value="0" aria-label="대화 위치">
