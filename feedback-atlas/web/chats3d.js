@@ -153,15 +153,17 @@ export function createView3d(canvas, { onTap }) {
     for (const { q } of projected) { zMin = Math.min(zMin, q.z); zMax = Math.max(zMax, q.z); }
     const depth = (z) => 0.35 + 0.65 * ((z - zMin) / Math.max(zMax - zMin, 1e-6));   // far 0.35 .. near 1
 
-    // Paths first, points over them. Only two: the turn route and the current
-    // turn. Arcs curve around the centre, so every earlier step drawn as well
-    // turns the cloud into a ball of loops by mid-conversation; the route
-    // already says where the conversation has been.
+    // Paths first, points over them. Arcs curve around the centre, so every
+    // earlier step drawn as well turns the cloud into a ball of loops by
+    // mid-conversation. So: the path just left behind (the previous turn and this
+    // one so far) in solid grey, the turn route for the longer history, and the
+    // cursor's fading trail on top.
     ctx.lineJoin = "round"; ctx.lineCap = "round";
     const path = (list, head, colour, width, alpha) => {
       ctx.beginPath(); strokeArcs(list, head);
       ctx.strokeStyle = colour; ctx.lineWidth = width; ctx.globalAlpha = alpha; ctx.stroke();
     };
+    path(scene.behind, null, v("--path"), 1.4, 0.9);
     if (scene.route.length) path(scene.route, scene.routeHead, v("--path-walked"), 2.5, 0.8);
     // The cursor's trail: its last few steps, oldest faintest, so the arc it is
     // travelling now reads clearly even inside a sixty-sentence answer.

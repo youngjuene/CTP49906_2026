@@ -333,8 +333,9 @@ from the file name, not the message times.
 The view opens in **3D** (a 보기 2D/3D switch keeps the flat map one click away):
 the build also fits a 3D cloud, drawn with perspective, and each step of the
 conversation is a SLERP arc about the cloud's centre, so the cursor travels a
-curve rather than a straight line. 3D draws only the numbered turn route and a
-short fading trail behind the cursor. The view is the reader's: drag to rotate
+curve rather than a straight line. 3D draws the numbered turn route, the path
+just left behind (the previous turn and the current one so far) in solid grey,
+and a short fading blue trail behind the cursor. The view is the reader's: drag to rotate
 (a flick keeps spinning briefly), Shift-drag, right-drag or two fingers to pan,
 scroll or pinch to zoom toward the pointer, double-click to reset. It never
 rotates on its own; with 따라가기 on and the view zoomed in, it slides to keep

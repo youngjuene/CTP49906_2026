@@ -648,6 +648,8 @@ function draw3d() {
   const css = getComputedStyle(document.documentElement);
   const grey = css.getPropertyValue("--other").trim() || "#94a3b8";
   const mine = (p) => p.conversation === state.conv.id;
+  const previous = turnStart(here.turn - 1);
+  const behindFrom = previous >= 0 ? previous : turnStart(here.turn);
   // The camera keeps the cursor in view on its own frame loop; this only says
   // where the cursor is.
   view3d.follow($("follow").checked ? (state.disp3 || here) : null);
@@ -662,6 +664,8 @@ function draw3d() {
       return { colour, alpha: p.seq > here.seq ? 0.45 : 1 };
     },
     trail: state.units.slice(Math.max(state.cur - TRAIL_3D, 0), state.cur),
+    // From the start of the previous turn up to where the trail begins.
+    behind: state.units.slice(behindFrom, Math.max(state.cur - TRAIL_3D, 0) + 1),
     cursor: state.disp3 || here,
     turnMark: `T${here.turn}`,
     route: $route.checked ? state.route.filter((c) => c.turn < here.turn) : [],
