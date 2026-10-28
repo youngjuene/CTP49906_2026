@@ -1,11 +1,11 @@
 """FastAPI app: two websocket channels, a health probe, and a static frontend.
 
-Participant credentials are checked in the `hello` frame; the resulting signed
-session is required for viewer queries and subsequent participant messages.
-There is no REST session endpoint and no way to become an admin on a participant
-socket: admin is a different path, a different Channel, and a different
-serialiser. A code cannot upgrade a connection in place, because there is no code
-path that would.
+The participant channel is anonymous and read-only: anyone who reaches the page
+sees the map, and nothing a participant socket sends can add to it. Opinions
+arrive only through scripts/seed_ai_opinions.py on the server. There is no way to
+become an admin on a participant socket: admin is a different path, a different
+Channel, and a different serialiser. A code cannot upgrade a connection in place,
+because there is no code path that would.
 
 Heartbeat, not decoration: Cloudflare quick tunnels drop an idle websocket at
 roughly 100 seconds, which in this app means the quiet stretch in the middle of a
@@ -28,22 +28,17 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response, RedirectResp
 from fastapi.staticfiles import StaticFiles
 
 from src.atlas_state import AtlasState, RecomputeLoop
-from src.access import AccessControl
 from src.config import AtlasConfig, cache_key, load_config, resolve_spec
-from src.embedder import build_embedder, SharedEmbedder
+from src.embedder import build_embedder
 from src.hub import Channel, Hub
-from src.models import validate_submission, _now_iso
-from src.class_schedule import load_schedule, schedule_info
-from src.schedule_routes import register_schedule_routes, broadcast_schedule
 from src.mosaic_db import MosaicService, available as mosaic_available
 from src.projection import warm_jit
 from src.protocol import (
-    MAX_FRAME_BYTES, PROTOCOL_VERSION, ack, error, hello_ok, neighbors,
+    MAX_FRAME_BYTES, PROTOCOL_VERSION, error, hello_ok, neighbors,
     parse_client_frame, pong,
 )
 from src.roster import Roster
 from src.store import Store
-from src.textnorm import text_hash
 from src.transport_security import TransportSecurity
 
 log = logging.getLogger("atlas")
@@ -119,7 +114,6 @@ class Atlas:
     def __init__(self, cfg: AtlasConfig):
         self.cfg = cfg
         self.hub = Hub()
-        self.limiter = RateLimiter()
         self.login_limiter = RateLimiter(per_second=2, burst=60)
         self.admin_limiter = RateLimiter(per_second=0.2, burst=10)
         self.query_limiter = RateLimiter(per_second=20, burst=100)
@@ -127,16 +121,12 @@ class Atlas:
         self.connections_by_ip: dict[str, int] = {}
         self.active_queries = 0
         self.query_slots = asyncio.Semaphore(MAX_QUERY_CONCURRENCY)
-        self.access: AccessControl | None = None
         self.embedder_override = None
-        self.demo_submit_limiter = RateLimiter(per_second=2, burst=10)
         self.store: Store | None = None
         self.state: AtlasState | None = None
         self.mosaic: MosaicService | None = None
         self.loop: RecomputeLoop | None = None
         self.roster: Roster | None = None
-        self.schedule = None
-        self.schedule_marker = None
         self.roster_changed = asyncio.Event()
         self.started_at = time.time()
 
@@ -145,12 +135,6 @@ class Atlas:
         # Roster before model: a mistyped path should fail in ten milliseconds,
         # not after a 1.2 GB download.
         self.roster = Roster.from_path(cfg.roster_path)
-        if self.access is None:
-            self.access = AccessControl.from_path(cfg.access_codes_path)
-        # Demo retains historical authors/targets for its example corpus, while
-        # only the shared practice account has a login credential.
-        if not cfg.is_demo and any(entry.id not in self.access.hashes for entry in self.roster.entries()):
-            raise ValueError("Every roster ID needs a private access code; run scripts/create_access_codes.py")
         log.info("roster: %d entries, %d targets", len(self.roster),
                  len(self.roster.targets()))
 
@@ -167,7 +151,6 @@ class Atlas:
 
         self.store = Store(cfg.db_path)
         self.store.migrate()
-        self.schedule = load_schedule(self.store)
         self.state = AtlasState(cfg, self.store, self.roster, embedder)
         # Stood up before load(), because load() recomputes and commits, and
         # commit() is what refreshes the relation. Built after the store so a
@@ -205,16 +188,10 @@ class Atlas:
         """SIGHUP. Lets a late entry be added without dropping every open socket."""
         try:
             fresh = Roster.from_path(self.cfg.roster_path)
-            credentials = AccessControl.from_path(self.cfg.access_codes_path)
-            if any(entry.id not in credentials.hashes for entry in fresh.entries()):
-                raise ValueError("Every roster ID needs a private access code")
         except Exception as exc:            # noqa: BLE001
             log.error("roster reload refused, keeping the old one: %s", exc)
             return
-        self.access.reload(self.cfg.access_codes_path)
         self.roster = fresh
-        with contextlib.suppress(RuntimeError):
-            asyncio.get_running_loop().create_task(_revoke_sessions(self))
         if self.state is not None:
             self.state.roster = fresh
             # Refresh the relation before asking open viewers to drop cached queries.
@@ -245,33 +222,10 @@ def _configure_logging() -> None:
 def create_app(cfg: AtlasConfig | None = None, *, atlas: Atlas | None = None) -> FastAPI:
     _configure_logging()
     atlas = atlas or Atlas(cfg or load_config())
-    demo = demo_app = None
-    if atlas.cfg.enable_demo:
-        from src.demo import create_demo_atlas
-        demo = create_demo_atlas(atlas)
-        demo_app = create_app(atlas=demo)
 
     @contextlib.asynccontextmanager
     async def lifespan(app: FastAPI):
         await asyncio.to_thread(atlas.startup)   # keeps Ctrl-C alive during a download
-        demo_lifespan = contextlib.AsyncExitStack()
-        if demo_app is not None:
-            from src.demo import demo_accounts
-            if any(atlas.access.authenticate_code(account["code"]) for account in demo_accounts()):
-                if atlas.mosaic is not None:
-                    atlas.mosaic.close()
-                atlas.store.close()
-                raise ValueError("Classroom credentials must not reuse public demo codes")
-            shared = SharedEmbedder(atlas.state.embedder)
-            atlas.state.embedder = shared
-            demo.embedder_override = shared
-            try:
-                await demo_lifespan.enter_async_context(demo_app.router.lifespan_context(demo_app))
-            except BaseException:
-                if atlas.mosaic is not None:
-                    atlas.mosaic.close()
-                atlas.store.close()
-                raise
         task = atlas.loop.start()
         beat = asyncio.create_task(_heartbeat(atlas))
         roster_updates = asyncio.create_task(_roster_updates(atlas))
@@ -282,13 +236,11 @@ def create_app(cfg: AtlasConfig | None = None, *, atlas: Atlas | None = None) ->
         with contextlib.suppress(NotImplementedError, ValueError, RuntimeError,
                                  AttributeError, OSError):
             running = asyncio.get_running_loop()
-            if not atlas.cfg.is_demo:
-                running.add_signal_handler(signal.SIGHUP, atlas.reload_roster)
-                running.add_signal_handler(signal.SIGUSR1, atlas.reload_corpus)
+            running.add_signal_handler(signal.SIGHUP, atlas.reload_roster)
+            running.add_signal_handler(signal.SIGUSR1, atlas.reload_corpus)
         try:
             yield
         finally:
-            await demo_lifespan.aclose()
             beat.cancel()
             roster_updates.cancel()
             with contextlib.suppress(asyncio.CancelledError):
@@ -306,16 +258,6 @@ def create_app(cfg: AtlasConfig | None = None, *, atlas: Atlas | None = None) ->
                   docs_url=None, redoc_url=None, openapi_url=None)
     app.add_middleware(TransportSecurity, require_https=atlas.cfg.require_https)
     app.state.atlas = atlas
-    app.state.demo = demo
-    register_schedule_routes(app, atlas, _request_json, _valid_admin_code, lambda: _now_iso())
-
-    @app.get("/api/environment")
-    async def environment():
-        if atlas.cfg.is_demo:
-            from src.demo import demo_accounts, DEMO_ADMIN_CODE, MAX_DEMO_OPINIONS
-            return {"mode": "demo", "classroom_url": "/", "accounts": demo_accounts(),
-                    "admin_code": DEMO_ADMIN_CODE, "opinion_limit": MAX_DEMO_OPINIONS}
-        return {"mode": "classroom", "demo_url": "/demo/" if demo_app else None}
 
     @app.get("/healthz")
     async def healthz():
@@ -396,40 +338,19 @@ def create_app(cfg: AtlasConfig | None = None, *, atlas: Atlas | None = None) ->
             headers={"Content-Disposition":
                      'attachment; filename="feedback-atlas.csv"'})
 
-    if not atlas.cfg.is_demo:
-        @app.post("/api/chats")
-        async def chats(request: Request):
-            """The chat-trajectory map (web/chats.html), for roster members only.
+    @app.get("/api/chats")
+    async def chats():
+        """The chat-trajectory map (web/chats.html), open to anyone with the link.
 
-            The file holds what students wrote to a model, and this server is on a
-            public address, so it is never a static file. A participant session
-            token, a participant's own code, or the admin code unlocks it -- in
-            the body, for the same reason as /api/export.csv. It is read per
-            request so a rebuild shows up without a restart.
-            """
-            try:
-                body = await _request_json(request)
-            except HTTPException:
-                raise
-            except Exception:      # noqa: BLE001
-                return JSONResponse(error("MALFORMED"), status_code=400)
-            if not isinstance(body, dict):
-                return JSONResponse(error("MALFORMED"), status_code=400)
-            allowed = (atlas.access.verify(body.get("session_token")) is not None
-                       or atlas.access.authenticate_code(body.get("code")) is not None
-                       or _valid_admin_code(body.get("code"), atlas.cfg.admin_code))
-            if not allowed:
-                if not atlas.admin_limiter.allow(_client_ip(request)):
-                    return JSONResponse(error("RATE_LIMITED"), status_code=429)
-                await asyncio.sleep(0.5)
-                return JSONResponse(error("BAD_ACCESS_CODE"), status_code=403)
-            path = Path(atlas.cfg.chats_path)
-            try:
-                payload = path.read_bytes()
-            except FileNotFoundError:
-                return JSONResponse(error("NO_CHATS"), status_code=404)
-            # TransportSecurity already marks every response no-store.
-            return Response(content=payload, media_type="application/json")
+        Served from outside web/ because scripts/build_chat_atlas.py writes it under
+        .run/, and read per request so a rebuild shows up without a restart.
+        """
+        try:
+            payload = Path(atlas.cfg.chats_path).read_bytes()
+        except FileNotFoundError:
+            return JSONResponse(error("NO_CHATS"), status_code=404)
+        # TransportSecurity already marks every response no-store.
+        return Response(content=payload, media_type="application/json")
 
     @app.post("/data/query")
     async def data_query(request: Request):
@@ -476,10 +397,7 @@ def create_app(cfg: AtlasConfig | None = None, *, atlas: Atlas | None = None) ->
                 return JSONResponse(error("BAD_ACCESS_CODE"), status_code=403)
             admin = True
 
-        identity = None if admin else _session_identity(atlas, _bearer(request))
-        if not admin and identity is None:
-            return JSONResponse(error("NOT_AUTHENTICATED"), status_code=401)
-        if not atlas.query_limiter.allow("admin" if admin else identity):
+        if not atlas.query_limiter.allow("admin" if admin else _client_ip(request)):
             return JSONResponse(error("RATE_LIMITED"), status_code=429)
 
         def viewer_unavailable():
@@ -544,13 +462,6 @@ def create_app(cfg: AtlasConfig | None = None, *, atlas: Atlas | None = None) ->
     async def admin_ws(socket: WebSocket):
         await _connection(atlas, socket, _admin)
 
-    if demo_app is not None:
-        @app.get("/demo", include_in_schema=False)
-        async def demo_redirect():
-            return RedirectResponse("/demo/", status_code=307)
-
-        app.mount("/demo", demo_app, name="demo")
-
     @app.get("/admin", include_in_schema=False)
     async def admin_page():
         return FileResponse(WEB_DIR / "index.html")
@@ -593,22 +504,9 @@ async def _roster_updates(atlas: Atlas) -> None:
 async def _heartbeat(atlas: Atlas) -> None:
     while True:
         await asyncio.sleep(HEARTBEAT_S)
-        await _revoke_sessions(atlas)
-        now = _now_iso()
-        info = schedule_info(atlas, now)
-        if atlas.schedule_marker != (info["revision"], info["current_week"]):
-            await broadcast_schedule(atlas, now)
         for channel in Channel:
             with contextlib.suppress(Exception):
                 await atlas.hub.broadcast(channel, {"t": "ping"})
-
-
-async def _revoke_sessions(atlas: Atlas) -> None:
-    for conn in atlas.hub.connections():
-        if (conn.channel is Channel.PARTICIPANT
-                and _session_identity(atlas, conn.meta.get("session_token")) != conn.identity):
-            await _refuse(conn.socket, "NOT_AUTHENTICATED")
-            await atlas.hub.leave(conn.id)
 
 
 async def _read(socket: WebSocket):
@@ -624,23 +522,11 @@ def _client_ip(connection) -> str:
     return connection.client.host if connection.client else "unknown"
 
 
-def _bearer(request: Request) -> str:
-    header = request.headers.get("authorization", "")
-    return header[7:] if header.lower().startswith("bearer ") else ""
-
-
-def _session_identity(atlas: Atlas, token) -> str | None:
-    identity = atlas.access.verify(token)
-    return identity if identity and atlas.roster.resolve(identity) else None
-
-
 async def _connection(atlas: Atlas, socket: WebSocket, handler) -> None:
     ip = _client_ip(socket)
     count = atlas.connections_by_ip.get(ip, 0)
-    total_limit = 32 if atlas.cfg.is_demo else MAX_CONNECTIONS
-    ip_limit = 32 if atlas.cfg.is_demo else MAX_CONNECTIONS_PER_IP
-    if (sum(atlas.connections_by_ip.values()) >= total_limit
-            or count >= ip_limit or not atlas.login_limiter.allow(ip)):
+    if (sum(atlas.connections_by_ip.values()) >= MAX_CONNECTIONS
+            or count >= MAX_CONNECTIONS_PER_IP or not atlas.login_limiter.allow(ip)):
         await socket.close(code=1013)
         return
     atlas.connections_by_ip[ip] = count + 1
@@ -676,44 +562,22 @@ async def _participant(atlas: Atlas, socket: WebSocket) -> None:
         return await _refuse(socket, parsed)
     kind, body = parsed
     if kind != "hello":
-        return await _refuse(socket, "NOT_AUTHENTICATED")
+        return await _refuse(socket, "MALFORMED")
     if body.get("protocol") != PROTOCOL_VERSION:
         # Loudly, so last week's cached page fails visibly instead of mis-parsing.
         return await _refuse(socket, "PROTOCOL_MISMATCH")
 
-    token = body.get("session_token")
-    if token:
-        identity = _session_identity(atlas, token)
-        entry = atlas.roster.resolve(identity) if identity else None
-    else:
-        identity = atlas.access.authenticate_code(body.get("code"))
-        entry = atlas.roster.resolve(identity) if identity else None
-        if entry:
-            token = atlas.access.issue(entry.id)
-    if entry is None:
-        return await _refuse(socket, "BAD_ACCESS_CODE")
-
     state = atlas.state
-    conn_id = await atlas.hub.join(socket, Channel.PARTICIPANT, identity=entry.id)
-    atlas.hub.get(conn_id).meta["session_token"] = token
+    conn_id = await atlas.hub.join(socket, Channel.PARTICIPANT)
     try:
-        welcome = hello_ok(
+        await socket.send_json(hello_ok(
             channel="participant", rev=state.rev, layout_rev=state.layout_rev,
-            targets=atlas.roster.targets(), role=entry.role,
-            default_week=atlas.cfg.default_week,
-            max_text_chars=atlas.cfg.max_text_chars)
-        welcome["session_token"] = token
-        welcome["submission_owner"] = atlas.access.submission_owner(
-            entry.id, scope="demo" if atlas.cfg.is_demo else "classroom")
-        welcome["schedule"] = schedule_info(atlas, _now_iso())
-        await socket.send_json(welcome)
+            targets=atlas.roster.targets()))
         await socket.send_json(state.participant_snapshot())
         state.mark_all_sent()
-        await _serve(atlas, socket, conn_id, entry, Channel.PARTICIPANT, token=token)
+        await _serve(atlas, socket, conn_id, Channel.PARTICIPANT)
     finally:
         atlas.message_limiter.forget(conn_id)
-        if atlas.cfg.is_demo:
-            atlas.limiter.forget(conn_id)
         await atlas.hub.leave(conn_id)
 
 
@@ -742,31 +606,25 @@ async def _admin(atlas: Atlas, socket: WebSocket) -> None:
     state = atlas.state
     conn_id = await atlas.hub.join(socket, Channel.ADMIN)
     try:
-        welcome = hello_ok(
+        await socket.send_json(hello_ok(
             channel="admin", rev=state.rev, layout_rev=state.layout_rev,
             targets=atlas.roster.targets(),
             roster=[{"id": e.id, "display_name": e.display_name, "role": e.role}
-                    for e in atlas.roster.entries()],
-            default_week=atlas.cfg.default_week,
-            max_text_chars=atlas.cfg.max_text_chars)
-        welcome["schedule"] = schedule_info(atlas, _now_iso())
-        await socket.send_json(welcome)
+                    for e in atlas.roster.entries()]))
         await socket.send_json(state.admin_snapshot())
-        await _serve(atlas, socket, conn_id, None, Channel.ADMIN)
+        await _serve(atlas, socket, conn_id, Channel.ADMIN)
     finally:
         atlas.message_limiter.forget(conn_id)
         await atlas.hub.leave(conn_id)
 
 
-async def _serve(atlas: Atlas, socket: WebSocket, conn_id: str, entry,
-                 channel: Channel, *, token=None) -> None:
+async def _serve(atlas: Atlas, socket: WebSocket, conn_id: str,
+                 channel: Channel) -> None:
     state = atlas.state
     while True:
         parsed = await _read(socket)
         if parsed is None:
             return
-        if channel is Channel.PARTICIPANT and _session_identity(atlas, token) != entry.id:
-            return await _refuse(socket, "NOT_AUTHENTICATED")
         if not atlas.message_limiter.allow(conn_id):
             return await _refuse(socket, "RATE_LIMITED")
         if isinstance(parsed, str):
@@ -806,53 +664,6 @@ async def _serve(atlas: Atlas, socket: WebSocket, conn_id: str, entry,
                 id=target, items=state.neighbors(target, k=k),
                 ready=state.vectors_ready,
                 nonce=nonce if isinstance(nonce, str) and len(nonce) <= 128 else None))
-        elif kind == "submit":
-            if channel is not Channel.PARTICIPANT or entry is None:
-                await socket.send_json(error("NOT_AUTHENTICATED"))
-                continue
-            nonce = body.get("nonce")
-            recorded = state.store.submission_receipt(entry.id, nonce)
-            if recorded is not None:
-                await socket.send_json(ack(nonce=nonce, id=recorded, rev=state.rev))
-                continue
-            received_at = _now_iso()
-            submission_body = dict(body)
-            if atlas.cfg.is_demo:
-                submission_body["week"] = atlas.cfg.default_week
-            elif atlas.cfg.auto_week:
-                active_week = atlas.schedule.week_for(received_at)
-                if active_week is None:
-                    await socket.send_json(error("OUTSIDE_CLASS_PERIOD"))
-                    continue
-                submission_body["week"] = active_week
-            if atlas.cfg.is_demo:
-                from src.demo import MAX_DEMO_OPINIONS
-                if len(state.opinions) >= MAX_DEMO_OPINIONS:
-                    await socket.send_json(error("DEMO_FULL"))
-                    continue
-                if not atlas.demo_submit_limiter.allow("demo"):
-                    await socket.send_json(error("RATE_LIMITED"))
-                    continue
-            if not atlas.limiter.allow(conn_id if atlas.cfg.is_demo else entry.id):
-                await socket.send_json(error("RATE_LIMITED"))
-                continue
-            op, err = validate_submission(
-                submission_body, reviewer=entry, roster=atlas.roster,
-                max_chars=atlas.cfg.max_text_chars,
-                default_week=atlas.cfg.default_week, now=received_at)
-            if err is not None:
-                # To this socket only. A refusal is not news for the room.
-                await socket.send_json(error(err))
-                continue
-            # Durable before acknowledged: a crash between the two would otherwise
-            # tell somebody their opinion landed when it did not.
-            inserted, opinion_id = state.store.insert_opinion_with_receipt(
-                op, text_hash(op.text), nonce)
-            rev = state.add(op) if inserted else state.rev
-            await socket.send_json(ack(nonce=str(body.get("nonce") or ""),
-                                       id=opinion_id, rev=rev))
-            if inserted:
-                atlas.loop.request()
         else:
             await socket.send_json(error("MALFORMED"))
 

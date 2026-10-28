@@ -6,7 +6,6 @@ from playwright.sync_api import expect
 pytest.register_assert_rewrite("browser_viewer")
 
 from browser_viewer import CODE
-from tests.auth_helpers import ACCESS_CODES
 
 pytest_plugins = ["browser_viewer"]
 
@@ -19,15 +18,6 @@ def context(browser):
     )
     yield ctx
     ctx.close()
-
-
-def enter(page, server, identity="writer1"):
-    page.goto(server.url)
-    expect(page.locator("#gate-submit")).to_be_enabled()
-    page.fill("#gate-code", ACCESS_CODES[identity])
-    page.click("#gate-submit")
-    page.wait_for_selector("#view-main:not([hidden])")
-    page.wait_for_selector("#map [data-id]", state="attached")
 
 
 def enter_admin(page, server):
@@ -78,16 +68,14 @@ def test_admin_selection_mode_survives_reconnect(live_server, context):
 
 
 def test_nearest_panel_refreshes_after_new_opinion(live_server, context):
-    admin, participant = context.new_page(), context.new_page()
+    admin = context.new_page()
     enter_admin(admin, live_server)
     admin.click("#tab-legend")
     admin.locator('#map [data-id="o_browser_1"]').click(force=True)
     admin.wait_for_selector("#nb-list .oprow")
     assert admin.locator("#nb-list .oprow").count() == 2
 
-    enter(participant, live_server)
-    participant.fill("#c-text", "새로 도착한 가까운 의견")
-    participant.click("#c-submit")
+    live_server.add_opinions(["새로 도착한 가까운 의견"], first=4)
     admin.wait_for_function("() => document.querySelectorAll('#map [data-id]').length === 4")
 
     expect(admin.locator("#nb-list .oprow")).to_have_count(3, timeout=3000)

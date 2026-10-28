@@ -78,20 +78,17 @@ export async function rendererAvailable() {
 
 /* ---------------- the connector ---------------- */
 
-/* Credentials are functions rather than values because the page can change
- * channel after this was built, and captured credentials would keep querying the
- * previous relation. */
-function connector({ getCode, getToken, onError }, decodeIPC) {
+/* The admin code is a function rather than a value because the page can change
+ * channel after this was built, and a captured value would keep querying the
+ * previous relation. Without a code the anonymous relation answers. */
+function connector({ getCode, onError }, decodeIPC) {
   return {
     async query(query) {
       try {
         const code = getCode();
-        const token = getToken();
-        const headers = { "content-type": "application/json" };
-        if (!code && token) headers.authorization = `Bearer ${token}`;
         const res = await fetch(apiUrl("/data/query"), {
           method: "POST",
-          headers,
+          headers: { "content-type": "application/json" },
           body: JSON.stringify({
             type: query.type ?? "arrow",
             // Mosaic passes SQL objects as often as strings; the endpoint wants text.
@@ -127,7 +124,7 @@ async function load() {
 }
 
 /** Mount the viewer into `container`. Idempotent; safe to call on every toggle. */
-export async function mount(container, { getCode, getToken, onError, hideTargetId = false, colorScheme = "light" } = {}) {
+export async function mount(container, { getCode, onError, colorScheme = "light" } = {}) {
   if (instance && mountedInto === container) {
     refreshState.onError = onError;
     instance.update({ colorScheme });
@@ -147,20 +144,12 @@ export async function mount(container, { getCode, getToken, onError, hideTargetI
   refreshState = { coordinator: activeCoordinator, reportError, onError, running: null, again: false };
   activeCoordinator.databaseConnector(connector({
     getCode: getCode ?? (() => null),
-    getToken: getToken ?? (() => null),
     onError: reportError,
   }, decodeIPC));
 
-  const chartConfig = hideTargetId ? {
-    exclude: ["target_id"],
-    table: { columns: ["id", "target_name", "text", "source", "week", "timestamp",
-                      "x", "y", "neighbors",
-                      ...(getCode?.() ? ["reviewer_id", "reviewer_name"] : [])] },
-  } : undefined;
   const charts = await defaultCharts({
     coordinator: activeCoordinator, table: TABLE, id: "id",
     projection: { x: "x", y: "y", text: "text", neighbors: "neighbors" },
-    config: chartConfig,
   });
   if (coordinator !== activeCoordinator || generation !== mounting) return null;
 
@@ -189,7 +178,6 @@ export async function mount(container, { getCode, getToken, onError, hideTargetI
     // in either the participant or administrator's initial workspace.
     initialState: { charts: Object.fromEntries(classroomCharts
       .map((chart, index) => [String(index + 1), chart])) },
-    defaultChartsConfig: chartConfig,
     colorScheme,
   });
   mountedInto = container;

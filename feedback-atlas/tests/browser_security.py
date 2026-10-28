@@ -3,7 +3,6 @@
 import pytest
 
 from browser_viewer import CODE
-from tests.auth_helpers import ACCESS_CODES
 
 pytest_plugins = ["browser_viewer"]
 
@@ -15,7 +14,7 @@ def test_legacy_admin_bookmark_redirects_to_path_and_back_to_classroom(live_serv
     page.wait_for_selector("#view-admin-gate:not([hidden])")
     page.click("#admin-back")
     page.wait_for_url(live_server.url)
-    page.wait_for_selector("#view-gate:not([hidden])")
+    page.wait_for_selector("#view-main:not([hidden])")
 
 
 @pytest.fixture
@@ -25,41 +24,40 @@ def context(browser):
     ctx.close()
 
 
-def test_private_code_login_and_session_restore_with_csp(live_server, context):
+def test_anonymous_boot_and_reload_with_csp(live_server, context):
     page = context.new_page()
     failures = []
     page.on("pageerror", lambda exc: failures.append(str(exc)))
     response = page.goto(live_server.url)
     assert "frame-ancestors 'none'" in response.headers["content-security-policy"]
-    page.click("#gate-submit")
-    assert "개인 접근 코드" in page.inner_text("#gate-error-text")
-    assert page.locator("#gate-id").count() == 0
-    assert page.locator('#gate-code[type="password"]').count() == 1
-    page.fill("#gate-code", ACCESS_CODES["writer1"])
-    page.click("#gate-submit")
     page.wait_for_selector("#view-main:not([hidden])")
     page.wait_for_selector("#map [data-id]", state="attached")
-    assert page.input_value("#gate-code") == ""
+    assert page.locator("input[type=password]:visible").count() == 0
     storage = page.evaluate("JSON.stringify({...sessionStorage, ...localStorage})")
-    assert ACCESS_CODES["writer1"] not in storage
-    assert "writer1" not in storage
+    assert "writer1" not in storage and "작성자1" not in storage
     page.reload()
     page.wait_for_selector("#view-main:not([hidden])")
+    page.wait_for_selector("#map [data-id]", state="attached")
     assert page.locator("#map [data-id]").count() == 3
     assert not failures, failures
 
 
-def test_unauthenticated_browser_cannot_query_feedback(live_server, context):
+def test_anonymous_browser_reads_feedback_but_never_authorship(live_server, context):
     page = context.new_page()
     page.goto(live_server.url)
     result = page.evaluate("""async () => {
-        const r = await fetch('/data/query', {method:'POST',
-          headers:{'content-type':'application/json'},
-          body:JSON.stringify({type:'json',sql:'SELECT text FROM dataset'})});
-        return {status:r.status, body:await r.json()};
+        const ask = async (sql) => {
+          const r = await fetch('/data/query', {method:'POST',
+            headers:{'content-type':'application/json'},
+            body:JSON.stringify({type:'json', sql})});
+          return {status:r.status, body:await r.json()};
+        };
+        return [await ask('SELECT text FROM dataset'),
+                await ask('SELECT reviewer_id FROM dataset')];
     }""")
-    assert result["status"] == 401
-    assert result["body"]["code"] == "NOT_AUTHENTICATED"
+    assert result[0]["status"] == 200 and len(result[0]["body"]) == 3
+    assert result[1]["status"] == 500
+    assert "reviewer_id" in result[1]["body"]["error"]
 
 
 def test_admin_then_participant_has_no_cached_authorship(live_server, context):
@@ -69,8 +67,8 @@ def test_admin_then_participant_has_no_cached_authorship(live_server, context):
     page.locator("#admin-form button[type=submit]").click()
     page.wait_for_selector("#view-main:not([hidden])")
     page.goto(live_server.url)
-    page.fill("#gate-code", ACCESS_CODES["writer1"])
-    page.click("#gate-submit")
     page.wait_for_selector("#view-main:not([hidden])")
+    page.wait_for_selector("#map [data-id]", state="attached")
     assert page.locator("#adminpanel").is_hidden()
     assert page.locator("#admin-badge").is_hidden()
+    assert "작성자1" not in page.content()

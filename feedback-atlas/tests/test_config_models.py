@@ -170,7 +170,7 @@ def test_a_default_config_uses_the_documented_defaults():
     assert cfg.pca_umap_threshold == 80
     assert cfg.debounce_s == 0.4 and cfg.max_debounce_s == 2.0
     assert cfg.fake_embedder is False
-    assert cfg.access_codes_path == ".run/access-codes.json"
+    assert cfg.chats_path == ".run/chats/atlas.json"
     assert cfg.require_https is True
 
 
@@ -187,29 +187,11 @@ def test_the_fake_embedder_requires_an_explicit_opt_in():
     assert load_config({**ENV, "ATLAS_UNSAFE_FAKE_EMBEDDER": "1"}).fake_embedder is True
 
 
-def test_an_out_of_range_default_week_is_refused_rather_than_clamped():
-    """Found by QA, not by a user, which is the only reason it is cheap.
-
-    ATLAS_DEFAULT_WEEK=7 was accepted and stamped on every submission that
-    omitted a week. Those opinions land on the map and no week checkbox can ever
-    show them -- present in the data, invisible on screen, and nothing anywhere
-    reports a problem.
-    """
-    for bad in ("0", "5", "7", "-1"):
-        try:
-            load_config({**ENV, "ATLAS_DEFAULT_WEEK": bad})
-        except ValueError as e:
-            assert "ATLAS_DEFAULT_WEEK" in str(e)
-        else:
-            raise AssertionError(f"ATLAS_DEFAULT_WEEK={bad} must not be accepted")
-    assert load_config({**ENV, "ATLAS_DEFAULT_WEEK": "3"}).default_week == 3
-
-
 def test_a_non_numeric_setting_names_itself_in_the_error():
     """Bare int() says "invalid literal for int() with base 10: 'two'", which does
     not say which setting is wrong. This runs at startup, in a terminal, minutes
     before a class."""
-    for var in ("ATLAS_DEFAULT_WEEK", "ATLAS_PCA_UMAP_THRESHOLD"):
+    for var in ("ATLAS_PCA_UMAP_THRESHOLD",):
         try:
             load_config({**ENV, var: "two"})
         except ValueError as e:
@@ -232,8 +214,8 @@ def test_a_threshold_below_three_is_refused():
 def test_an_empty_optional_setting_falls_back_to_its_default():
     """An unset variable exported as "" is the normal shape of a half-filled .env
     file and must not be a startup failure."""
-    cfg = load_config({**ENV, "ATLAS_DEFAULT_WEEK": "", "ATLAS_PCA_UMAP_THRESHOLD": "  "})
-    assert cfg.default_week == 1 and cfg.pca_umap_threshold == 80
+    cfg = load_config({**ENV, "ATLAS_PCA_UMAP_THRESHOLD": "  "})
+    assert cfg.pca_umap_threshold == 80
 
 
 def test_the_pca_umap_threshold_is_configurable():

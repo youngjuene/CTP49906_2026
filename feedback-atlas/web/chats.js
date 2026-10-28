@@ -6,9 +6,8 @@
 // never innerHTML: it is untrusted input that happens to be ours.
 
 const NS = "http://www.w3.org/2000/svg";
-// The classroom page's keys (app-context.js storageKey at base "/"). Read only:
-// a participant already in the class map in this tab does not type a code twice.
-const TOKEN_KEY = "atlas.session_token:classroom";
+// The classroom page's theme key (app-context.js storageKey at base "/"), so both
+// pages follow the same light/dark choice.
 const THEME_KEY = "atlas.theme:classroom";
 
 const $ = (id) => document.getElementById(id);
@@ -25,44 +24,25 @@ try {
 
 // ---------- loading ----------
 
-async function fetchChats(body) {
-  const res = await fetch("/api/chats", {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body), cache: "no-store",
-  });
-  if (res.ok) return { data: await res.json() };
-  let err = null;
-  try { err = await res.json(); } catch { /* not JSON */ }
-  return { status: res.status, error: err };
-}
-
-function showGate(message) {
+function showNotice(message) {
   $("app").hidden = true;
-  $("gate").hidden = false;
-  $("gate-error").hidden = !message;
-  $("gate-error").textContent = message || "";
-  $("gate-code").focus();
+  $("notice").hidden = false;
+  $("notice-text").textContent = message;
 }
 
 async function boot() {
-  let token = null;
-  try { token = sessionStorage.getItem(TOKEN_KEY); } catch { /* blocked */ }
-  if (token) {
-    const r = await fetchChats({ session_token: token });
-    if (r.data) return start(r.data);
-    if (r.status === 404) return showGate(r.error?.message || "아직 올라온 대화가 없습니다.");
+  let res;
+  try {
+    res = await fetch("/api/chats", { cache: "no-store" });
+  } catch {
+    return showNotice("서버에 연결하지 못했습니다. 잠시 후 새로고침해 주세요.");
   }
-  showGate("");
+  if (res.ok) return start(await res.json());
+  let err = null;
+  try { err = await res.json(); } catch { /* not JSON */ }
+  showNotice(err ? `${err.message} ${err.hint || ""}`.trim()
+                 : "대화 지도를 열 수 없습니다. 잠시 후 새로고침해 주세요.");
 }
-
-$("gate-form").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const code = $("gate-code").value.trim();
-  if (!code) return showGate("접근 코드를 입력해 주세요.");
-  const r = await fetchChats({ code });
-  if (r.data) { $("gate-code").value = ""; return start(r.data); }
-  showGate(r.error?.message || "열 수 없습니다. 잠시 후 다시 시도해 주세요.");
-});
 
 // ---------- colour ----------
 
@@ -569,7 +549,7 @@ new ResizeObserver(() => { if (state.data && state.conv) render(); }).observe(sv
 function start(data) {
   if (!data.points?.length) return showGate("아직 올라온 대화가 없습니다.");
   state.data = data;
-  $("gate").hidden = true;
+  $("notice").hidden = true;
   $("app").hidden = false;
   const names = Object.fromEntries((data.targets || []).map((t) => [t.id, t.display_name]));
   const select = $("conv");

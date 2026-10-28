@@ -8,32 +8,21 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='11' cy='19' r='6' fill='%231f77b4'/%3E%3Cpath d='M21 6l7 7-7 7-7-7z' fill='%23ff7f0e'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="tokens.css">
 <link rel="stylesheet" href="app.css">
-<link rel="stylesheet" href="schedule.css">
 </head>
 <body>
 
-<!-- ============ 랜딩: 개인 접근 코드 확인 ============ -->
-<section class="gate view" id="view-gate">
-  <form class="gate-card" id="gate-form" method="post" autocomplete="off" novalidate>
-    <h1 id="gate-title">feedback-atlas</h1>
-    <p class="sub" id="gate-sub">실제 수업 1~4주차</p>
-    <div class="context-note" id="gate-context-note" hidden></div>
-    <p class="demo-intro" id="demo-intro" hidden>의견을 작성하고 시각화를 탐색해 보세요. 실제 수업 기록에는 반영되지 않습니다.</p>
-    <div class="field" id="gate-code-field">
-      <label for="gate-code">개인 접근 코드</label>
-      <input type="password" id="gate-code" name="code" autocapitalize="off"
-             autocorrect="off" spellcheck="false" enterkeyhint="go" required>
-    </div>
-    <p class="hint" id="gate-code-hint">담당 TA가 알려준 본인 전용 코드를 입력해 주세요. 같은 코드를 계속 사용할 수 있습니다.</p>
-    <div class="err" id="gate-error" hidden>
+<!-- ============ 시작 중 / 시작 실패 ============ -->
+<section class="gate view" id="view-boot">
+  <div class="gate-card">
+    <h1>feedback-atlas</h1>
+    <p class="sub" id="boot-status">불러오는 중…</p>
+    <div class="err" id="boot-error" hidden>
       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/>
         <path d="M12 8v5M12 16h.01"/></svg>
-      <span id="gate-error-text"></span>
-      <button class="btn" type="button" id="boot-retry" hidden>다시 시도</button>
+      <span id="boot-error-text"></span>
+      <button class="btn" type="button" id="boot-retry">다시 시도</button>
     </div>
-    <button class="btn pri tall" type="submit" id="gate-submit" disabled>시작 중…</button>
-    <p class="hint demo-main-link" id="demo-main-link" hidden><a id="demo-classroom-link" href="/">실제 수업 페이지로 이동</a></p>
-  </form>
+  </div>
 </section>
 
 <!-- ============ 관리자 접근 코드 (PRD 5.6) ============ -->
@@ -41,7 +30,6 @@
   <form class="gate-card" id="admin-form" method="post" autocomplete="off" novalidate>
     <h1>관리자 모드</h1>
     <p class="sub">작성자 정보가 표시됩니다.</p>
-    <div class="context-note" id="admin-context-note" hidden></div>
     <div class="field">
       <label for="admin-code">접근 코드</label>
       <input type="password" id="admin-code" name="code" enterkeyhint="go" required>
@@ -52,13 +40,12 @@
       <span id="admin-error-text"></span>
     </div>
     <button class="btn pri tall" type="submit" id="admin-submit" disabled>시작 중…</button>
-    <p class="hint"><a href="./" id="admin-back">참가자 화면으로 돌아가기</a></p>
+    <p class="hint"><a href="./" id="admin-back">지도 보기로 돌아가기</a></p>
   </form>
 </section>
 
 <!-- ============ 메인 ============ -->
 <main class="shell view" id="view-main" hidden>
-  <div class="context-banner" id="context-banner" hidden></div>
   <header class="bar">
     <div class="logo">feedback-atlas</div>
     <span class="admin-badge" id="admin-badge" hidden>관리자</span>
@@ -72,16 +59,12 @@
       <label><input type="checkbox" value="4" checked>4주차</label>
     </fieldset>
 
+    <a class="chats-link" href="chats.html">대화 지도</a>
     <div class="conn" id="conn"><i></i><span id="conn-text">연결 중…</span></div>
   </header>
 
   <div class="body">
     <nav class="rail" aria-label="도구">
-      <button type="button" id="tab-compose" aria-pressed="true" title="의견 쓰기">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/>
-          <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
-        <span class="sr-only" hidden>의견 쓰기</span>
-      </button>
       <button type="button" id="tab-legend" aria-pressed="true" title="범례">
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="7" r="2.5"/>
           <path d="M11 7h8M11 17h8"/><path d="m3.5 15 2.5 4 2.5-4z"/></svg>
@@ -106,7 +89,7 @@
       <svg id="map" role="img" aria-label="의견 의미 지도"></svg>
       <div class="empty" id="empty" hidden>
         <div><b style="color:var(--fg)">아직 의견이 없습니다.</b><br>
-        첫 의견을 남기면 여기에 점으로 나타납니다.</div>
+        의견이 올라오면 여기에 점으로 나타납니다.</div>
       </div>
       <aside class="legend" id="legend" aria-label="범례"></aside>
       <div class="statusbar">
@@ -123,39 +106,6 @@
     <section class="viewer-card" id="viewer-card" hidden>
       <div class="viewer-mount" id="viewer-mount"></div>
       <div class="viewer-note" id="viewer-note" hidden></div>
-    </section>
-
-    <!-- 의견 입력 (PRD 5.2, 5.3) -->
-    <section class="side" id="compose">
-      <h2>의견 쓰기</h2>
-      <form id="compose-form">
-        <div class="field">
-          <label for="c-target">대상 학생</label>
-          <select id="c-target" required></select>
-        </div>
-        <div class="field" style="margin-top:10px">
-          <label for="c-text">의견</label>
-          <textarea id="c-text" maxlength="1000" enterkeyhint="send"
-                    placeholder="AI가 생성한 피드백을 붙여넣어 주세요."></textarea>
-        </div>
-        <div class="row2" style="margin-top:10px">
-          <div class="field" style="flex:1">
-            <label id="c-source-label">구분</label>
-            <div class="seg" id="c-source" role="group" aria-labelledby="c-source-label">
-              <button type="button" data-value="ai" aria-pressed="true">
-                <svg viewBox="-6 -6 12 12" aria-hidden="true">
-                  <path d="M0-5.2 5.2 0 0 5.2-5.2 0Z" fill="currentColor"/></svg>AI</button>
-              <button type="button" data-value="human" aria-pressed="false">
-                <svg viewBox="-6 -6 12 12" aria-hidden="true">
-                  <circle r="4.6" fill="currentColor"/></svg>사람</button>
-            </div>
-          </div>
-        </div>
-        <p class="hint" id="c-week-status" aria-live="polite" style="margin-top:10px"></p>
-        <button class="btn pri tall" type="submit" id="c-submit"
-                style="width:100%;margin-top:10px">보내기</button>
-        <p class="hint" id="c-hint" aria-live="polite"></p>
-      </form>
     </section>
 
     <!-- 관리자 전용 도구. 참가자 채널에는 이 셋 중 어느 것도 없습니다 (PRD 5.6). -->

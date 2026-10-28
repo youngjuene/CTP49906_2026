@@ -1,4 +1,4 @@
-"""Rotate the previous HTTP-exposed admin code and configure private credentials."""
+"""Rotate the previous HTTP-exposed admin code and keep it in a private file."""
 
 import os
 import re
@@ -17,7 +17,6 @@ def main():
     code = secrets.token_urlsafe(32)
     values = {
         "ATLAS_ADMIN_CODE": code,
-        "ATLAS_ACCESS_CODES": ".run/access-codes.json",
         "ATLAS_ALLOW_INSECURE_HTTP": "0",
     }
     for name, value in values.items():

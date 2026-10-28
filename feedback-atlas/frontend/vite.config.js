@@ -16,7 +16,7 @@ import { readonlyCategoryTransformPlugin } from "./readonly-category-transform.j
  * `npm install && npm run build` from this directory after changing a version.
  */
 export default defineConfig({
-  // The bundle is served from /vendor/ and /demo/vendor/, not the origin root.
+  // Relative, so the bundle resolves against whatever path serves the page.
   base: "./",
   plugins: [readonlyCategoryTransformPlugin()],
   build: {

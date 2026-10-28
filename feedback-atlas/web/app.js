@@ -1,4 +1,4 @@
-/* Entry point: connection, state, and the three views.
+/* Entry point: connection, state, and the three views (boot, admin gate, map).
  *
  * The connection is the interesting part. WebSocket has no EventSource-style
  * auto-reconnect, and Cloudflare quick tunnels drop an idle socket at roughly
@@ -7,35 +7,27 @@
  * we hold is not the one a delta expects.
  */
 import { Atlas, CATEGORY10 } from "./atlas.js";
-import { mountCompose } from "./compose.js";
 import { mountAdmin } from "./admin.js";
-import { mountSchedule } from "./schedule.js";
-import { apiUrl, loadEnvironment, storageKey, wsUrl } from "./app-context.js";
+import { apiUrl, storageKey, wsUrl } from "./app-context.js";
 import * as viewer from "./viewer.js";
 
 const PROTOCOL = 1;
 const OTHER = "var(--other)";
-const environment = await loadEnvironment();
-const SESSION_TOKEN_KEY = storageKey("atlas.session_token");
 const THEME_KEY = storageKey("atlas.theme");
 
 const state = {
   channel: "participant",
-  adminCode: null, sessionToken: null,
-  submissionOwner: null,
+  adminCode: null,
   rev: 0, layoutRev: 0,
   targets: [], targetIndex: new Map(),
   roster: [],
   weeks: new Set([1, 2, 3, 4]),
   focusTarget: null, focusReviewer: null,
-  defaults: { source: "ai", week: 1, maxChars: 1000 },
-  environment,
-  schedule: null,
   connected: false,
 };
 
 const $ = (id) => document.getElementById(id);
-const views = { gate: $("view-gate"), admin: $("view-admin-gate"), main: $("view-main") };
+const views = { boot: $("view-boot"), admin: $("view-admin-gate"), main: $("view-main") };
 
 function show(name) {
   for (const [k, node] of Object.entries(views)) node.hidden = k !== name;
@@ -195,20 +187,11 @@ $("weeks").addEventListener("change", (e) => {
 });
 
 $("btn-fit").addEventListener("click", () => { atlas.fit(); renderStatus(); });
-$("tab-compose").addEventListener("click", (e) => {
-  if (state.channel === "admin") return;   // there is nothing to show
-  toggleSide(e.currentTarget, "compose");
-});
 $("tab-legend").addEventListener("click", (e) => {
   const on = e.currentTarget.getAttribute("aria-pressed") !== "true";
   e.currentTarget.setAttribute("aria-pressed", String(on));
   $("legend").hidden = !on;
 });
-function toggleSide(button, id) {
-  const on = button.getAttribute("aria-pressed") !== "true";
-  button.setAttribute("aria-pressed", String(on));
-  $(id).hidden = !on;
-}
 
 /* ---------------- Embedding Atlas viewer ----------------
  *
@@ -219,9 +202,9 @@ function toggleSide(button, id) {
  * a room of assorted laptops, so the hand-written scatter stays as the fallback
  * and the button disables itself where the viewer cannot draw.
  *
- * The default is also deliberate: the viewer is a dashboard, and a phone held by
- * somebody who is there to write a sentence is not where it earns its space. Wide
- * screen and a working adapter, or it stays off until asked for.
+ * The default is also deliberate: the viewer is a dashboard, and a phone is not
+ * where it earns its space. Wide screen and a working adapter, or it stays off
+ * until asked for.
  */
 const viewerBtn = $("tab-viewer");
 let viewerUsable = null;         // null until probed; probing costs an adapter request
@@ -299,8 +282,6 @@ async function setViewer(on) {
       // the viewer was mounted, and a captured null would keep the admin looking
       // at the participant relation.
       getCode: () => (state.channel === "admin" ? state.adminCode : null),
-      getToken: () => (state.channel === "participant" ? state.sessionToken : null),
-      hideTargetId: environment.mode === "demo",
       colorScheme: colorScheme(),
       onError: fail,
     });
@@ -344,15 +325,13 @@ function setConn(kind, text) {
 /* ---------------- connection ---------------- */
 let socket = null, backoff = 500, closing = false, retryTimer = null;
 let lastFrameAt = 0, watchdog = null;
-let pendingParticipantCode = null;
 
 /* A dropped connection does not always announce itself.
  *
  * A close event is the polite case. A tunnel that stops forwarding, a phone that
  * changes network, a laptop coming back from sleep -- these leave the socket in
  * readyState OPEN with nothing ever arriving again, and the client would sit
- * there showing a stale map and an enabled submit button for the rest of the
- * session.
+ * there showing a stale map for the rest of the session.
  *
  * The server already sends a heartbeat every 25s. This is the half that makes it
  * useful: if two of them fail to arrive, treat the socket as gone and reconnect.
@@ -377,15 +356,7 @@ function send(message) {
   return false;
 }
 
-function clearParticipantSession() {
-  state.sessionToken = null;
-  state.submissionOwner = null;
-  try {
-    sessionStorage.removeItem(SESSION_TOKEN_KEY);
-  } catch { /* ignore */ }
-}
-
-function resetSurface({ keepParticipantSession = false } = {}) {
+function resetSurface() {
   showTip(null);
   viewer.destroy();
   viewerOn = false;
@@ -405,7 +376,6 @@ function resetSurface({ keepParticipantSession = false } = {}) {
   state.focusReviewer = null;
   renderLegend();
   renderStatus();
-  if (!keepParticipantSession) clearParticipantSession();
 }
 
 function connect() {
@@ -416,8 +386,7 @@ function connect() {
   const admin = state.channel === "admin";
   // Close any socket we are replacing, and stop listening to it. Without this,
   // a superseded socket's close event arrives *after* the new one is already
-  // working and flips the UI back to "reconnecting" -- leaving the map live and
-  // correct but the compose button permanently disabled.
+  // working and flips the UI back to "reconnecting" while the map is live.
   const previous = socket;
   if (previous) {
     previous.onopen = previous.onmessage = previous.onclose = previous.onerror = null;
@@ -431,14 +400,8 @@ function connect() {
     if (socket !== ws) return;
     lastFrameAt = Date.now();
     startWatchdog();
-    if (admin) {
-      send({ t: "hello", protocol: PROTOCOL, code: state.adminCode });
-      return;
-    }
-    const hello = state.sessionToken
-      ? { t: "hello", protocol: PROTOCOL, session_token: state.sessionToken }
-      : { t: "hello", protocol: PROTOCOL, code: pendingParticipantCode };
-    send(hello);
+    send(admin ? { t: "hello", protocol: PROTOCOL, code: state.adminCode }
+               : { t: "hello", protocol: PROTOCOL });
   };
 
   ws.onmessage = (ev) => {
@@ -463,27 +426,12 @@ function handle(frame) {
   switch (frame.t) {
     case "hello_ok": {
       backoff = 500;
-      if (frame.channel === "participant" && frame.session_token) {
-        state.sessionToken = frame.session_token;
-        state.submissionOwner = frame.submission_owner || null;
-        try {
-          sessionStorage.setItem(SESSION_TOKEN_KEY, state.sessionToken);
-        } catch { /* ignore */ }
-      } else if (frame.channel !== "participant") {
-        state.submissionOwner = null;
-      }
-      pendingParticipantCode = null;
-      $("gate-code").value = "";
       // A reconnect gets a fresh snapshot from the server, so anything the
       // client accumulated while it was away is replaced rather than merged.
       state.rev = frame.rev; state.layoutRev = frame.layout_rev;
       state.targets = frame.targets || [];
       state.targetIndex = new Map(state.targets.map((t, i) => [t.id, i]));
       state.roster = frame.roster || [];
-      state.defaults = { source: frame.default_source || "ai",
-                         week: frame.default_week || 1,
-                         maxChars: frame.max_text_chars || 1000 };
-      state.schedule = frame.schedule || null;
       show("main");
       $("admin-badge").hidden = frame.channel !== "admin";
       $("adminpanel").hidden = frame.channel !== "admin";
@@ -493,18 +441,11 @@ function handle(frame) {
       autoEnableViewer();
       break;
     }
-    case "schedule": {
-      if (state.schedule && frame.schedule.revision < state.schedule.revision) break;
-      state.schedule = frame.schedule;
-      document.dispatchEvent(new CustomEvent("atlas:schedule", { detail: frame.schedule }));
-      break;
-    }
     case "snapshot": {
       // Below roughly a hundred and fifty opinions the server legitimately sends
       // snapshots rather than deltas, because a full recompute really does move
-      // most points. Without diffing here, a new opinion arriving early in a
-      // session -- which is every opinion in the first half hour -- would appear
-      // with no animation at all, losing exactly the live moment the tool is for.
+      // most points. Without diffing here, a new opinion arriving while the
+      // corpus is small would appear with no animation at all.
       const known = new Set(atlas.points.keys());
       const fresh = known.size ? frame.points.filter(p => !known.has(p.id)) : [];
       state.rev = frame.rev; state.layoutRev = frame.layout_rev;
@@ -532,10 +473,6 @@ function handle(frame) {
       document.dispatchEvent(new CustomEvent("atlas:data"));
       break;
     }
-    case "ack":
-      state.rev = Math.max(state.rev, frame.rev);
-      document.dispatchEvent(new CustomEvent("atlas:ack", { detail: frame }));
-      break;
     case "roster":
       state.targets = frame.targets || [];
       state.targetIndex = new Map(state.targets.map((t, i) => [t.id, i]));
@@ -561,118 +498,21 @@ function handle(frame) {
       if (frame.fatal) {
         closing = true;
         setConn("bad", frame.message);
-        resetSurface({ keepParticipantSession: state.channel === "admin" });
-        pendingParticipantCode = null;
-        $("gate-code").value = "";
+        resetSurface();
         if (state.channel === "admin") { showAdminError(frame); show("admin"); }
-        else { showGateError(frame); show("gate"); clearParticipantSession(); }
+        else { showBootError(`${frame.message} ${frame.hint || ""}`.trim()); }
       }
       break;
   }
 }
 
-/* ---------------- landing (PRD 5.1) ---------------- */
-let gateAttempts = 0;
-
-function setTextOrHtml(node, text, href = null) {
-  node.replaceChildren();
-  node.appendChild(document.createTextNode(text));
-  if (!href) return;
-  node.appendChild(document.createTextNode(" "));
-  const a = document.createElement("a");
-  a.href = href;
-  a.textContent = href === "/" ? "실제 수업 페이지로 이동" : "데모 페이지에서 연습";
-  node.appendChild(a);
+/* ---------------- boot card ---------------- */
+function showBootError(text) {
+  $("boot-status").hidden = true;
+  $("boot-error").hidden = false;
+  $("boot-error-text").textContent = text;
+  show("boot");
 }
-
-function applyEnvironmentChrome() {
-  const isDemo = environment.mode === "demo";
-  const contextNote = $("gate-context-note");
-  const adminNote = $("admin-context-note");
-  const banner = $("context-banner");
-  const appTitle = isDemo ? "feedback-atlas (demo)" : "feedback-atlas";
-  $("gate-title").textContent = appTitle;
-  document.title = appTitle;
-  document.querySelector(".logo").textContent = appTitle;
-  $("gate-sub").hidden = isDemo;
-  $("demo-intro").hidden = !isDemo;
-  $("demo-main-link").hidden = !isDemo;
-  $("gate-code-field").hidden = isDemo;
-  $("gate-code-hint").hidden = isDemo;
-  $("gate-code").disabled = isDemo;
-  $("gate-code").required = !isDemo;
-  $("gate-submit").textContent = isDemo ? "데모 시작하기" : "들어가기";
-  $("gate-submit").disabled = false;
-  $("admin-submit").textContent = "들어가기";
-  $("admin-submit").disabled = false;
-
-  if (isDemo) {
-    $("demo-classroom-link").href = environment.classroom_url || "/";
-    setTextOrHtml(adminNote,
-      `연습용 관리자 코드는 ${environment.admin_code || "ctp49906"} 입니다.`,
-      environment.classroom_url || "/");
-    setTextOrHtml(banner,
-      "Demo · 이곳의 계정과 피드백은 실제 수업 1~4주차와 분리된 공유 연습 콘텐츠입니다.",
-      environment.classroom_url || "/");
-    contextNote.hidden = true;
-    adminNote.hidden = false;
-    banner.hidden = false;
-    const adminInput = $("admin-code");
-    if (environment.admin_code && !adminInput.value) adminInput.value = environment.admin_code;
-    return;
-  }
-
-  setTextOrHtml(contextNote,
-    environment.demo_url
-      ? "실제 수업 1~4주차 페이지입니다. 처음 사용해 볼 학생은 데모에서 먼저 연습할 수 있습니다."
-      : "실제 수업 1~4주차 페이지입니다.",
-    environment.demo_url);
-  contextNote.hidden = false;
-  adminNote.hidden = true;
-  banner.hidden = true;
-}
-
-function showGateError(frame) {
-  gateAttempts++;
-  $("gate-error").hidden = false;
-  $("gate-code").classList.add("input-bad");
-  // Suspect a typo first; send them to find a person only after that has failed
-  // a few times. Most failures really are typos, and walking to the front of the
-  // room costs the presentation.
-  $("gate-error-text").textContent = gateAttempts >= 3 && frame.code === "BAD_ACCESS_CODE"
-    ? `${frame.message} 강사·조교에게 본인의 코드를 확인해 주세요.`
-    : `${frame.message} ${frame.hint || ""}`.trim();
-  $("gate-submit").disabled = false;
-  $("gate-code").focus();
-  $("gate-code").select();
-}
-
-function localGateError(message, hint = "") {
-  $("gate-error").hidden = false;
-  $("gate-error-text").textContent = `${message} ${hint}`.trim();
-  $("gate-code").classList.add("input-bad");
-  $("gate-code").focus();
-}
-
-$("gate-form").addEventListener("submit", (e) => {
-  e.preventDefault();
-  const code = environment.mode === "demo" ? "demo" : $("gate-code").value.trim();
-  if (!code) {
-    localGateError("개인 접근 코드를 입력해 주세요.");
-    $("gate-code").classList.add("input-bad");
-    $(environment.mode === "demo" ? "gate-submit" : "gate-code").focus();
-    return;
-  }
-  resetSurface();
-  state.channel = "participant";
-  state.adminCode = null;
-  pendingParticipantCode = code;
-  $("gate-error").hidden = true;
-  $("gate-code").classList.remove("input-bad");
-  $("gate-submit").disabled = true;
-  setConn("warn", "연결 중…");
-  connect();
-});
 
 /* ---------------- admin gate (PRD 5.6) ---------------- */
 function showAdminError(frame) {
@@ -694,7 +534,6 @@ $("admin-form").addEventListener("submit", (e) => {
   resetSurface();
   state.channel = "admin";
   state.adminCode = $("admin-code").value;
-  pendingParticipantCode = null;
   $("admin-error").hidden = true;
   $("admin-code").classList.remove("input-bad");
   setConn("warn", "연결 중…");
@@ -706,10 +545,9 @@ $("admin-back").addEventListener("click", (e) => {
 });
 
 /* ---------------- boot ---------------- */
-mountCompose({ state, send, atlas });
 mountAdmin({ state, send, atlas, renderStatus });
-mountSchedule({ state });
-applyEnvironmentChrome();
+$("admin-submit").textContent = "들어가기";
+$("admin-submit").disabled = false;
 document.documentElement.dataset.boot = "ready";
 document.addEventListener("atlas:data", renderStatus);
 // The server updates its DuckDB relation before it broadcasts, so by the time a
@@ -726,20 +564,7 @@ if (location.hash === "#admin") {
   show("admin");
   $("admin-code").focus();
 } else {
-  let token = null;
-  try {
-    sessionStorage.removeItem("atlas.id");
-    token = sessionStorage.getItem(SESSION_TOKEN_KEY);
-  } catch { /* ignore */ }
-  if (token) {
-    // Same session, no re-entry (PRD 5.1).
-    state.sessionToken = token;
-    setConn("warn", "연결 중…");
-    connect();
-    show("main");
-  } else {
-    clearParticipantSession();
-    show("gate");
-    $(environment.mode === "demo" ? "gate-submit" : "gate-code").focus();
-  }
+  setConn("warn", "연결 중…");
+  connect();
+  show("main");
 }

@@ -13,7 +13,7 @@ button,input,select,textarea { font:inherit; color:inherit }
 [hidden] { display:none !important }
 @media (prefers-reduced-motion:reduce) { *{animation:none!important;transition:none!important} }
 
-/* ---------- landing + admin gate ---------- */
+/* ---------- boot card + admin gate ---------- */
 .gate { min-height:100dvh; display:grid; place-items:center; padding:24px }
 .gate-card {
   background:var(--card); border:1px solid var(--hair); border-radius:6px;
@@ -22,22 +22,12 @@ button,input,select,textarea { font:inherit; color:inherit }
 }
 .gate-card h1 { font-size:17px; letter-spacing:-.01em; margin:0 }
 .gate-card .sub { font-size:13px; color:var(--muted); margin:-8px 0 0 }
-.context-note,.context-banner {
-  font-size:12px; color:var(--muted); background:var(--panel);
-  border:1px solid var(--hair); border-radius:6px; padding:9px 10px;
-}
-.context-note a,.context-banner a { color:var(--accent); font-weight:500 }
-.context-banner { flex:none }
-.demo-intro { margin:0; color:var(--muted); font-size:14px; line-height:1.7 }
-.demo-main-link { text-align:center }
-.demo-main-link a { color:var(--muted) }
 .field { display:flex; flex-direction:column; gap:4px }
 .field > label { font-size:12px; color:var(--muted) }
-input[type=text],input[type=password],select,textarea {
+input[type=text],input[type=password],select {
   background:var(--card); border:1px solid var(--hair); border-radius:6px;
   padding:8px 9px; width:100%; font-size:var(--fs-body);
 }
-textarea { resize:vertical; min-height:90px; line-height:var(--lh-body); word-break:keep-all }
 .input-bad { border-color:var(--bad) }
 .err {
   display:flex; gap:8px; align-items:flex-start; font-size:12.5px; color:var(--bad);
@@ -76,8 +66,8 @@ textarea { resize:vertical; min-height:90px; line-height:var(--lh-body); word-br
   border-radius:4px; cursor:pointer; font-size:12px; user-select:none }
 .weeks label:hover { background:var(--panel) }
 .weeks input { accent-color:var(--accent); margin:0; width:13px; height:13px }
-.conn { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--muted);
-  margin-left:auto }
+.chats-link { margin-left:auto; font-size:12px; color:var(--accent); font-weight:500 }
+.conn { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--muted) }
 .conn i { width:7px; height:7px; border-radius:50%; background:var(--ok); display:block }
 .conn.warn i { background:var(--warn) }
 .conn.bad  i { background:var(--bad) }
@@ -152,7 +142,7 @@ textarea { resize:vertical; min-height:90px; line-height:var(--lh-body); word-br
 .flabel { font:500 11px var(--sans); letter-spacing:.07em; text-transform:uppercase;
   color:var(--muted) }
 
-/* ---------- compose ---------- */
+/* ---------- side panel ---------- */
 .side { width:330px; flex:none; background:var(--panel); border:1px solid var(--hair);
   border-radius:6px; padding:10px; display:flex; flex-direction:column; gap:10px;
   overflow:auto }
@@ -166,7 +156,6 @@ textarea { resize:vertical; min-height:90px; line-height:var(--lh-body); word-br
 .seg button[aria-pressed="true"] { background:var(--panel); color:var(--fg);
   font-weight:500; box-shadow:inset 0 0 0 1px var(--hair) }
 .seg svg { width:11px; height:11px }
-.row2 { display:flex; gap:8px; align-items:flex-end }
 
 /* ---------- admin reviewer panel ---------- */
 .revlist { display:flex; flex-direction:column; gap:1px; overflow:auto; flex:1; min-height:0 }
@@ -200,24 +189,16 @@ textarea { resize:vertical; min-height:90px; line-height:var(--lh-body); word-br
   text-align:center; color:var(--muted); font-size:13px; pointer-events:none }
 
 /* ---------- responsive ----------
- * The projector and the phone want opposite things. On a wide screen the map is
- * the shared object the room reads together; on a phone the viewer's job is to
- * write, not to browse, so the form becomes the primary surface and the map
- * shrinks to context.
+ * On a phone the panels stack under the map, which keeps most of the screen:
+ * reading the map is the whole job here.
  */
 @media (max-width:1023px) {
   .body { flex-direction:column }
   .rail { flex-direction:row; order:3 }
   .rail .spacer { flex:0 }
-  .map-card { flex:none; height:40vh; min-height:200px }
-  /* Extra room at the foot so the last line is not clipped against the tab bar.
-   * The panel scrolls, so nothing was unreachable -- but a sentence sliced in
-   * half horizontally reads as a broken layout, not as something to scroll. */
-  /* Let the page scroll rather than trapping the form in its own scroll area.
-   * Locking the shell to 100dvh is right on a projector, where the map is the
-   * whole point and nothing should move. On a phone it makes the form a nested
-   * scroller inside a fixed viewport, which clips its last line and hides the
-   * keyboard-adjacent controls people are reaching for. */
+  .map-card { flex:1 1 auto; min-height:62vh }
+  /* Let the page scroll rather than trapping the admin panel in its own scroll
+   * area under a fixed-height map. */
   .shell { height:auto; min-height:100dvh }
   .side { width:auto; order:2; flex:1 1 auto; overflow:visible; padding-bottom:16px }
   .body { min-height:0 }

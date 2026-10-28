@@ -4,10 +4,11 @@
   <b>English</b> · <a href="README_kr.md">한국어</a>
 </p>
 
-A classroom tool for the CTP49906 *Multimodal AI* workshop. During a student
-presentation, attendees open a link on their phones and write what they think.
-Each opinion is embedded **locally** — no API call — projected to 2D, and pushed
-to every connected screen within a second.
+A classroom tool for the CTP49906 *Multimodal AI* workshop. The instructor
+imports feedback and students' LLM conversations on the server; anyone with the
+link opens the map on a phone or the projector, with no login. Each opinion is
+embedded **locally** — no API call — projected to 2D, and pushed to every
+connected screen as soon as it is imported.
 
 Colour encodes **which student the feedback is about**; shape encodes **AI or
 human**. That second channel is the point: the session asks how far a model can
@@ -22,16 +23,15 @@ The specification is [`realtime-feedback-atlas-prd.md`](realtime-feedback-atlas-
 
 ## What it is not
 
-Not a campus login system. Each enrolled person enters only their fixed private
-access code; the server resolves the matching roster identity and role. The
-participant websocket accepts `{code}` and returns an 8-hour signed session
-token, or accepts a later `{session_token}` resume. Existing codes stay the same
-across restarts; a restart expires sessions, not the personal codes. Duplicate
-codes are rejected so one code cannot identify two people.
+Not a submission form. The participant page is anonymous and read-only: there are
+no personal codes, no sessions, and nothing a browser sends can add an opinion.
+Opinions arrive only through [bulk import](#bulk-ai-import-prd-43) on the server,
+and conversations through [chat trajectories](#chat-trajectories-chatshtml).
 
-Not anonymous, and not pretending to be. `reviewer_id` is stored on the server
-and never crosses a participant connection. Admin mode, behind a fixed access
-code, is the only surface that shows who wrote what.
+Not a public record of who wrote what. `reviewer_id` is stored on the server and
+never crosses a participant connection. Admin mode, behind the admin code, is the
+only surface that shows it. Target names (the students whose work is discussed)
+and everything on the chat map *are* visible to anyone with the link.
 
 ## Setup
 
@@ -82,37 +82,15 @@ ta.youngjun,영준,ta
 ```
 
 Three roles. `student` (수강생) rows are also the **targets** — the projects
-feedback can be *about*. `observer` (청강생) and `ta` (조교) write feedback and are
-never targets, which is what the course actually looks like: a TA comments on
-work, nobody comments on the TA.
+feedback can be *about*, and the people whose chats can be imported. `observer`
+(청강생) and `ta` (조교) can be credited as reviewers on imported feedback and are
+never targets. Matching is forgiving about spaces, case and full-width characters
+(a Korean IME left in 전각 mode emits `ｋｉｍ`), and about nothing else: an
+edit-distance match would let one student's id resolve to another's.
 
-PRD 7's table names only `student` and `observer`; `ta` is a deliberate addition,
-because PRD 3 already lists 조교 as a user who may submit — and submitting needs a
-roster entry. Without a role of their own a TA has to be filed as 청강생, and the
-admin panel, which exists to attribute writing correctly, would then label them as
-something they are not. Matching is forgiving about spaces, case and
-full-width characters (a Korean IME left in 전각 mode emits `ｋｉｍ`), and about
-nothing else: an edit-distance match would let one student's id resolve to
-another's.
-
-Generate the private per-person codes after the roster is final enough to share.
-The JSON file contains only SHA-256 hashes and is read by the server; the CSV
-contains cleartext codes and must be sent privately to each participant, one code
-at a time. Do not paste the whole CSV into a public chat or slide.
-
-```bash
-python scripts/create_access_codes.py \
-  --roster roster.csv \
-  --hashes .run/access-codes.json \
-  --out .run/access-codes.csv
-```
-
-The script writes private files with mode `0600` under `.run/` and refuses to
-overwrite existing credentials. Rotate by moving the old files aside and issuing
-new codes privately.
-
-Adding someone later means editing the roster, generating a code for the new
-roster state, and sending `SIGHUP` — no restart, no dropped connections:
+The roster is the only list of people the server holds; there are no per-person
+credentials to generate. Editing it later takes a `SIGHUP` — no restart, no
+dropped connections:
 
 ```bash
 kill -HUP $(pgrep -f 'uvicorn.*src.server')
@@ -121,9 +99,9 @@ kill -HUP $(pgrep -f 'uvicorn.*src.server')
 ### Configuration
 
 Copy [`.env.example`](.env.example) to `.env`. `ATLAS_ADMIN_CODE` and
-`ATLAS_ROSTER` have no defaults. `ATLAS_ACCESS_CODES` defaults to
-`.run/access-codes.json`, and every roster id must have a hash there before the
-server starts. A default admin code is a published admin code.
+`ATLAS_ROSTER` have no defaults; a default admin code is a published admin code.
+`ATLAS_CHATS` (default `.run/chats/atlas.json`) is where the chat map is read
+from.
 
 If the previous admin code ever crossed plain HTTP, rotate it before class:
 
@@ -135,15 +113,6 @@ The new admin code is written to `.run/admin-code.txt` with private file
 permissions. Do not put its contents in documentation or slides.
 
 ## Running it
-
-The main classroom (`/`) and practice demo (`/demo/`) are separate apps sharing
-the same interface. The main classroom uses private codes and its own weeks 1–4
-corpus. The demo uses one default `demo` account without a personal-code field; its comments,
-sessions, queries, and exports cannot enter the main classroom. The existing 30
-example opinions were assigned to the demo, with an empty main classroom.
-See [the deployment runbook](SECURITY_DEPLOYMENT.md#classroom-and-demo) for data
-paths and the one-time migration. For a fresh install, create `.run/classroom`
-and `.run/demo` before starting the configured databases.
 
 The classroom deployment is the fixed numeric HTTPS URL:
 
@@ -186,11 +155,11 @@ The server entry point refuses unsafe public HTTP/proxy-trust fallbacks, so do
 not bind an insecure development command to `0.0.0.0`.
 
 Start it **five minutes early**. The first run loads the model and warms UMAP's
-numba kernels; done at the bell, that cost lands on the first submission of the
-class instead.
+numba kernels; done at the bell, that cost lands on the first import of the class
+instead.
 
 `GET /healthz` reports the model's cache key, the corpus size, the projector in
-use and the connection counts. It never reports the access code.
+use and the connection counts. It never reports the admin code.
 
 ### Getting the room connected
 
@@ -200,18 +169,18 @@ Share only the HTTPS IP address:
 https://143.248.249.7:8888
 ```
 
-The page, websocket, and Embedding Atlas query endpoint are all on that origin.
-The server is not restricted to a classroom IP range because no known classroom
-CIDR is installed; security comes from TLS, per-person codes, signed sessions,
-and the admin code rather than from source-IP filtering.
+The page, websocket, and Embedding Atlas query endpoint are all on that origin,
+and none of them asks for a code. The server is not restricted to a classroom IP
+range: anyone who has the link can read the map and the chat map. What stays
+protected is authorship, behind the admin code.
 
 **An SSH tunnel is not a classroom path.** `ssh -L 8888:127.0.0.1:8888 …` forwards
 the port to *one* machine — the laptop you typed it on. It is the right way to
 preview the map yourself over SSH, and it does nothing for thirty phones.
 
 Cloudflare is outside the recommended launch path. If you manually use an
-alternative tunnel later, keep the same participant/admin credentials, HTTPS
-browser origin, websocket upgrade, and origin checks.
+alternative tunnel later, keep the same admin code, HTTPS browser origin,
+websocket upgrade, and origin checks.
 
 ### On the day
 
@@ -225,28 +194,14 @@ journalctl --user -u feedback-atlas.service -f
 ```
 
 Start it **five minutes early**. The first run loads the model and warms UMAP's
-numba kernels; done at the bell, that cost lands on the first submission of the
-class instead.
+numba kernels; done at the bell, that cost lands on the first import of the class
+instead.
 
 See [`SECURITY_DEPLOYMENT.md`](SECURITY_DEPLOYMENT.md) for the runbook.
 
 ## Admin mode
 
-The **주차 일정 설정** button opens a calendar with four start-date inputs and
-seven-day range previews. The main classroom assigns each new opinion from its
-server receipt timestamp in **Asia/Seoul**, ignoring any client-supplied week.
-Defaults are October 15–21, October 22–28, November 5–11, and November 12–18,
-2026. October 29–November 4 is the midterm break. New submissions outside these
-ranges are refused without discarding the browser draft; an already accepted
-submission can still recover its receipt after a period ends.
-
-Saved schedules survive restarts. Updates apply to future submissions and do
-not rewrite the week on existing opinions. Concurrent admin edits require a
-fresh schedule revision. The demo has separate settings and always permits
-practice in week 1. The participant form has no week dropdown; its placeholder
-changes with the selected AI/human source.
-
-Open `/admin` and enter the access code. The code buys a **different websocket**,
+Open `/admin` and enter the admin code. The code buys a **different websocket**,
 not a UI flag — a participant connection has no path to become an admin one,
 because the two endpoints use different serialisers.
 
@@ -268,8 +223,8 @@ every column that cross-filter each other, full-text search, and
 its WebGPU embedding view with density contours and automatic cluster labels.
 
 Toggle it with the panel button in the left rail. It turns itself on at startup on
-a wide screen with a capable browser, and stays off on a phone, where the job is
-to write a sentence rather than to explore a dashboard.
+a wide screen with a capable browser, and stays off on a phone, where a dashboard
+does not earn its space.
 
 **It is a Mosaic application, so it queries rather than receives.** The server
 keeps an in-memory DuckDB holding the corpus and answers `POST /data/query`, which
@@ -281,10 +236,9 @@ websocket broadcast goes out, so the charts and the map never disagree.
 The client writes the query, so no filter on the way out could hold —
 `SELECT reviewer_id FROM dataset` is an ordinary Mosaic-shaped request. The
 participant database therefore does not contain the column, and asking for it
-returns a DuckDB binder error rather than data. Participant queries now also need
-`Authorization: Bearer <session_token>` from the websocket hello. Admin queries
-keep using the admin code in the request body, never the URL, exactly as with CSV
-export.
+returns a DuckDB binder error rather than data. Participant queries need no
+credentials and are rate limited per address. Admin queries carry the admin code
+in the request body, never the URL, exactly as with CSV export.
 
 **AI versus human moved from shape to filter.** `EmbeddingView` encodes one
 channel, category colour, so the map's second channel has no equivalent here.
@@ -316,15 +270,15 @@ embedding-atlas feedback-atlas.csv --text text --x x --y y
 
 ## Bulk AI import (PRD 4.3)
 
-The submit path is rate-limited to about one message a second per connection —
-right for people, wrong for a script. `scripts/seed_ai_opinions.py` writes to the
-database instead:
+This is the only way opinions reach the map: `scripts/seed_ai_opinions.py` writes
+to the database, and `SIGUSR1` tells the running server to pick them up. The
+reviewer must be a roster id.
 
 ```bash
 python scripts/seed_ai_opinions.py comments.csv \
-  --db .run/classroom/atlas.db --roster roster.csv --reviewer instructor --dry-run
+  --db .run/classroom/atlas.db --roster roster.csv --reviewer ta.youngjun --dry-run
 python scripts/seed_ai_opinions.py comments.csv \
-  --db .run/classroom/atlas.db --roster roster.csv --reviewer instructor
+  --db .run/classroom/atlas.db --roster roster.csv --reviewer ta.youngjun
 kill -USR1 $(pgrep -f 'uvicorn.*src.server')   # re-read without a restart
 ```
 
@@ -353,8 +307,9 @@ and a student's own prompts are not peer feedback.
 HF_HUB_OFFLINE=1 python scripts/build_chat_atlas.py --chats .run/chats --roster roster.csv
 ```
 
-No restart is needed: `/api/chats` reads `.run/chats/atlas.json` per request,
-and only for a roster member's session or code (or the admin code). To check a
+No restart is needed: `/api/chats` reads `.run/chats/atlas.json` per request.
+It is open to anyone with the link, like the page itself, so only import
+conversations the students have agreed to show this way. To check a
 conversation's split before building, `scripts/chat_to_trajectory.py` writes a
 readable `<stem>.preview.md`.
 
@@ -410,8 +365,8 @@ only hoped for:
   server and asserts that, of a single broadcast, the admin sees `reviewer_id`
   and the participant does not. Every per-module test passed while that leak was
   live; it only exists when both channels are connected at once.
-- `test_viewer_pipeline.py` submits sentences over a real websocket and then asks
-  the running server for them in SQL, which is the only honest way to test the
+- `test_viewer_pipeline.py` seeds sentences into a running server and then asks
+  it for them in SQL, which is the only honest way to test the
   viewer's half: it asks for `reviewer_id` over HTTP and requires DuckDB to refuse
   because the column is absent, and it asks for `/etc/passwd` and requires the
   same. It skips without duckdb, pyarrow or embedding-atlas.
@@ -425,14 +380,11 @@ these tests do not verify hardware rendering.
 
 ## Known limits
 
-- **Credentials are private classroom credentials, not campus SSO.** A person who
-  receives or steals someone else's code can still post as that person. Give each
-  participant only their own code, rotate codes if one is exposed, and do not use
-  the admin authorship view as a grading authority.
-- **The service is not IP-range limited.** No classroom CIDR is currently
-  installed. Anyone who can reach `https://143.248.249.7:8888` can load the page,
-  but they still need a valid participant code or admin code to use protected
-  endpoints.
+- **Everything except authorship is public to anyone with the link.** There is
+  no participant login and no IP-range limit, so anyone who can reach
+  `https://143.248.249.7:8888` can read the map, the analysis view and every
+  imported conversation on `/chats.html`. Only `reviewer_id`, the admin tools and
+  CSV export sit behind the admin code.
 - **Dedicated OS-user isolation is not configured.** The service currently runs
   from this repository under the existing `june` user account.
 - **Application dependencies were not changed by the security deployment.** The
@@ -459,7 +411,7 @@ these tests do not verify hardware rendering.
   multi-statement SQL are refused, including requests labeled `exec`. A pinned
   viewer build adapter uses inline category expressions instead of table writes.
   If a relation refresh fails, viewer queries return 503 until both audience
-  relations recover; feedback submission and the map remain available.
+  relations recover; the map remains available.
 
 ## Design notes
 

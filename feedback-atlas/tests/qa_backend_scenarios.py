@@ -5,7 +5,7 @@ Run: .venv/bin/python -m pytest tests/qa_backend_scenarios.py -q
 
 import pytest
 
-from tests.auth_helpers import ACCESS_CODES
+from tests.seed_helpers import seed
 
 pytest_plugins = ["test_viewer_pipeline"]
 
@@ -18,23 +18,20 @@ def test_failed_viewer_refresh_does_not_silently_serve_stale_rows(client, monkey
         raise RuntimeError("QA injected relation replacement failure")
 
     with client.websocket_connect("/ws") as ws:
-        ws.send_json({"t": "hello", "protocol": 1, "code": ACCESS_CODES["writer1"]})
+        ws.send_json({"t": "hello", "protocol": 1})
         hello = ws.receive_json()
         assert hello["t"] == "hello_ok"
         assert ws.receive_json()["t"] == "snapshot"
         target = atlas.mosaic if failure_stage == "service" else getattr(atlas.mosaic, failure_stage)
         original_replace = target.replace
         monkeypatch.setattr(target, "replace", fail_replace)
-        ws.send_json({"t": "submit", "nonce": "qa-mosaic-failure", "target_id": "target1",
-                      "text": "뷰어 갱신 실패 중에도 저장된 의견", "source": "human"})
-        assert ws.receive_json()["t"] == "ack"
+        seed(client, ["뷰어 갱신 실패 중에도 저장된 의견"], sources=["human"])
         update = ws.receive_json()
         assert update["t"] in {"snapshot", "delta"}, update
         points = update.get("points", update.get("added", []))
         assert len(points) == 1
-        response = client.post("/data/query", headers={
-            "authorization": "Bearer " + hello["session_token"],
-        }, json={"type": "json", "sql": "SELECT COUNT(*) AS n FROM dataset"})
+        response = client.post("/data/query", json={
+            "type": "json", "sql": "SELECT COUNT(*) AS n FROM dataset"})
         health = client.get("/healthz").json()
         assert "QA injected relation replacement failure" in health["last_error"]
         # A viewer query must either report its unavailability or include the
@@ -51,9 +48,8 @@ def test_failed_viewer_refresh_does_not_silently_serve_stale_rows(client, monkey
         assert admin_response.status_code == 503
         monkeypatch.setattr(target, "replace", original_replace)
         assert client.portal.call(atlas.state.refresh_mosaic) is True
-        recovered = client.post("/data/query", headers={
-            "authorization": "Bearer " + hello["session_token"],
-        }, json={"type": "json", "sql": "SELECT COUNT(*) AS n FROM dataset"})
+        recovered = client.post("/data/query", json={
+            "type": "json", "sql": "SELECT COUNT(*) AS n FROM dataset"})
         assert recovered.status_code == 200
         assert recovered.json() == [{"n": 1}]
         health = client.get("/healthz").json()
@@ -66,10 +62,6 @@ def test_inflight_query_reports_failure_even_if_rebuild_recovers(client, monkeyp
     from threading import Event
 
     atlas = client.app.state.atlas
-    with client.websocket_connect("/ws") as ws:
-        ws.send_json({"t": "hello", "protocol": 1, "code": ACCESS_CODES["writer1"]})
-        token = ws.receive_json()["session_token"]
-        ws.receive_json()
     started, release = Event(), Event()
     query = atlas.mosaic.participant.query
     replace = atlas.mosaic.replace
@@ -86,9 +78,8 @@ def test_inflight_query_reports_failure_even_if_rebuild_recovers(client, monkeyp
 
     monkeypatch.setattr(atlas.mosaic.participant, "query", delayed_query)
     with ThreadPoolExecutor(max_workers=1) as executor:
-        result = executor.submit(client.post, "/data/query", headers={
-            "authorization": "Bearer " + token,
-        }, json={"type": "json", "sql": "SELECT COUNT(*) AS n FROM dataset"})
+        result = executor.submit(client.post, "/data/query", json={
+            "type": "json", "sql": "SELECT COUNT(*) AS n FROM dataset"})
         try:
             assert started.wait(5)
             monkeypatch.setattr(atlas.mosaic, "replace", failed_replace)

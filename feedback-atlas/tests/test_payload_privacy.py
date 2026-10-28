@@ -135,10 +135,9 @@ def test_reviewer_id_appears_nowhere_in_any_participant_frame():
         protocol.snapshot(rev=1, layout_rev=1, points=points),
         protocol.delta(from_rev=0, rev=1, layout_rev=1, added=points, moved=[
             {"id": op.id, "x": 0.1, "y": 0.2}]),
-        protocol.ack(nonce="c-1", id=op.id, rev=1),
-        protocol.error("UNKNOWN_ID"),
+        protocol.error("NO_CHATS"),
         protocol.hello_ok(channel="participant", rev=1, layout_rev=1,
-                          targets=ROSTER.targets(), role="student"),
+                          targets=ROSTER.targets()),
     ]
     for frame in frames:
         blob = json.dumps(frame, ensure_ascii=False)
@@ -146,19 +145,17 @@ def test_reviewer_id_appears_nowhere_in_any_participant_frame():
 
 
 def test_participant_hello_ok_carries_no_display_name_at_all():
-    """Not even the viewer's own real name crosses the participant channel.
+    """No author name crosses the participant channel.
 
-    hello_ok returns `role`, never a name. With no names on the channel there is
-    nothing for a curious participant to correlate points against -- which is a
-    stronger property than merely omitting the author of each point.
+    With no author names on the channel there is nothing for a viewer to
+    correlate points against -- a stronger property than merely omitting the
+    author of each point.
     """
     frame = protocol.hello_ok(channel="participant", rev=0, layout_rev=0,
-                              targets=[{"id": "kim.seoyeon", "display_name": "김서연"}],
-                              role="student")
-    assert "roster" not in frame
-    assert frame["role"] == "student"
-    # Target display names are present on purpose: the compose form has to name
-    # the projects. Those are the presenters, not the authors of feedback.
+                              targets=[{"id": "kim.seoyeon", "display_name": "김서연"}])
+    assert "roster" not in frame and "role" not in frame
+    # Target display names are present on purpose: the legend has to name the
+    # projects. Those are the presenters, not the authors of feedback.
     assert frame["targets"][0]["display_name"] == "김서연"
 
 

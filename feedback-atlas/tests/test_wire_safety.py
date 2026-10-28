@@ -22,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # -> feedback-atla
 
 from src.models import new_opinion  # noqa: E402
 from src.payloads import admin_point, admin_points, participant_point, participant_points  # noqa: E402
-from src.protocol import ack, delta, error, hello_ok, pong, snapshot  # noqa: E402
+from src.protocol import delta, error, hello_ok, pong, snapshot  # noqa: E402
 from src.roster import Roster  # noqa: E402
 
 ROSTER = Roster.from_csv_text(
@@ -73,15 +73,14 @@ def test_every_frame_type_survives_a_strict_parse_with_korean_content():
     admin = admin_points([OP], {OP.id: (0.1, -0.2)}, ROSTER)
     frames = [
         hello_ok(channel="participant", rev=1, layout_rev=1,
-                 targets=ROSTER.targets(), role="student"),
+                 targets=ROSTER.targets()),
         hello_ok(channel="admin", rev=1, layout_rev=1, targets=ROSTER.targets(),
                  roster=[{"id": "kang.minsu", "display_name": "강민수", "role": "student"}]),
         snapshot(rev=1, layout_rev=1, points=points),
         snapshot(rev=1, layout_rev=1, points=admin),
         delta(from_rev=0, rev=1, layout_rev=1, added=points,
               moved=[{"id": OP.id, "x": 0.1, "y": -0.2}]),
-        ack(nonce="c-1", id=OP.id, rev=1),
-        error("UNKNOWN_ID", fatal=True),
+        error("PROTOCOL_MISMATCH", fatal=True),
         pong(),
     ]
     for frame in frames:

@@ -7,15 +7,15 @@ server at the same moment. So the central test here connects both and asserts, o
 one broadcast, that the admin socket sees reviewer_id and the participant socket
 does not.
 
-The other thing under test is that admin is a *place*, not a permission: there is
-no frame a participant socket can send to become one.
+The other things under test: admin is a *place*, not a permission -- there is no
+frame a participant socket can send to become one -- and the participant channel
+is anonymous and read-only.
 
 Runs with ATLAS_UNSAFE_FAKE_EMBEDDER=1, so no model is ever downloaded.
 
 Run:  python -m pytest feedback-atlas/tests/test_server_routes.py
 """
 import sys
-import time
 from pathlib import Path
 
 import pytest
@@ -24,7 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # -> feedback-atla
 
 from src.config import load_config  # noqa: E402
 from src.protocol import PROTOCOL_VERSION  # noqa: E402
-from tests.auth_helpers import ACCESS_CODES, write_access_codes, write_access_codes_for  # noqa: E402
+from tests.seed_helpers import seed  # noqa: E402
 
 pytestmark = [pytest.mark.needs_fastapi, pytest.mark.needs_httpx]
 
@@ -46,24 +46,19 @@ def client(tmp_path):
 
     roster = tmp_path / "roster.csv"
     roster.write_text(ROSTER_CSV, encoding="utf-8")
-    access = write_access_codes(tmp_path)
     cfg = load_config({
         "ATLAS_ADMIN_CODE": CODE,
         "ATLAS_ROSTER": str(roster),
-        "ATLAS_ACCESS_CODES": str(access),
         "ATLAS_DB": str(tmp_path / "atlas.db"),
         "ATLAS_UNSAFE_FAKE_EMBEDDER": "1",
         "ATLAS_SKIP_WARMUP": "1",
         "ATLAS_ALLOW_INSECURE_HTTP": "1",
-        "ATLAS_AUTO_WEEK": "0",
     })
     with TestClient(create_app(cfg)) as c:
         yield c
 
 
 def _hello(ws, **extra):
-    if "id" in extra and "code" not in extra and "session_token" not in extra:
-        extra["code"] = ACCESS_CODES.get(str(extra["id"]).strip().lower())
     ws.send_json({"t": "hello", "protocol": PROTOCOL_VERSION, **extra})
     return ws.receive_json()
 
@@ -79,8 +74,8 @@ def _drain_until(ws, kind, limit=8):
 def test_the_rate_limiter_allows_a_burst_then_throttles_and_refills():
     """Not a security control -- the link is shared with the room by design.
 
-    It stops one stuck client from queueing thirty recomputes and starving
-    everyone else's submissions during the exact minute they are all submitting.
+    It stops one stuck client from flooding the socket loop that thirty other
+    viewers share.
     """
     from src.server import RateLimiter
     limiter = RateLimiter(per_second=1.0, burst=5)
@@ -100,9 +95,7 @@ def test_a_broken_roster_file_does_not_replace_a_working_one(tmp_path):
 
     roster = tmp_path / "roster.csv"
     roster.write_text(ROSTER_CSV, encoding="utf-8")
-    access = write_access_codes(tmp_path)
     atlas = Atlas(_load({"ATLAS_ADMIN_CODE": CODE, "ATLAS_ROSTER": str(roster),
-                         "ATLAS_ACCESS_CODES": str(access),
                          "ATLAS_DB": str(tmp_path / "a.db"),
                          "ATLAS_UNSAFE_FAKE_EMBEDDER": "1", "ATLAS_SKIP_WARMUP": "1",
                          "ATLAS_ALLOW_INSECURE_HTTP": "1"}))
@@ -115,7 +108,6 @@ def test_a_broken_roster_file_does_not_replace_a_working_one(tmp_path):
     assert atlas.roster.resolve("writer1") is not None
 
     roster.write_text(ROSTER_CSV + "writer3,작성자3,observer\n", encoding="utf-8")
-    write_access_codes_for(tmp_path, ["target1", "target2", "writer1", "writer2", "writer3"])
     atlas.reload_roster()
     assert len(atlas.roster) == 5
     assert atlas.state.roster.resolve("writer3") is not None, \
@@ -123,28 +115,28 @@ def test_a_broken_roster_file_does_not_replace_a_working_one(tmp_path):
     atlas.store.close()
 
 
-def test_healthz_reports_state_and_never_the_access_code(client):
+def test_healthz_reports_state_and_never_the_admin_code(client):
     body = client.get("/healthz").json()
     assert body["ok"] is True and body["protocol"] == PROTOCOL_VERSION
     assert body["cache_key"].startswith("fake:")   # the fake embedder is visible
     assert CODE not in str(body)
 
 
-def test_an_unlisted_id_never_gets_past_hello(client):
+def test_anyone_gets_the_handshake_and_a_snapshot_without_a_code(client):
     with client.websocket_connect("/ws") as ws:
-        reply = _hello(ws, id="wanderer", code="not-a-real-code")
-        assert reply["t"] == "error" and reply["code"] == "BAD_ACCESS_CODE"
-        assert reply["fatal"] is True
-
-
-def test_a_listed_id_gets_the_handshake_and_a_snapshot(client):
-    with client.websocket_connect("/ws") as ws:
-        reply = _hello(ws, id="  WRITER1 ")      # sloppy paste still resolves
-        assert reply["t"] == "hello_ok"
-        assert reply["channel"] == "participant" and reply["role"] == "observer"
+        reply = _hello(ws)
+        assert reply["t"] == "hello_ok" and reply["channel"] == "participant"
         assert [t["id"] for t in reply["targets"]] == ["target1", "target2"]
-        assert "roster" not in reply
+        assert "roster" not in reply and "role" not in reply
+        assert "session_token" not in reply
         assert ws.receive_json()["t"] == "snapshot"
+
+
+def test_a_first_frame_that_is_not_hello_is_refused(client):
+    with client.websocket_connect("/ws") as ws:
+        ws.send_json({"t": "resync", "have_rev": 0})
+        reply = ws.receive_json()
+        assert reply["code"] == "MALFORMED" and reply["fatal"] is True
 
 
 def test_a_stale_client_is_told_to_refresh_rather_than_mis_parsing(client):
@@ -164,32 +156,43 @@ def test_a_participant_socket_cannot_be_upgraded_by_sending_the_code(client):
     """Admin is a different path, a different channel and a different serialiser.
     There is deliberately no frame that promotes a connection in place."""
     with client.websocket_connect("/ws") as ws:
-        assert _hello(ws, id="writer1")["channel"] == "participant"
+        assert _hello(ws)["channel"] == "participant"
         _drain_until(ws, "snapshot")
         ws.send_json({"t": "hello", "protocol": PROTOCOL_VERSION, "code": CODE})
         assert ws.receive_json()["t"] == "error"
 
 
-def test_a_submission_reaches_a_second_participant(client):
+def test_a_participant_cannot_write_and_nobody_else_hears_about_it(client):
+    """The participant channel is read-only: a submit frame from an old page is
+    an unknown message, answered to the sender alone, and nothing is stored."""
     with client.websocket_connect("/ws") as a, client.websocket_connect("/ws") as b:
-        _hello(a, id="writer1")
+        _hello(a)
         _drain_until(a, "snapshot")
-        _hello(b, id="writer2")
+        _hello(b)
         _drain_until(b, "snapshot")
-
         a.send_json({"t": "submit", "nonce": "n1", "target_id": "target1",
-                     "text": "소리가 몸 안쪽에서 나는 것처럼 들렸어요.",
-                     "source": "human", "week": 2})
-        acked = _drain_until(a, "ack")
-        assert acked["nonce"] == "n1" and acked["rev"] == 1
+                     "text": "소리가 몸 안쪽에서 나는 것처럼 들렸어요."})
+        assert _drain_until(a, "error")["code"] == "MALFORMED"
+        b.send_json({"t": "ping"})
+        assert b.receive_json()["t"] == "pong", "a refusal was broadcast to the room"
+    assert client.get("/healthz").json()["opinions"] == 0
+    assert client.app.state.atlas.store.all_opinions() == []
 
+
+def test_a_seeded_opinion_reaches_a_connected_viewer(client):
+    """How opinions arrive now: written to the store on the server, then picked up
+    by the corpus reload SIGUSR1 triggers."""
+    with client.websocket_connect("/ws") as ws:
+        _hello(ws)
+        _drain_until(ws, "snapshot")
+        seed(client, ["소리가 몸 안쪽에서 나는 것처럼 들렸어요."], week=2, sources=["human"])
         arrived = None
         for _ in range(8):
-            frame = b.receive_json()
+            frame = ws.receive_json()
             if frame["t"] in ("delta", "snapshot"):
                 arrived = frame
                 break
-        assert arrived is not None, "the second client never saw the new opinion"
+        assert arrived is not None, "the viewer never saw the new opinion"
         points = arrived.get("added") or arrived.get("points")
         assert points[0]["text"].startswith("소리가")
         assert points[0]["week"] == 2 and points[0]["source"] == "human"
@@ -199,14 +202,12 @@ def test_one_broadcast_shows_authorship_to_admin_and_not_to_participants(client)
     """The defect this file is named for, reproduced in the only configuration
     that could ever have exposed it: both channels live at once."""
     with client.websocket_connect("/ws") as p, client.websocket_connect("/ws/admin") as a:
-        _hello(p, id="writer1")
+        _hello(p)
         _drain_until(p, "snapshot")
         _hello(a, code=CODE)
         _drain_until(a, "snapshot")
 
-        p.send_json({"t": "submit", "nonce": "n1", "target_id": "target1",
-                     "text": "불편했는데 그 불편함이 좋았습니다.", "source": "human"})
-        _drain_until(p, "ack")
+        seed(client, ["불편했는데 그 불편함이 좋았습니다."], sources=["human"])
 
         p_frame = None
         for _ in range(8):
@@ -238,26 +239,11 @@ def test_the_admin_handshake_carries_the_roster_and_the_participant_one_does_not
         assert "작성자1" in names
 
 
-def test_a_refused_submission_answers_only_the_sender(client):
-    with client.websocket_connect("/ws") as a, client.websocket_connect("/ws") as b:
-        _hello(a, id="writer1")
-        _drain_until(a, "snapshot")
-        _hello(b, id="writer2")
-        _drain_until(b, "snapshot")
-        a.send_json({"t": "submit", "nonce": "n1", "target_id": "target1", "text": "   "})
-        assert _drain_until(a, "error")["code"] == "EMPTY_TEXT"
-        b.send_json({"t": "ping"})
-        assert b.receive_json()["t"] == "pong", "a refusal was broadcast to the room"
-
-
 def test_resync_returns_a_full_snapshot_at_the_current_rev(client):
+    seed(client, [f"의견 {i}" for i in range(3)])
     with client.websocket_connect("/ws") as ws:
-        _hello(ws, id="writer1")
+        _hello(ws)
         _drain_until(ws, "snapshot")
-        for i in range(3):
-            ws.send_json({"t": "submit", "nonce": f"n{i}", "target_id": "target1",
-                          "text": f"의견 {i}"})
-            _drain_until(ws, "ack")
         ws.send_json({"t": "resync", "have_rev": 0})
         snap = _drain_until(ws, "snapshot")
         assert snap["rev"] == 3 and len(snap["points"]) == 3
@@ -267,36 +253,24 @@ def test_an_oversized_or_malformed_frame_does_not_drop_the_connection(client):
     """One broken client must not be able to take its own session down, let alone
     anyone else's."""
     with client.websocket_connect("/ws") as ws:
-        _hello(ws, id="writer1")
+        _hello(ws)
         _drain_until(ws, "snapshot")
         ws.send_text("this is not json")
         assert _drain_until(ws, "error")["code"] == "MALFORMED"
-        ws.send_text('{"t":"submit","text":"' + "가" * 9000 + '"}')
+        ws.send_text('{"t":"ping","pad":"' + "가" * 9000 + '"}')
         assert _drain_until(ws, "error")["code"] == "TOO_LARGE"
         ws.send_json({"t": "ping"})
         assert ws.receive_json()["t"] == "pong"
 
 
 def _seed(client, n=4):
-    with client.websocket_connect("/ws") as ws:
-        _hello(ws, id="writer1")
-        _drain_until(ws, "snapshot")
-        texts = ["소리가 몸 안쪽에서 나는 것처럼 들렸어요.",
-                 "소리가 몸 안쪽에서 나는 것처럼 들렸어요.",
-                 "명도 대비가 낮아 세부 형태의 식별이 어렵습니다.",
-                 "끝나고 나서 한참 아무 말도 못 했습니다."][:n]
-        ids = []
-        for i, text in enumerate(texts):
-            ws.send_json({"t": "submit", "nonce": f"s{i}", "target_id": "target1",
-                          "text": text, "source": "ai" if i % 2 else "human"})
-            ids.append(_drain_until(ws, "ack")["id"])
-        # Wait for a layout, so a neighbour query is answered from real vectors
-        # rather than from a corpus that has not been projected yet.
-        for _ in range(40):
-            if client.get("/healthz").json()["layout_rev"] > 0:
-                break
-            time.sleep(0.1)
-        return ids
+    texts = ["소리가 몸 안쪽에서 나는 것처럼 들렸어요.",
+             "소리가 몸 안쪽에서 나는 것처럼 들렸어요.",
+             "명도 대비가 낮아 세부 형태의 식별이 어렵습니다.",
+             "끝나고 나서 한참 아무 말도 못 했습니다."][:n]
+    # Wait for a layout, so a neighbour query is answered from real vectors
+    # rather than from a corpus that has not been projected yet.
+    return seed(client, texts, sources=["human", "ai"], wait_for_layout=True)
 
 
 def test_a_participant_cannot_ask_for_neighbours(client):
@@ -305,7 +279,7 @@ def test_a_participant_cannot_ask_for_neighbours(client):
     channel is the one with thirty sockets on it."""
     ids = _seed(client)
     with client.websocket_connect("/ws") as ws:
-        assert _hello(ws, id="writer1")["channel"] == "participant"
+        assert _hello(ws)["channel"] == "participant"
         _drain_until(ws, "snapshot")
         ws.send_json({"t": "neighbors", "id": ids[0], "k": 3})
         assert _drain_until(ws, "error")["code"] == "NOT_AUTHENTICATED"
@@ -340,7 +314,7 @@ def test_an_unknown_opinion_id_is_an_error_not_an_empty_answer(client):
         assert _drain_until(ws, "error")["code"] == "UNKNOWN_OPINION"
 
 
-def test_export_requires_the_access_code(client):
+def test_export_requires_the_admin_code(client):
     """The export carries every reviewer_id in the corpus, so it is the single
     most sensitive surface in the app."""
     _seed(client, n=2)
@@ -377,7 +351,7 @@ def test_export_can_be_narrowed_to_a_selection(client):
     assert all(any(i in r for i in ids[:2]) for r in rows)
 
 
-def test_submissions_survive_a_restart_of_the_app(tmp_path):
+def test_opinions_survive_a_restart_of_the_app(tmp_path):
     """PRD 6, through the real startup path rather than the Store alone."""
     from fastapi.testclient import TestClient
 
@@ -385,25 +359,18 @@ def test_submissions_survive_a_restart_of_the_app(tmp_path):
 
     roster = tmp_path / "roster.csv"
     roster.write_text(ROSTER_CSV, encoding="utf-8")
-    access = write_access_codes(tmp_path)
     env = {"ATLAS_ADMIN_CODE": CODE, "ATLAS_ROSTER": str(roster),
-           "ATLAS_ACCESS_CODES": str(access),
            "ATLAS_DB": str(tmp_path / "atlas.db"),
            "ATLAS_UNSAFE_FAKE_EMBEDDER": "1", "ATLAS_SKIP_WARMUP": "1",
-           "ATLAS_ALLOW_INSECURE_HTTP": "1", "ATLAS_AUTO_WEEK": "0"}
+           "ATLAS_ALLOW_INSECURE_HTTP": "1"}
 
     with TestClient(create_app(load_config(env))) as c:
-        with c.websocket_connect("/ws") as ws:
-            _hello(ws, id="writer1")
-            _drain_until(ws, "snapshot")
-            ws.send_json({"t": "submit", "nonce": "n1", "target_id": "target1",
-                          "text": "재시작 후에도 남아야 하는 의견"})
-            _drain_until(ws, "ack")
+        seed(c, ["재시작 후에도 남아야 하는 의견"])
 
     with TestClient(create_app(load_config(env))) as c:
         assert c.get("/healthz").json()["opinions"] == 1
         with c.websocket_connect("/ws") as ws:
-            _hello(ws, id="writer2")
+            _hello(ws)
             snap = _drain_until(ws, "snapshot")
             assert snap["points"][0]["text"] == "재시작 후에도 남아야 하는 의견"
             assert "reviewer_id" not in snap["points"][0]

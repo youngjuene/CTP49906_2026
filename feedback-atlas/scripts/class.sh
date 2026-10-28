@@ -14,9 +14,9 @@ url() {
   health_ok || { echo 'HTTPS server is not ready. Run scripts/class.sh start.' >&2; return 1; }
   .venv/bin/python scripts/make_qr.py "$URL" .run/qr.png
   echo "학생 공유 주소: $URL"
+  echo "대화 지도: $URL/chats.html"
   echo "관리자: $URL/admin"
   echo "슬라이드용 QR: $PWD/.run/qr.png"
-  echo '각 참가자에게 본인의 고정 개인 접근 코드만 따로 전달하세요.'
 }
 
 start() {

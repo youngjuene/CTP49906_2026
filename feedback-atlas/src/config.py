@@ -23,7 +23,6 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from src.deltas import MOVE_EPSILON
-from src.models import WEEKS
 
 
 @dataclass(frozen=True)
@@ -134,8 +133,6 @@ class AtlasConfig:
     db_path: str = "atlas.db"
     embedding_model: str = DEFAULT_MODEL
     device: str = "cpu"
-    default_week: int = 1
-    auto_week: bool = True
     # Below this many opinions, project with PCA. UMAP's spectral init is
     # unusable on tiny inputs and its layout is dominated by initialisation
     # randomness up to ~50. Configurable because crossing it *reorganises the
@@ -153,7 +150,6 @@ class AtlasConfig:
     # a whole class typing at once -- never fires at all.
     debounce_s: float = 0.4
     max_debounce_s: float = 2.0
-    max_text_chars: int = 1000
     move_epsilon: float = MOVE_EPSILON
     fake_embedder: bool = False
     warm_umap: bool = True
@@ -163,11 +159,7 @@ class AtlasConfig:
     # vendored bundle on the client, and WebGPU in the browser -- and a room where
     # any of those is missing should still get its map.
     enable_viewer: bool = True
-    access_codes_path: str = ".run/access-codes.json"
     require_https: bool = True
-    enable_demo: bool = False
-    demo_db_path: str = ".run/demo/atlas.db"
-    is_demo: bool = False
     # Written by scripts/build_chat_atlas.py, read per request by /api/chats.
     chats_path: str = ".run/chats/atlas.json"
 
@@ -203,22 +195,12 @@ def load_config(env: Mapping[str, str] | None = None) -> AtlasConfig:
     roster_path = (env.get("ATLAS_ROSTER") or "").strip()
     if not roster_path:
         raise ValueError(
-            "ATLAS_ROSTER is not set. Registration is strict: an unlisted id "
-            "cannot get in, so there is nothing sensible to do without a roster."
+            "ATLAS_ROSTER is not set. The roster names the students whose work "
+            "the map is about, and the authors the admin view shows."
         )
 
     model = env.get("ATLAS_EMBEDDING_MODEL", DEFAULT_MODEL).strip() or DEFAULT_MODEL
     resolve_spec(model)  # fail here, not at model-load time
-
-    default_week = _int_env(env, "ATLAS_DEFAULT_WEEK", 1)
-    if default_week not in WEEKS:
-        # Not clamped. An out-of-range default silently stamps every submission
-        # that omits a week with a value no week checkbox can select, so those
-        # opinions are on the map and invisible -- the worst of both.
-        raise ValueError(
-            f"ATLAS_DEFAULT_WEEK={default_week} is not one of {WEEKS}; every "
-            "submission that omits a week would be filed under a week the filter "
-            "cannot show")
 
     threshold = _int_env(env, "ATLAS_PCA_UMAP_THRESHOLD", 80)
     if threshold < 3:
@@ -232,15 +214,10 @@ def load_config(env: Mapping[str, str] | None = None) -> AtlasConfig:
         db_path=env.get("ATLAS_DB", "atlas.db"),
         embedding_model=model,
         device=env.get("ATLAS_DEVICE", "cpu"),
-        default_week=default_week,
-        auto_week=env.get("ATLAS_AUTO_WEEK", "1") != "0",
         pca_umap_threshold=threshold,
         fake_embedder=env.get("ATLAS_UNSAFE_FAKE_EMBEDDER", "") == "1",
         warm_umap=env.get("ATLAS_SKIP_WARMUP", "") != "1",
         enable_viewer=env.get("ATLAS_DISABLE_VIEWER", "") != "1",
-        access_codes_path=env.get("ATLAS_ACCESS_CODES", ".run/access-codes.json"),
         require_https=env.get("ATLAS_ALLOW_INSECURE_HTTP", "") != "1",
-        enable_demo=env.get("ATLAS_ENABLE_DEMO", "") == "1",
-        demo_db_path=env.get("ATLAS_DEMO_DB", ".run/demo/atlas.db"),
         chats_path=env.get("ATLAS_CHATS", ".run/chats/atlas.json"),
     )

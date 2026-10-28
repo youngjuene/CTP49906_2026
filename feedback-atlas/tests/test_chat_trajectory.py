@@ -7,8 +7,8 @@ here with a small synthetic share page -- data-testid roles, a <time> beside (no
 inside) the student's message, and the furniture that must be dropped -- rather
 than trusted to keep working.
 
-Also covered: the build lays out sentences but not status lines, the output is
-private, and /api/chats answers roster members only.
+Also covered: the build lays out sentences but not status lines, the build file
+is private on disk, and /api/chats serves it to anyone with the link.
 
 Run:  python -m pytest feedback-atlas/tests/test_chat_trajectory.py
 """
@@ -25,7 +25,6 @@ from scripts.build_chat_atlas import main as build  # noqa: E402
 from scripts.chat_to_trajectory import (  # noqa: E402
     convert, merge_short, parse_conversation, split_long, split_sentences)
 from src.roster import Roster  # noqa: E402
-from tests.auth_helpers import ACCESS_CODES, write_access_codes  # noqa: E402
 
 ROSTER_CSV = (
     "id,display_name,role\n"
@@ -183,43 +182,33 @@ def client(tmp_path, roster):
     from src.config import load_config
     from src.server import create_app
 
-    access = write_access_codes(tmp_path)
-    roster.write_text("id,display_name,role\n"
-                      + "".join(f"{i},{i},student\n" for i in ACCESS_CODES), encoding="utf-8")
     cfg = load_config({
         "ATLAS_ADMIN_CODE": "admin-code-for-tests",
         "ATLAS_ROSTER": str(roster),
-        "ATLAS_ACCESS_CODES": str(access),
         "ATLAS_DB": str(tmp_path / "atlas.db"),
         "ATLAS_CHATS": str(tmp_path / "atlas.json"),
         "ATLAS_UNSAFE_FAKE_EMBEDDER": "1",
         "ATLAS_SKIP_WARMUP": "1",
         "ATLAS_ALLOW_INSECURE_HTTP": "1",
-        "ATLAS_AUTO_WEEK": "0",
     })
     with TestClient(create_app(cfg)) as c:
         yield c
 
 
-def test_chats_need_a_roster_member(client, tmp_path):
+def test_chats_are_open_to_anyone_with_the_link(client, tmp_path):
     (tmp_path / "atlas.json").write_text('{"points":[]}', encoding="utf-8")
-    assert client.post("/api/chats", json={}).status_code == 403
-    assert client.post("/api/chats", json={"code": "wrong"}).status_code == 403
-    assert client.post("/api/chats", json={"session_token": "forged.token"}).status_code == 403
-    ok = client.post("/api/chats", json={"code": ACCESS_CODES["writer1"]})
+    ok = client.get("/api/chats")
     assert ok.status_code == 200 and ok.json() == {"points": []}
     assert ok.headers["cache-control"] == "no-store"
-    assert client.post("/api/chats", json={"code": "admin-code-for-tests"}).status_code == 200
 
 
-def test_a_session_token_opens_chats(client, tmp_path):
+def test_a_rebuild_is_served_without_a_restart(client, tmp_path):
     (tmp_path / "atlas.json").write_text('{"points":[]}', encoding="utf-8")
-    with client.websocket_connect("/ws") as ws:
-        ws.send_json({"t": "hello", "protocol": 1, "code": ACCESS_CODES["writer1"]})
-        token = ws.receive_json()["session_token"]
-    assert client.post("/api/chats", json={"session_token": token}).status_code == 200
+    assert client.get("/api/chats").json() == {"points": []}
+    (tmp_path / "atlas.json").write_text('{"points":[{"id":"a#0"}]}', encoding="utf-8")
+    assert client.get("/api/chats").json() == {"points": [{"id": "a#0"}]}
 
 
 def test_no_chats_yet_is_a_clear_404(client):
-    r = client.post("/api/chats", json={"code": ACCESS_CODES["writer1"]})
+    r = client.get("/api/chats")
     assert r.status_code == 404 and r.json()["code"] == "NO_CHATS"

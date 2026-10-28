@@ -25,8 +25,6 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from tests.auth_helpers import ACCESS_CODES, write_access_codes_for  # noqa: E402
-
 CODE = "qa-code"
 ROSTER = (
     "id,display_name,role\n"
@@ -59,34 +57,41 @@ def _free_port() -> int:
         return int(sock.getsockname()[1])
 
 
-def _seed_database(path: Path) -> None:
+def _insert_opinions(path: Path, texts, *, first: int = 1, minute: int = 0,
+                     target: str = "target1", source: str = "human", week: int = 2) -> list[str]:
     from src.models import Opinion
     from src.store import Store
-    from src.textnorm import text_hash
+    from src.textnorm import normalize_text, text_hash
 
     store = Store(str(path))
+    ids = []
     try:
         store.migrate()
-        for index, text in enumerate(("첫 의견입니다.", "두 번째 의견입니다.", "세 번째 의견입니다."), start=1):
+        for index, text in enumerate(texts, start=first):
             op = Opinion(
                 id=f"o_browser_{index}",
                 reviewer_id="writer1",
-                target_id="target1",
-                text=text,
-                source="human",
-                week=2,
-                timestamp=f"2026-09-08T00:00:0{index}.000Z",
+                target_id=target,
+                text=normalize_text(text),
+                source=source,
+                week=week,
+                timestamp=f"2026-09-08T00:{minute:02d}:{index:02d}.000Z",
             )
             store.insert_opinion(op, text_hash(op.text))
+            ids.append(op.id)
     finally:
         store.close()
+    return ids
+
+
+def _seed_database(path: Path) -> None:
+    _insert_opinions(path, ("첫 의견입니다.", "두 번째 의견입니다.", "세 번째 의견입니다."))
 
 
 class LiveServer:
     def __init__(self, tmpdir: Path):
         self.tmpdir = tmpdir
         self.roster = tmpdir / "roster.csv"
-        self.access = tmpdir / "access-codes.json"
         self.db = tmpdir / "atlas.db"
         self.port = _free_port()
         self.url = f"http://127.0.0.1:{self.port}/"
@@ -98,12 +103,10 @@ class LiveServer:
             **os.environ,
             "ATLAS_ADMIN_CODE": CODE,
             "ATLAS_ROSTER": str(self.roster),
-            "ATLAS_ACCESS_CODES": str(self.access),
             "ATLAS_DB": str(self.db),
             "ATLAS_UNSAFE_FAKE_EMBEDDER": "1",
             "ATLAS_SKIP_WARMUP": "1",
             "ATLAS_ALLOW_INSECURE_HTTP": "1",
-            "ATLAS_AUTO_WEEK": "0",
         }
         self.proc = subprocess.Popen(
             [
@@ -147,6 +150,16 @@ class LiveServer:
         assert self.proc is not None
         self.proc.send_signal(signal.SIGHUP)
 
+    def sigusr1(self) -> None:
+        assert self.proc is not None
+        self.proc.send_signal(signal.SIGUSR1)
+
+    def add_opinions(self, texts, *, first: int, **fields) -> list[str]:
+        """Write to the store and ask the server to reload, as seed_ai_opinions.py does."""
+        ids = _insert_opinions(self.db, texts, first=first, minute=1, **fields)
+        self.sigusr1()
+        return ids
+
     def close(self) -> None:
         self.stop()
         self.log.close()
@@ -159,7 +172,6 @@ def live_server():
         server = LiveServer(tmpdir)
         try:
             server.roster.write_text(ROSTER, encoding="utf-8")
-            write_access_codes_for(tmpdir, ["target1", "target2", "writer1"])
             _seed_database(server.db)
             server.start()
             yield server
@@ -183,17 +195,14 @@ def browser():
 
 def _enter(page, url: str) -> None:
     page.goto(url)
-    page.fill("#gate-code", ACCESS_CODES["writer1"])
-    page.click("#gate-submit")
     page.wait_for_selector("#view-main:not([hidden])", timeout=20_000)
     page.wait_for_selector("#map path[d], #map circle", state="attached", timeout=20_000)
 
 
-def _reenter_after_restart(page) -> None:
-    page.wait_for_selector("#view-gate:not([hidden])", timeout=20_000)
-    page.fill("#gate-code", ACCESS_CODES["writer1"])
-    page.click("#gate-submit")
-    page.wait_for_selector("#view-main:not([hidden])", timeout=20_000)
+def _reconnected(page) -> None:
+    page.wait_for_function("document.querySelector('#conn-text').textContent.trim() === '연결됨'",
+                           timeout=30_000)
+    assert page.get_attribute("#view-main", "hidden") is None
 
 
 def _route_viewer(page, body: str) -> None:
@@ -249,7 +258,7 @@ def test_reader_closed_choice_survives_server_restart(live_server, browser):
         live_server.stop()
         page.wait_for_function("document.querySelector('#conn-text').textContent.trim() !== '연결됨'", timeout=20_000)
         live_server.start()
-        _reenter_after_restart(page)
+        _reconnected(page)
 
         assert page.get_attribute("#tab-viewer", "aria-pressed") == "false"
         assert page.get_attribute("#map-card", "hidden") is None

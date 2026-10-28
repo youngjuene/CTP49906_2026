@@ -98,7 +98,7 @@ def test_start_uses_managed_https_service_and_prints_numeric_class_url(tmp_path)
     assert result.returncode == 0, result.stderr + result.stdout
     assert "학생 공유 주소: https://143.248.249.7:8888" in result.stdout
     assert "관리자: https://143.248.249.7:8888/admin" in result.stdout
-    assert "각 참가자에게 본인의 고정 개인 접근 코드만 따로 전달하세요." in result.stdout
+    assert "대화 지도: https://" in result.stdout and "/chats.html" in result.stdout
     assert "trycloudflare" not in result.stdout
     assert "cloudflared" not in result.stdout
     assert (root / ".run" / "qr.png").read_text() == "PNG"

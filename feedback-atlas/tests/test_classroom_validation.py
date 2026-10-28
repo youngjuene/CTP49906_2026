@@ -6,7 +6,7 @@ import io
 import pytest
 
 from test_server_routes import CODE
-from tests.auth_helpers import ACCESS_CODES
+from tests.seed_helpers import seed
 
 pytest_plugins = ["test_server_routes"]
 
@@ -47,16 +47,7 @@ def test_unicode_wrong_websocket_code_returns_an_error(client):
 @pytest.mark.parametrize("text", ['=HYPERLINK("https://example.invalid", "click")',
                                  "+1+1", "-1+1", "@SUM(1,2)"])
 def test_spreadsheet_export_treats_opinions_as_text(client, text):
-    with client.websocket_connect("/ws") as ws:
-        ws.send_json({
-            "t": "hello", "protocol": 1,
-            "id": "writer1", "code": ACCESS_CODES["writer1"],
-        })
-        ws.receive_json()
-        ws.receive_json()
-        ws.send_json({"t": "submit", "target_id": "target1", "text": text,
-                      "nonce": "csv-test"})
-        assert ws.receive_json()["t"] == "ack"
+    seed(client, [text])
     response = client.post("/api/export.csv", json={"code": CODE})
     rows = list(csv.DictReader(io.StringIO(response.content.decode("utf-8-sig"))))
     assert rows[0]["text"] == "'" + text

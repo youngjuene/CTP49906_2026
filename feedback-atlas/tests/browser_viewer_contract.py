@@ -5,12 +5,11 @@ GPU drawing; holding the device promise avoids pretending to implement WebGPU.
 """
 
 import json
+import time
 
 import pytest
 
 pytest.register_assert_rewrite("browser_viewer")
-
-from tests.auth_helpers import ACCESS_CODES
 
 pytest_plugins = ["browser_viewer"]
 
@@ -39,10 +38,17 @@ def open_viewer(live_server, context):
             if request.url.endswith("/data/query") and request.post_data else None)
     page.on("pageerror", lambda error: errors.append(str(error)))
     page.goto(live_server.url)
-    page.fill("#gate-code", ACCESS_CODES["writer1"])
-    page.click("#gate-submit")
     page.wait_for_selector("#viewer-card:not([hidden])")
     return page, queries, errors
+
+
+def wait_for_rows(page, live_server, n):
+    deadline = time.monotonic() + 15
+    while time.monotonic() < deadline:
+        if page.request.get(live_server.url + "healthz").json()["viewer"]["rows"] >= n:
+            return
+        time.sleep(0.1)
+    raise AssertionError(f"the viewer relation never reached {n} rows")
 
 
 def test_real_viewer_initializes_with_only_read_queries(live_server, context):
@@ -86,8 +92,7 @@ def test_real_viewer_refreshes_categories_and_table_without_reset(live_server, c
     text = "새 AI 의견도 같은 분석 화면에 나타납니다."
     with page.expect_response(lambda response: is_category_count(response, "source")
                               and "'ai'" in json.loads(response.request.post_data)["sql"]) as updated:
-        page.fill("#c-text", text)
-        page.click("#c-submit")
+        live_server.add_opinions([text], first=4, source="ai")
     assert updated.value.status == 200
     page.get_by_text(text, exact=True).first.wait_for(timeout=15_000)
     assert category.input_value() == json.dumps("source")
@@ -109,8 +114,7 @@ def test_empty_real_viewer_accepts_its_first_opinion(live_server, context):
     page, queries, errors = open_viewer(live_server, context)
     page.locator("#viewer-mount select").first.wait_for(timeout=15_000)
     text = "빈 분석 화면에 들어오는 첫 의견"
-    page.fill("#c-text", text)
-    page.click("#c-submit")
+    live_server.add_opinions([text], first=10)
     page.get_by_text(text, exact=True).first.wait_for(timeout=15_000)
     assert all(query["type"] != "exec" for query in queries), queries
     assert not errors, errors
@@ -130,8 +134,7 @@ def test_real_full_text_search_loads_worker_and_finds_new_data(live_server, cont
     search.press("Enter")
     expect(page.get_by_text("1 result.", exact=True)).to_be_visible(timeout=10_000)
     text = "qaFreshOpinion 새로 등록한 의견"
-    page.fill("#c-text", text)
-    page.click("#c-submit")
+    live_server.add_opinions([text], first=4)
     page.get_by_text(text, exact=True).first.wait_for(timeout=15_000)
     search.fill("qaFreshOpinion")
     search.press("Enter")
@@ -148,9 +151,8 @@ def test_real_viewer_crossfilter_survives_refresh_and_can_clear(live_server, con
     page.get_by_text("첫 의견입니다.", exact=True).first.wait_for(timeout=15_000)
     page.get_by_title("o_browser_1", exact=True).click()
     expect(page.get_by_text("두 번째 의견입니다.", exact=True)).to_have_count(0)
-    page.fill("#c-text", "필터 밖에서 새로 도착한 의견")
-    page.click("#c-submit")
-    page.wait_for_function("() => document.querySelector('#c-text').value === ''")
+    live_server.add_opinions(["필터 밖에서 새로 도착한 의견"], first=4)
+    wait_for_rows(page, live_server, 4)
     expect(page.get_by_text("첫 의견입니다.", exact=True)).to_be_visible()
     expect(page.get_by_text("두 번째 의견입니다.", exact=True)).to_have_count(0)
     page.get_by_title("Clear filters", exact=True).click()
@@ -165,7 +167,6 @@ def test_real_viewer_groups_many_targets_in_other_category(live_server, context)
     from src.models import Opinion
     from src.store import Store
     from src.textnorm import text_hash
-    from tests.auth_helpers import write_access_codes_for
 
     live_server.stop()
     with live_server.roster.open("w", newline="", encoding="utf-8") as file:
@@ -173,7 +174,6 @@ def test_real_viewer_groups_many_targets_in_other_category(live_server, context)
         writer.writerow(["id", "display_name", "role"])
         writer.writerow(["writer1", "Author", "observer"])
         writer.writerows([[f"target{i}", f"Group '{i}'", "student"] for i in range(12)])
-    write_access_codes_for(live_server.tmpdir, ["writer1"] + [f"target{i}" for i in range(12)])
     store = Store(str(live_server.db))
     try:
         store.migrate()

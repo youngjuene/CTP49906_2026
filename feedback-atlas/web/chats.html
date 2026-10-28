@@ -11,18 +11,14 @@
 </head>
 <body>
 
-<!-- 개인 접근 코드: 같은 탭에서 수업 지도에 이미 들어와 있으면 건너뜁니다. -->
-<section class="gate" id="gate" hidden>
-  <form class="gate-card" id="gate-form" autocomplete="off" novalidate>
+<!-- 대화 지도를 불러오지 못했을 때만 보입니다. -->
+<section class="gate" id="notice" hidden>
+  <div class="gate-card">
     <h1>대화 지도</h1>
     <p class="sub">학생과 AI의 대화를 문장 단위로 펼쳐, 대화가 의미 공간에서 지나간 길을 따라갑니다.</p>
-    <label for="gate-code">개인 접근 코드</label>
-    <input type="password" id="gate-code" autocapitalize="off" autocorrect="off"
-           spellcheck="false" enterkeyhint="go" required>
-    <p class="err" id="gate-error" role="alert" hidden></p>
-    <button class="btn pri" type="submit">열기</button>
+    <p class="err" id="notice-text" role="alert"></p>
     <p class="hint"><a href="/">수업 지도로 돌아가기</a></p>
-  </form>
+  </div>
 </section>
 
 <main class="app" id="app" hidden>

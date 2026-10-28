@@ -23,7 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # -> feedback-atla
 
 from src import protocol  # noqa: E402
 from src.protocol import (  # noqa: E402
-    ERROR_CODES, MESSAGES, PROTOCOL_VERSION, ack, delta, error, hello_ok,
+    ERROR_CODES, MESSAGES, PROTOCOL_VERSION, delta, error, hello_ok,
     parse_client_frame, pong, snapshot,
 )
 
@@ -34,11 +34,10 @@ POINT = {"id": "o1", "target_id": "kim.seoyeon", "text": "좋았어요.",
 
 def _all_server_frames():
     return [
-        hello_ok(channel="participant", rev=1, layout_rev=1, targets=[], role="student"),
+        hello_ok(channel="participant", rev=1, layout_rev=1, targets=[]),
         snapshot(rev=1, layout_rev=1, points=[POINT]),
         delta(from_rev=0, rev=1, layout_rev=1, added=[POINT], moved=[]),
-        ack(nonce="c-1", id="o1", rev=1),
-        error("EMPTY_TEXT"),
+        error("NO_CHATS"),
         pong(),
     ]
 
@@ -53,10 +52,10 @@ def test_korean_survives_both_json_escaping_settings():
     """ensure_ascii is a library default that differs between callers. Korean
     must round-trip identically either way, or error messages arrive as \\uXXXX
     soup on somebody's phone."""
-    frame = error("UNKNOWN_ID")
+    frame = error("NO_CHATS")
     for ensure_ascii in (True, False):
         assert json.loads(json.dumps(frame, ensure_ascii=ensure_ascii)) == frame
-    assert "명단" in frame["message"]
+    assert "대화" in frame["message"]
 
 
 def test_the_protocol_carries_no_week_filter_in_either_direction():
@@ -75,20 +74,20 @@ def test_the_protocol_carries_no_week_filter_in_either_direction():
     d = delta(from_rev=0, rev=1, layout_rev=1, added=[], moved=[])
     assert set(d) == {"t", "from_rev", "rev", "layout_rev", "added", "moved", "drift"}
 
-    # hello_ok's `weeks` is the compose form's vocabulary, not a filter: it is the
-    # full set, always.
+    # hello_ok's `weeks` is the legend's vocabulary, not a filter: it is the full
+    # set, always.
     assert hello_ok(channel="participant", rev=0, layout_rev=0,
-                    targets=[], role="student")["weeks"] == [1, 2, 3, 4]
+                    targets=[])["weeks"] == [1, 2, 3, 4]
 
 
-def test_hello_ok_tells_the_form_everything_it_needs_and_no_names():
+def test_the_participant_handshake_carries_targets_and_no_author_roster():
     frame = hello_ok(channel="participant", rev=0, layout_rev=0,
-                     targets=[{"id": "kim.seoyeon", "display_name": "김서연"}],
-                     role="observer")
-    assert frame["default_source"] == "ai"        # PRD 5.3
+                     targets=[{"id": "kim.seoyeon", "display_name": "김서연"}])
     assert frame["sources"] == ["ai", "human"]
-    assert frame["max_text_chars"] > 0
+    assert frame["targets"][0]["display_name"] == "김서연"
     assert "roster" not in frame                  # admin channel only
+    # Nothing a participant could write with: the channel is read-only.
+    assert not {"role", "session_token", "default_week", "max_text_chars"} & set(frame)
 
 
 def test_the_admin_handshake_is_the_only_one_carrying_a_roster():
@@ -100,7 +99,7 @@ def test_the_admin_handshake_is_the_only_one_carrying_a_roster():
 
 
 def test_every_error_code_has_korean_text_and_the_set_is_closed():
-    """A code with no message would reach a student as a blank red box."""
+    """A code with no message would reach a reader as a blank red box."""
     assert set(MESSAGES) == set(ERROR_CODES)
     for code in ERROR_CODES:
         message, hint = MESSAGES[code]
@@ -113,13 +112,10 @@ def test_every_error_code_has_korean_text_and_the_set_is_closed():
         raise AssertionError("an unknown error code must not produce a frame")
 
 
-def test_the_unknown_id_error_suspects_a_typo_before_it_blames_the_roster():
-    """PRD 5.1 asks for that order specifically. Most failures really are typos,
-    and sending someone to find the instructor first wastes the presentation."""
-    frame = error("UNKNOWN_ID", fatal=True)
-    assert "오타" in frame["hint"]
-    assert frame["hint"].index("오타") < frame["hint"].index("강사")
+def test_fatal_is_carried_on_the_frame():
+    frame = error("PROTOCOL_MISMATCH", fatal=True)
     assert frame["fatal"] is True
+    assert "새로고침" in frame["hint"]
 
 
 def test_an_oversized_frame_is_refused_before_it_is_parsed():
