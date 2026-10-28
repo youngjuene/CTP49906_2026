@@ -593,8 +593,9 @@ new ResizeObserver(() => {
 
 // ---------- 3D ----------
 // The same scene as the flat map, handed to chats3d.js to draw: which points are
-// shown and how each is coloured, the walked path, the current turn's line up to
-// the gliding cursor, and the turn route grown to the current turn.
+// shown and how each is coloured, a short fading trail behind the gliding
+// cursor, and the turn route grown to the current turn. Fewer lines than the
+// flat map on purpose: arcs loop around the centre and pile up fast.
 
 const view3d = createView3d($("map3d"), {
   onTap(p) {
@@ -607,6 +608,8 @@ const view3d = createView3d($("map3d"), {
   },
 });
 
+const TRAIL_3D = 6;               // steps of trail behind the cursor in 3D
+
 function draw3d() {
   const here = state.units[state.cur];
   if (!here) return;
@@ -614,7 +617,6 @@ function draw3d() {
   const ramp = rampScale();
   const css = getComputedStyle(document.documentElement);
   const grey = css.getPropertyValue("--other").trim() || "#94a3b8";
-  const start = turnStart(here.turn);
   const mine = (p) => p.conversation === state.conv.id;
   view3d.draw({
     points: state.data.points,
@@ -626,9 +628,7 @@ function draw3d() {
         ? state.clusterColor.get(p.cluster) : ramp((p.turn - 1) / turns);
       return { colour, alpha: p.seq > here.seq ? 0.45 : 1 };
     },
-    units: state.units,
-    walked: state.units.slice(0, start + 1),
-    turnLine: state.units.slice(Math.max(start - 1, 0), state.cur),
+    trail: state.units.slice(Math.max(state.cur - TRAIL_3D, 0), state.cur),
     cursor: state.disp3 || here,
     turnMark: `T${here.turn}`,
     route: $route.checked ? state.route.filter((c) => c.turn < here.turn) : [],

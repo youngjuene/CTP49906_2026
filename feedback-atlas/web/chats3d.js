@@ -100,16 +100,22 @@ export function createView3d(canvas, { onTap }) {
     for (const { q } of projected) { zMin = Math.min(zMin, q.z); zMax = Math.max(zMax, q.z); }
     const depth = (z) => 0.35 + 0.65 * ((z - zMin) / Math.max(zMax - zMin, 1e-6));   // far 0.35 .. near 1
 
-    // Paths first, points over them.
+    // Paths first, points over them. Only two: the turn route and the current
+    // turn. Arcs curve around the centre, so every earlier step drawn as well
+    // turns the cloud into a ball of loops by mid-conversation; the route
+    // already says where the conversation has been.
     ctx.lineJoin = "round"; ctx.lineCap = "round";
     const path = (list, head, colour, width, alpha) => {
       ctx.beginPath(); strokeArcs(list, head);
       ctx.strokeStyle = colour; ctx.lineWidth = width; ctx.globalAlpha = alpha; ctx.stroke();
     };
-    path(scene.units, null, v("--path"), 1, 0.12);
-    path(scene.walked, null, v("--path"), 1, 0.45);
     if (scene.route.length) path(scene.route, scene.routeHead, v("--path-walked"), 2.5, 0.8);
-    path(scene.turnLine, scene.cursor, v("--accent"), 2, 0.95);
+    // The cursor's trail: its last few steps, oldest faintest, so the arc it is
+    // travelling now reads clearly even inside a sixty-sentence answer.
+    const trail = [...scene.trail, scene.cursor];
+    for (let i = 1; i < trail.length; i++) {
+      path([trail[i - 1], trail[i]], null, v("--accent"), 2.2, 0.95 * (i / (trail.length - 1)) ** 1.5);
+    }
 
     // Other conversations are grey context: drawn in four depth bands, one fill
     // per band, no outline, no sort. Per-point fills for thousands of them are
