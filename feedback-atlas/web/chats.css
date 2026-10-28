@@ -123,6 +123,6 @@ a { color:var(--accent-strong) }
   .panel { max-height:none }
 }
 @media (max-width:520px) {
-  .ramp-label, .back { display:none }
+  .ramp-label { display:none }
   .btn { padding:0 8px }
 }
