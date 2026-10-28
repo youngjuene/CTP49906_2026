@@ -111,18 +111,27 @@ def _pin_status(rows, coords, offset: float = 0.04) -> dict[int, int]:
     return anchors
 
 
-def _clusters(rows, prose, X, coords, anchors, k: int, seed: int, prev=None):
+def _clusters(rows, prose, X, coords, anchors, k: int, seed: int, prev=None, unchanged=False):
     """-> (cluster id per row, cluster summaries). Status lines take the cluster
     of the sentence they are pinned to. With `prev` (the last build's clusters),
     clusters continue from their old centres and keep their ids and colours."""
     centres_from, fixed = None, {}
     if prev and len(prev["colors"]) == k:
-        hashes = [text_hash(rows[i]["text"]) for i in prose]
-        groups = [[j for j, h in enumerate(hashes) if prev["cluster"].get(h) == c] for c in range(k)]
+        was = [prev["cluster"].get(f"{rows[i]['conversation']}#{rows[i]['seq']}",
+                                 prev["cluster"].get(text_hash(rows[i]["text"]))) for i in prose]
+        groups = [[j for j, c0 in enumerate(was) if c0 == c] for c in range(k)]
         if all(groups):
-            centres_from = np.array([X[g].mean(axis=0) for g in groups])
+            # Means of the unit vectors, which is what cluster() fits on, so an
+            # unchanged corpus starts at the converged centres and stays put.
+            Xn = X / np.maximum(np.linalg.norm(X, axis=1, keepdims=True), 1e-12)
+            centres_from = np.array([Xn[g].mean(axis=0) for g in groups])
             fixed = dict(enumerate(prev["colors"]))
-    labels = cluster(X, k, seed=seed, centres=centres_from)
+    if unchanged and centres_from is not None and None not in was:
+        # Nothing new: keep membership exactly. A refit from the same centres can
+        # still flip a sentence that sits on a boundary by rounding alone.
+        labels = np.array(was)
+    else:
+        labels = cluster(X, k, seed=seed, centres=centres_from)
     per_row = np.full(len(rows), -1)
     per_row[prose] = labels
     for i, anchor in anchors.items():
@@ -151,8 +160,10 @@ def _clusters(rows, prose, X, coords, anchors, k: int, seed: int, prev=None):
 
 
 def _previous(path: Path, key: str):
-    """The last build's positions and clusters, keyed by sentence text, or None
-    when there is no usable previous build (missing, unreadable, other model)."""
+    """The last build's positions and clusters, or None when there is no usable
+    previous build (missing, unreadable, other model). Positions are keyed both by
+    point id ("conversation#seq") and by sentence text: the id keeps a sentence
+    said twice in two places, the text finds a sentence whose seq has shifted."""
     try:
         old = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
@@ -164,26 +175,35 @@ def _previous(path: Path, key: str):
         if p.get("kind") == "status":
             continue
         h = text_hash(p["text"])
+        xy[p["id"]] = (p["x"], p["y"])
         xy.setdefault(h, (p["x"], p["y"]))
         if "cluster" in p:
+            members[p["id"]] = p["cluster"]
             members.setdefault(h, p["cluster"])
     colors = [c["color"] for c in sorted(old.get("clusters", []), key=lambda c: c["id"])]
-    return {"xy": xy, "cluster": members, "colors": colors} if xy else None
+    ids = {p["id"] for p in old.get("points", []) if p.get("kind") != "status"}
+    return {"xy": xy, "ids": ids, "cluster": members, "colors": colors} if xy else None
 
 
-def _layout(X, hashes, prev, n_neighbors: int, seed: int) -> np.ndarray:
+def _unchanged(keys, prev) -> bool:
+    """True when every sentence is already on the previous map, in its place."""
+    return bool(prev) and all(k in prev["xy"] for k in keys) \
+        and prev["ids"] == {k for k in keys if "#" in k}
+
+
+def _layout(X, keys, prev, n_neighbors: int, seed: int) -> np.ndarray:
     """Project, starting from the previous build when there is one, and rotate
     the result onto its frame so a rebuild does not spin or rescale the map."""
     if not prev:
         return normalize_scale(project(X, n_neighbors=n_neighbors, seed=seed))
-    if set(hashes) == set(prev["xy"]):
+    if _unchanged(keys, prev):
         # Nothing new: a refit would only jiggle the map, so nothing moves.
-        return np.array([prev["xy"][h] for h in hashes], dtype=float)
-    known = [i for i, h in enumerate(hashes) if h in prev["xy"]]
+        return np.array([prev["xy"][k] for k in keys], dtype=float)
+    known = [i for i, k in enumerate(keys) if k in prev["xy"]]
     init = None
     if known:
         start = np.zeros((len(X), 2))
-        start[known] = [prev["xy"][hashes[i]] for i in known]
+        start[known] = [prev["xy"][keys[i]] for i in known]
         new = [i for i in range(len(X)) if i not in set(known)]
         if new:
             # A new sentence starts at the mean of its five closest known ones.
@@ -193,7 +213,7 @@ def _layout(X, hashes, prev, n_neighbors: int, seed: int) -> np.ndarray:
             start[new] = start[np.array(known)[nearest]].mean(axis=1)
         init = start
     coords = project(X, n_neighbors=n_neighbors, seed=seed, init=init)
-    return stabilize(coords, hashes, prev["xy"])[0]
+    return stabilize(coords, keys, prev["xy"])[0]
 
 
 def _same_conversation(units) -> tuple | None:
@@ -300,17 +320,22 @@ def main(argv: list[str] | None = None) -> int:
 
     prev = None if args.fresh else _previous(out, key)
     hashes = [text_hash(rows[i]["text"]) for i in prose]
+    ids = [f"{rows[i]['conversation']}#{rows[i]['seq']}" for i in prose]
+    # Match a sentence to its previous self by id first (same place in the same
+    # conversation), else by its text.
+    keys = [i if prev and i in prev["xy"] else h for i, h in zip(ids, hashes, strict=True)]
     coords = np.zeros((len(rows), 2))
-    coords[prose] = _layout(X, hashes, prev, args.n_neighbors, args.seed)
+    coords[prose] = _layout(X, keys, prev, args.n_neighbors, args.seed)
     if prev:
-        shared = [j for j, h in enumerate(hashes) if h in prev["xy"]]
+        shared = [j for j, k in enumerate(keys) if k in prev["xy"]]
         if shared:
             moved = np.linalg.norm(coords[np.array(prose)[shared]]
-                                   - np.array([prev["xy"][hashes[j]] for j in shared]), axis=1)
+                                   - np.array([prev["xy"][keys[j]] for j in shared]), axis=1)
             print(f"kept the previous layout: {len(shared)} sentence(s) already on the map moved "
                   f"a median {np.median(moved):.3f} (map radius ~1)")
     anchors = _pin_status(rows, coords)
-    per_row, clusters = (_clusters(rows, prose, X, coords, anchors, args.clusters, args.seed, prev)
+    per_row, clusters = (_clusters(rows, prose, X, coords, anchors, args.clusters, args.seed, prev,
+                                   _unchanged(keys, prev))
                          if args.clusters > 0 else (np.full(len(rows), -1), []))
     points = [{**r, "id": f"{r['conversation']}#{r['seq']}",
                "x": round(float(x), 5), "y": round(float(y), 5),
