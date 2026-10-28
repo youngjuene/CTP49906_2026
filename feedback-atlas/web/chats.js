@@ -326,7 +326,6 @@ function glide(ms) {
       if (state.view3d) {
         state.disp3 = arc(from3, here, k);
         state.routeDisp3 = stopNow ? arc(routeFrom3, stopNow, k) : null;
-        if ($("follow").checked) view3d.lookToward(state.disp3);
       } else if ($("follow").checked) follow();
       renderMotion();
       if (t < 1) state.glide.raf = requestAnimationFrame(frame);
@@ -490,6 +489,7 @@ $("play").addEventListener("click", togglePlay);
 $("scrub").addEventListener("input", (e) => { stop(); go(Number(e.target.value), { animate: false }); });
 $("conv").addEventListener("change", (e) => selectConversation(e.target.value));
 $route.addEventListener("change", () => render());
+$("follow").addEventListener("change", () => render());
 $("show-status").addEventListener("change", (e) => {
   const seq = state.units[state.cur]?.seq ?? 0;
   state.showStatus = e.target.checked;
@@ -618,6 +618,9 @@ function draw3d() {
   const css = getComputedStyle(document.documentElement);
   const grey = css.getPropertyValue("--other").trim() || "#94a3b8";
   const mine = (p) => p.conversation === state.conv.id;
+  // The camera keeps the cursor in view on its own frame loop; this only says
+  // where the cursor is.
+  view3d.follow($("follow").checked ? (state.disp3 || here) : null);
   view3d.draw({
     points: state.data.points,
     mine,
@@ -648,7 +651,8 @@ function setView(mode, { redraw = true } = {}) {
   $("overlay").toggleAttribute("hidden", state.view3d);
   $("map3d").hidden = !state.view3d;
   $("map-note").textContent = `문장 ${state.data.points.length}개 · 위치는 의미 유사도, 선은 대화 순서 · ` +
-    (state.view3d ? "끌어서 회전 · 휠로 확대 · 더블클릭으로 처음 보기" : "더블클릭으로 전체 보기");
+    (state.view3d ? "끌어서 회전 · Shift/오른쪽 끌기·두 손가락으로 이동 · 휠로 확대 · 더블클릭으로 처음 보기"
+                   : "더블클릭으로 전체 보기");
   if (state.view3d) view3d.resize();
   if (!redraw || !state.conv) return;
   state.drawn = null;                 // the flat map re-places everything when it returns

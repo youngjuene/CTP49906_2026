@@ -40,9 +40,57 @@ const START = mul(axisAngle([1, 0, 0], -0.35), axisAngle([0, 1, 0], 0.6));
 
 export function createView3d(canvas, { onTap }) {
   const ctx = canvas.getContext("2d");
-  const cam = { R: START.slice(), zoom: 1 };
+  // The camera: orientation, zoom, and a pan offset in screen pixels. It belongs
+  // to the reader. Playback only ever *asks* it to keep the cursor in view.
+  const cam = { R: START.slice(), zoom: 1, pan: [0, 0] };
+  canvas._camera = cam;            // read by browser QA; nothing on the page uses it
   const DIST = 4.2;                 // camera distance, in cloud radii
   let size = [0, 0], focal = 1, last = null;
+
+  // Camera motion runs on its own frame loop, separate from playback: drag
+  // momentum, and following the cursor. Driving it from the cursor's glide made
+  // it lurch on every step and stop dead during every pause.
+  const spin = { ax: 0, ay: 0 };    // radians per 60 fps frame, decaying after a drag
+  let target = null;                // the point to keep in view while following
+  let quietUntil = 0;               // following waits while the reader explores
+  let raf = 0, lastT = 0;
+
+  function requestDraw() { if (!raf) raf = requestAnimationFrame(frame); }
+  function frame(now) {
+    raf = 0;
+    const dt = lastT ? Math.min(50, now - lastT) / (1000 / 60) : 1;
+    lastT = now;
+    let moving = false;
+    if (!drag && Math.abs(spin.ax) + Math.abs(spin.ay) > 2e-4) {
+      rotate(spin.ax * dt, spin.ay * dt);
+      const decay = 0.93 ** dt;
+      spin.ax *= decay; spin.ay *= decay;
+      moving = true;
+    }
+    if (target && !drag && !pinch && now >= quietUntil) moving = steer(target, dt) || moving;
+    if (last) paint(last);
+    if (moving) requestDraw(); else lastT = 0;
+  }
+
+  function rotate(ax, ay) {
+    cam.R = mul(axisAngle([1, 0, 0], ay), mul(axisAngle([0, 1, 0], ax), cam.R));
+  }
+
+  // Following never rotates: rotation is the reader's. Every sentence is visible
+  // from any angle (far ones are only fainter), so at the normal zoom there is
+  // nothing to do. Zoomed in, the view slides -- eased, like the flat map -- to
+  // keep the cursor inside the middle of the frame.
+  function steer(p, dt) {
+    const q = project(p);
+    const [w, h] = size, mx = w * 0.15, my = h * 0.15;
+    let dx = 0, dy = 0;
+    if (q.sx < mx) dx = mx - q.sx; else if (q.sx > w - mx) dx = (w - mx) - q.sx;
+    if (q.sy < my) dy = my - q.sy; else if (q.sy > h - my) dy = (h - my) - q.sy;
+    if (Math.abs(dx) + Math.abs(dy) < 0.5) return false;
+    const k = 1 - 0.88 ** dt;                 // ~12% of the way per frame
+    cam.pan = [cam.pan[0] + dx * k, cam.pan[1] + dy * k];
+    return true;
+  }
 
   function resize() {
     const r = canvas.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
@@ -52,14 +100,14 @@ export function createView3d(canvas, { onTap }) {
     focal = 0.3 * Math.min(r.width, r.height) * DIST;   // the cloud's ~1.5 radius fills ~90% of the short side
   }
 
-  // World -> screen: rotate, then perspective. z grows toward the viewer.
+  // World -> screen: rotate, then perspective, then pan. z grows toward the viewer.
   function project(p) {
     const R = cam.R;
     const x = R[0] * p.x3 + R[1] * p.y3 + R[2] * p.z3;
     const y = R[3] * p.x3 + R[4] * p.y3 + R[5] * p.z3;
     const z = R[6] * p.x3 + R[7] * p.y3 + R[8] * p.z3;
     const k = (focal * cam.zoom) / (DIST - z);
-    return { sx: size[0] / 2 + x * k, sy: size[1] / 2 - y * k, z, k };
+    return { sx: size[0] / 2 + cam.pan[0] + x * k, sy: size[1] / 2 + cam.pan[1] - y * k, z, k };
   }
 
   function strokeArcs(list, head) {
@@ -87,9 +135,14 @@ export function createView3d(canvas, { onTap }) {
   }
 
   // `scene` is everything the page decides: which points, how each is coloured,
-  // which paths are walked, where the cursor and the route head are.
+  // where the trail, the cursor and the route head are. The page hands one over
+  // whenever something changes; painting happens once per frame at most.
   function draw(scene) {
     last = scene;
+    requestDraw();
+  }
+
+  function paint(scene) {
     if (!size[0]) resize();
     const css = getComputedStyle(document.documentElement);
     const v = (name) => css.getPropertyValue(name).trim();
@@ -186,32 +239,37 @@ export function createView3d(canvas, { onTap }) {
     ctx.fillStyle = fill; ctx.fillText(text, x, y);
   }
 
-  // Turn the cloud a little so `p` comes toward the front and centre.
-  function lookToward(p, rate = 0.06) {
-    const R = cam.R;
-    const v = [R[0] * p.x3 + R[1] * p.y3 + R[2] * p.z3, R[3] * p.x3 + R[4] * p.y3 + R[5] * p.z3,
-               R[6] * p.x3 + R[7] * p.y3 + R[8] * p.z3];
-    const n = Math.hypot(...v);
-    if (n < 0.15) return false;                  // near the centre: nothing to turn toward
-    const axis = [v[1], -v[0], 0], an = Math.hypot(...axis);   // v x (0,0,1)
-    if (an < 1e-6) return false;
-    const angle = Math.atan2(an, v[2]) * rate;
-    if (angle < 1e-4) return false;
-    cam.R = mul(axisAngle(axis.map((c) => -c / an), angle), cam.R);
-    return true;
-  }
-
-  // ---- interaction: drag to rotate, wheel / pinch to zoom, tap to pick ----
+  // ---- interaction ----
+  // Drag rotates (and keeps spinning a moment after release); Shift-drag,
+  // right-drag or two fingers pan; wheel and pinch zoom toward the pointer;
+  // double-click resets; a tap picks a sentence. Any of it pauses following.
   const pointers = new Map();
   let drag = null, pinch = null, moved = 0;
+  const explore = () => { quietUntil = performance.now() + 4000; };
+
+  function zoomAbout(mx, my, factor) {
+    const z = Math.max(0.4, Math.min(8, cam.zoom * factor));
+    const f = z / cam.zoom, cx = size[0] / 2, cy = size[1] / 2;
+    cam.pan = [(mx - cx) - (mx - cx - cam.pan[0]) * f, (my - cy) - (my - cy - cam.pan[1]) * f];
+    cam.zoom = z;
+  }
+
+  canvas.addEventListener("contextmenu", (e) => e.preventDefault());
   canvas.addEventListener("pointerdown", (e) => {
     canvas.setPointerCapture(e.pointerId);
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     moved = 0;
-    if (pointers.size === 1) { drag = { x: e.clientX, y: e.clientY }; canvas.classList.add("dragging"); }
+    spin.ax = spin.ay = 0;
+    explore();
+    if (pointers.size === 1) {
+      drag = { x: e.clientX, y: e.clientY, t: e.timeStamp, pan: e.shiftKey || e.button === 2 };
+      canvas.classList.add("dragging");
+    }
     if (pointers.size === 2) {
       const [a, b] = [...pointers.values()];
-      pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), zoom: cam.zoom };
+      pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), zoom: cam.zoom,
+                mid: [(a.x + b.x) / 2, (a.y + b.y) / 2], pan: cam.pan.slice() };
+      drag = null;
     }
   });
   canvas.addEventListener("pointermove", (e) => {
@@ -219,31 +277,49 @@ export function createView3d(canvas, { onTap }) {
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (pointers.size === 2 && pinch) {
       const [a, b] = [...pointers.values()];
-      cam.zoom = Math.max(0.4, Math.min(8, pinch.zoom * Math.hypot(a.x - b.x, a.y - b.y) / pinch.d));
+      const r = canvas.getBoundingClientRect();
+      const mid = [(a.x + b.x) / 2, (a.y + b.y) / 2];
+      cam.pan = [pinch.pan[0] + mid[0] - pinch.mid[0], pinch.pan[1] + mid[1] - pinch.mid[1]];
+      cam.zoom = pinch.zoom;
+      zoomAbout(mid[0] - r.left, mid[1] - r.top, Math.hypot(a.x - b.x, a.y - b.y) / pinch.d);
       moved = Infinity;
     } else if (drag) {
-      const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
-      drag = { x: e.clientX, y: e.clientY };
+      const dx = e.clientX - drag.x, dy = e.clientY - drag.y, dt = Math.max(1, e.timeStamp - drag.t);
       moved += Math.hypot(dx, dy);
-      cam.R = mul(axisAngle([1, 0, 0], dy * 0.008), mul(axisAngle([0, 1, 0], dx * 0.008), cam.R));
+      if (drag.pan) cam.pan = [cam.pan[0] + dx, cam.pan[1] + dy];
+      else {
+        rotate(dx * 0.008, dy * 0.008);
+        // Remember the drag's speed, per 60 fps frame, for the spin after release.
+        spin.ax = 0.6 * spin.ax + 0.4 * dx * 0.008 * (1000 / 60) / dt;
+        spin.ay = 0.6 * spin.ay + 0.4 * dy * 0.008 * (1000 / 60) / dt;
+      }
+      drag = { ...drag, x: e.clientX, y: e.clientY, t: e.timeStamp };
     } else return;
-    if (last) draw(last);
+    explore();
+    requestDraw();
   });
   function release(e) {
     pointers.delete(e.pointerId);
     if (pointers.size < 2) pinch = null;
     if (pointers.size) return;
-    drag = null; canvas.classList.remove("dragging");
+    // A drag that had stopped before the finger lifted does not fling.
+    if (!drag || drag.pan || e.timeStamp - drag.t > 80) spin.ax = spin.ay = 0;
+    drag = null;
+    canvas.classList.remove("dragging");
+    explore();
+    requestDraw();
     if (moved < 4 && e.type === "pointerup" && last) pick(e);
   }
   canvas.addEventListener("pointerup", release);
   canvas.addEventListener("pointercancel", release);
   canvas.addEventListener("wheel", (e) => {
     e.preventDefault();
-    cam.zoom = Math.max(0.4, Math.min(8, cam.zoom * Math.exp(-e.deltaY * 0.0015)));
-    if (last) draw(last);
+    const r = canvas.getBoundingClientRect();
+    zoomAbout(e.clientX - r.left, e.clientY - r.top, Math.exp(-e.deltaY * 0.0015));
+    explore();
+    requestDraw();
   }, { passive: false });
-  canvas.addEventListener("dblclick", () => { reset(); if (last) draw(last); });
+  canvas.addEventListener("dblclick", () => { reset(); requestDraw(); });
 
   function pick(e) {
     const r = canvas.getBoundingClientRect();
@@ -260,7 +336,16 @@ export function createView3d(canvas, { onTap }) {
     if (best) onTap(best);
   }
 
-  function reset() { cam.R = START.slice(); cam.zoom = 1; }
+  function reset() {
+    cam.R = START.slice(); cam.zoom = 1; cam.pan = [0, 0];
+    spin.ax = spin.ay = 0; quietUntil = 0;
+  }
 
-  return { draw, resize, lookToward, reset, redraw: () => last && draw(last) };
+  // Keep `p` in view (null stops following). Cheap to call every frame.
+  function follow(p) {
+    target = p;
+    if (p) requestDraw();
+  }
+
+  return { draw, resize: () => { resize(); requestDraw(); }, follow, reset };
 }
