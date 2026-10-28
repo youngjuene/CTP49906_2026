@@ -72,11 +72,15 @@ a { color:var(--accent-strong) }
 .map-note { position:absolute; left:10px; bottom:6px; margin:0; color:var(--muted);
   font-size:11px; pointer-events:none }
 
-.pt { stroke:var(--card); stroke-width:.6; cursor:pointer;
-  transition:opacity .35s ease, fill .35s ease, stroke .35s ease }
-.stop, .stop-label { transition:opacity .35s ease, fill .35s ease }
+.pt { stroke:var(--card); stroke-width:.6; cursor:pointer }
+/* Only the conversation being played fades. Thousands of simultaneous SVG
+ * transitions -- every point on a first draw, a conversation switch or a colour
+ * change -- freeze the page for seconds at ten conversations, so other
+ * conversations never animate and #map.instant switches it off for big redraws. */
+.pt:not(.other), .stop, .stop-label { transition:opacity .35s ease, fill .35s ease, stroke .35s ease }
+#map.instant .pt { transition:none }
 @media (prefers-reduced-motion:reduce) {
-  .pt, .stop, .stop-label { transition:none }
+  .pt, .stop, .stop-label { transition:none !important }
 }
 .controls select { height:30px; border-radius:6px; border:1px solid var(--hair);
   background:var(--card); color:var(--fg); font:inherit; font-size:12px }

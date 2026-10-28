@@ -438,7 +438,18 @@ function buildRoute() {
     .map(([turn, a]) => ({ turn, x: a.x / a.n, y: a.y / a.n }));
 }
 
+// Redraw everything at once, without the per-point fade, then let fades resume.
+function instantly(redraw) {
+  svg.classList.add("instant");
+  redraw();
+  requestAnimationFrame(() => requestAnimationFrame(() => svg.classList.remove("instant")));
+}
+
 function selectConversation(id) {
+  instantly(() => selectConversationNow(id));
+}
+
+function selectConversationNow(id) {
   stop();
   state.conv = state.data.conversations.find((c) => c.id === id) || state.data.conversations[0];
   state.units = state.data.points
@@ -599,7 +610,7 @@ function setColorBy(mode) {
   $("color-by").value = mode;
   $("legend-turn").hidden = mode !== "turn";
   $("cluster-legend").hidden = mode !== "cluster";
-  if (state.conv) renderStatic();
+  if (state.conv) instantly(renderStatic);
 }
 
 $("color-by").addEventListener("change", (e) => {

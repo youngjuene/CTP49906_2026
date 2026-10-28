@@ -25,6 +25,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse, Response, RedirectResponse, FileResponse
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from src.atlas_state import AtlasState, RecomputeLoop
@@ -256,6 +257,10 @@ def create_app(cfg: AtlasConfig | None = None, *, atlas: Atlas | None = None) ->
 
     app = FastAPI(title="Feedback Atlas", lifespan=lifespan,
                   docs_url=None, redoc_url=None, openapi_url=None)
+    # Compress HTTP bodies: the chat map's JSON is ~0.3 MB per conversation and
+    # mostly repeated keys and Korean text, which gzip cuts to about a fifth.
+    # Added before TransportSecurity so that one stays outermost.
+    app.add_middleware(GZipMiddleware, minimum_size=2048)
     app.add_middleware(TransportSecurity, require_https=atlas.cfg.require_https)
     app.state.atlas = atlas
 

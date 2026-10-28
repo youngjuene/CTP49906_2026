@@ -48,17 +48,22 @@ from src.textnorm import text_hash  # noqa: E402
 
 
 def _embedder(model: str, device: str, fake: bool):
+    """-> (a function that loads the embedder, cache key). Loading is deferred so
+    a rebuild whose text is all cached never touches the model."""
     spec = resolve_spec(model)
     if fake:
         # Tests only: deterministic vectors, no model download.
         from src.embedder import HashEmbedder
-        return HashEmbedder(dim=spec.dim, model_id=f"fake:{spec.model_id}"), \
-            f"fake:{cache_key(spec)}"
-    from src.embedder import SentenceTransformerEmbedder
-    return SentenceTransformerEmbedder(spec, device=device), cache_key(spec)
+        return (lambda: HashEmbedder(dim=spec.dim, model_id=f"fake:{spec.model_id}"),
+                f"fake:{cache_key(spec)}")
+
+    def load():
+        from src.embedder import SentenceTransformerEmbedder
+        return SentenceTransformerEmbedder(spec, device=device)
+    return load, cache_key(spec)
 
 
-def embed(texts, store: Store, embedder, key: str) -> np.ndarray:
+def embed(texts, store: Store, load_embedder, key: str) -> np.ndarray:
     hashes = [text_hash(t) for t in texts]
     cached = store.get_embeddings(hashes, key)
     todo = {}
@@ -66,7 +71,7 @@ def embed(texts, store: Store, embedder, key: str) -> np.ndarray:
         if h not in cached and h not in todo:
             todo[h] = t
     if todo:
-        vectors = embedder.encode(list(todo.values()))
+        vectors = load_embedder().encode(list(todo.values()))
         fresh = dict(zip(todo.keys(), vectors))
         store.put_embeddings(key, vectors.shape[1], fresh)
         cached.update(fresh)
@@ -190,11 +195,11 @@ def main(argv: list[str] | None = None) -> int:
     prose = [i for i, r in enumerate(rows) if r["kind"] != "status"]
     if not prose:
         raise SystemExit("nothing but status lines to lay out")
-    embedder, key = _embedder(args.model, args.device, args.fake_embedder)
+    load_embedder, key = _embedder(args.model, args.device, args.fake_embedder)
     store = Store(str(cache))
     store.migrate()
     try:
-        X = embed([rows[i]["text"] for i in prose], store, embedder, key)
+        X = embed([rows[i]["text"] for i in prose], store, load_embedder, key)
     finally:
         store.close()
 

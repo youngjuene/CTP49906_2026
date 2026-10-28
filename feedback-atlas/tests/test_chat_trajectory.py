@@ -268,3 +268,30 @@ def test_the_chat_map_is_the_home_page_and_the_opinion_map_moved_to_map(client):
     # The old addresses keep working.
     assert 'src="chats.js"' in client.get("/chats.html").text
     assert 'src="bootstrap.js"' in client.get("/index.html").text
+
+
+def test_the_chat_map_is_sent_compressed(client, tmp_path):
+    body = json.dumps({"points": [{"id": f"c#{i}", "text": "죽음이란 무엇일까?" * 5} for i in range(200)]},
+                      ensure_ascii=False)
+    (tmp_path / "atlas.json").write_text(body, encoding="utf-8")
+    r = client.get("/api/chats", headers={"accept-encoding": "gzip"})
+    assert r.status_code == 200 and r.headers["content-encoding"] == "gzip"
+    assert r.json()["points"][0]["id"] == "c#0"
+    assert r.headers["cache-control"] == "no-store"
+
+
+def test_a_fully_cached_rebuild_never_loads_the_model(tmp_path, roster, monkeypatch):
+    import scripts.build_chat_atlas as b
+
+    page = _page(tmp_path)
+    args = ["--chats", str(page.parent), "--roster", str(roster), "--out", str(tmp_path / "a.json"),
+            "--cache", str(tmp_path / "cache.db"), "--fake-embedder"]
+    assert build(args) == 0
+    loads = []
+    real = b._embedder
+
+    def counting(*a):
+        load, key = real(*a)
+        return (lambda: loads.append(1) or load()), key
+    monkeypatch.setattr(b, "_embedder", counting)
+    assert build(args) == 0 and loads == []
